@@ -12,32 +12,45 @@ logger = logging.getLogger(__name__)
 
 def get_synced_run(run_id: str) -> Optional[SyncedRun]:
     """Get sync record for a specific run."""
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT id, run_id, run_version, google_event_id, synced_at, 
-                   sync_status, error_message, created_at, updated_at
-            FROM synced_runs
-            WHERE run_id = %s
-        """,
-            (run_id,),
-        )
+    try:
+        with get_db_cursor() as cursor:
+            logger.debug(f"Querying sync record for run_id={run_id}")
+            cursor.execute(
+                """
+                SELECT id, run_id, run_version, google_event_id, synced_at,
+                       sync_status, error_message, created_at, updated_at
+                FROM synced_runs
+                WHERE run_id = %s
+            """,
+                (run_id,),
+            )
 
-        row = cursor.fetchone()
-        if row is None:
-            return None
+            row = cursor.fetchone()
+            if row is None:
+                logger.debug(f"No sync record found for run_id={run_id}")
+                return None
 
-        return SyncedRun(
-            id=row[0],
-            run_id=row[1],
-            run_version=row[2],
-            google_event_id=row[3],
-            synced_at=row[4],
-            sync_status=row[5],
-            error_message=row[6],
-            created_at=row[7],
-            updated_at=row[8],
+            logger.debug(
+                f"Found sync record: run_id={run_id}, sync_status={row[5]}, "
+                f"google_event_id={row[3]}"
+            )
+            return SyncedRun(
+                id=row[0],
+                run_id=row[1],
+                run_version=row[2],
+                google_event_id=row[3],
+                synced_at=row[4],
+                sync_status=row[5],
+                error_message=row[6],
+                created_at=row[7],
+                updated_at=row[8],
+            )
+    except Exception as e:
+        logger.exception(
+            f"Database error retrieving sync record: run_id={run_id}, "
+            f"exception_type={type(e).__name__}, error={e}"
         )
+        raise
 
 
 def create_synced_run(
@@ -48,45 +61,59 @@ def create_synced_run(
     error_message: Optional[str] = None,
 ) -> SyncedRun:
     """Create a new sync record for a run."""
-    with get_db_cursor() as cursor:
-        now = datetime.now()
-        cursor.execute(
-            """
-            INSERT INTO synced_runs 
-            (run_id, run_version, google_event_id, synced_at, sync_status, error_message, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id, created_at, updated_at
-        """,
-            (
-                run_id,
-                run_version,
-                google_event_id,
-                now,
-                sync_status,
-                error_message,
-                now,
-                now,
-            ),
-        )
-
-        result = cursor.fetchone()
-        sync_id, created_at, updated_at = result
-
+    try:
         logger.info(
-            f"Created sync record for run {run_id} with Google event {google_event_id}"
+            f"Creating sync record: run_id={run_id}, google_event_id={google_event_id}, "
+            f"sync_status={sync_status}, run_version={run_version}"
         )
 
-        return SyncedRun(
-            id=sync_id,
-            run_id=run_id,
-            run_version=run_version,
-            google_event_id=google_event_id,
-            synced_at=now,
-            sync_status=sync_status,
-            error_message=error_message,
-            created_at=created_at,
-            updated_at=updated_at,
+        with get_db_cursor() as cursor:
+            now = datetime.now()
+            cursor.execute(
+                """
+                INSERT INTO synced_runs
+                (run_id, run_version, google_event_id, synced_at, sync_status, error_message, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, created_at, updated_at
+            """,
+                (
+                    run_id,
+                    run_version,
+                    google_event_id,
+                    now,
+                    sync_status,
+                    error_message,
+                    now,
+                    now,
+                ),
+            )
+
+            result = cursor.fetchone()
+            sync_id, created_at, updated_at = result
+
+            logger.info(
+                f"Successfully created sync record: sync_id={sync_id}, run_id={run_id}, "
+                f"google_event_id={google_event_id}, sync_status={sync_status}"
+            )
+
+            return SyncedRun(
+                id=sync_id,
+                run_id=run_id,
+                run_version=run_version,
+                google_event_id=google_event_id,
+                synced_at=now,
+                sync_status=sync_status,
+                error_message=error_message,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+    except Exception as e:
+        logger.exception(
+            f"Database error creating sync record: run_id={run_id}, "
+            f"google_event_id={google_event_id}, sync_status={sync_status}, "
+            f"exception_type={type(e).__name__}, error={e}"
         )
+        raise
 
 
 def update_synced_run(
@@ -98,97 +125,83 @@ def update_synced_run(
     clear_error_message: bool = False,
 ) -> Optional[SyncedRun]:
     """Update an existing sync record."""
-    with get_db_cursor() as cursor:
-        # Build dynamic UPDATE query based on provided fields
-        update_fields = []
-        params = []
-
+    try:
+        # Build update details for logging
+        update_details = []
         if run_version is not None:
-            update_fields.append("run_version = %s")
-            params.append(run_version)
-
+            update_details.append(f"run_version={run_version}")
         if google_event_id is not None:
-            update_fields.append("google_event_id = %s")
-            params.append(google_event_id)
-
+            update_details.append(f"google_event_id={google_event_id}")
         if sync_status is not None:
-            update_fields.append("sync_status = %s")
-            params.append(sync_status)
-
+            update_details.append(f"sync_status={sync_status}")
         if error_message is not None:
-            update_fields.append("error_message = %s")
-            params.append(error_message)
-        elif clear_error_message:
-            update_fields.append("error_message = NULL")
-            # No parameter needed for NULL
+            update_details.append(f"error_message={error_message[:100]}...")
+        if clear_error_message:
+            update_details.append("clear_error_message=True")
 
-        if not update_fields:
-            # Nothing to update
-            return get_synced_run(run_id)
-
-        # Always update the updated_at timestamp
-        update_fields.append("updated_at = %s")
-        params.append(datetime.now())
-
-        # Add run_id for WHERE clause
-        params.append(run_id)
-
-        query = f"""
-            UPDATE synced_runs 
-            SET {", ".join(update_fields)}
-            WHERE run_id = %s
-            RETURNING id, run_id, run_version, google_event_id, synced_at, 
-                      sync_status, error_message, created_at, updated_at
-        """
-
-        cursor.execute(query, params)
-        row = cursor.fetchone()
-
-        if row is None:
-            logger.warning(f"No sync record found for run {run_id} to update")
-            return None
-
-        logger.info(f"Updated sync record for run {run_id}")
-
-        return SyncedRun(
-            id=row[0],
-            run_id=row[1],
-            run_version=row[2],
-            google_event_id=row[3],
-            synced_at=row[4],
-            sync_status=row[5],
-            error_message=row[6],
-            created_at=row[7],
-            updated_at=row[8],
+        logger.info(
+            f"Updating sync record: run_id={run_id}, updates=[{', '.join(update_details)}]"
         )
 
+        with get_db_cursor() as cursor:
+            # Build dynamic UPDATE query based on provided fields
+            update_fields = []
+            params = []
 
-def delete_synced_run(run_id: str) -> bool:
-    """Delete a sync record for a run (when unsyncing from calendar)."""
-    with get_db_cursor() as cursor:
-        cursor.execute("DELETE FROM synced_runs WHERE run_id = %s", (run_id,))
-        deleted_count = cursor.rowcount
+            if run_version is not None:
+                update_fields.append("run_version = %s")
+                params.append(run_version)
 
-        if deleted_count > 0:
-            logger.info(f"Deleted sync record for run {run_id}")
-            return True
-        else:
-            logger.warning(f"No sync record found for run {run_id} to delete")
-            return False
+            if google_event_id is not None:
+                update_fields.append("google_event_id = %s")
+                params.append(google_event_id)
 
+            if sync_status is not None:
+                update_fields.append("sync_status = %s")
+                params.append(sync_status)
 
-def get_all_synced_runs() -> List[SyncedRun]:
-    """Get all sync records."""
-    with get_db_cursor() as cursor:
-        cursor.execute("""
-            SELECT id, run_id, run_version, google_event_id, synced_at, 
-                   sync_status, error_message, created_at, updated_at
-            FROM synced_runs
-            ORDER BY synced_at DESC
-        """)
+            if error_message is not None:
+                update_fields.append("error_message = %s")
+                params.append(error_message)
+            elif clear_error_message:
+                update_fields.append("error_message = NULL")
+                # No parameter needed for NULL
 
-        return [
-            SyncedRun(
+            if not update_fields:
+                # Nothing to update
+                logger.debug(
+                    f"No fields to update for run_id={run_id}, returning existing record"
+                )
+                return get_synced_run(run_id)
+
+            # Always update the updated_at timestamp
+            update_fields.append("updated_at = %s")
+            params.append(datetime.now())
+
+            # Add run_id for WHERE clause
+            params.append(run_id)
+
+            query = f"""
+                UPDATE synced_runs
+                SET {", ".join(update_fields)}
+                WHERE run_id = %s
+                RETURNING id, run_id, run_version, google_event_id, synced_at,
+                          sync_status, error_message, created_at, updated_at
+            """
+
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+
+            if row is None:
+                logger.warning(f"No sync record found to update: run_id={run_id}")
+                return None
+
+            logger.info(
+                f"Successfully updated sync record: run_id={run_id}, "
+                f"new_sync_status={row[5]}, google_event_id={row[3]}"
+            )
+
+            return SyncedRun(
                 id=row[0],
                 run_id=row[1],
                 run_version=row[2],
@@ -199,8 +212,79 @@ def get_all_synced_runs() -> List[SyncedRun]:
                 created_at=row[7],
                 updated_at=row[8],
             )
-            for row in cursor.fetchall()
-        ]
+    except Exception as e:
+        logger.exception(
+            f"Database error updating sync record: run_id={run_id}, "
+            f"exception_type={type(e).__name__}, error={e}"
+        )
+        raise
+
+
+def delete_synced_run(run_id: str) -> bool:
+    """Delete a sync record for a run (when unsyncing from calendar)."""
+    try:
+        logger.info(f"Deleting sync record: run_id={run_id}")
+
+        with get_db_cursor() as cursor:
+            cursor.execute("DELETE FROM synced_runs WHERE run_id = %s", (run_id,))
+            deleted_count = cursor.rowcount
+
+            if deleted_count > 0:
+                logger.info(
+                    f"Successfully deleted sync record: run_id={run_id}, "
+                    f"rows_deleted={deleted_count}"
+                )
+                return True
+            else:
+                logger.warning(
+                    f"No sync record found to delete: run_id={run_id}, "
+                    f"rows_deleted={deleted_count}"
+                )
+                return False
+    except Exception as e:
+        logger.exception(
+            f"Database error deleting sync record: run_id={run_id}, "
+            f"exception_type={type(e).__name__}, error={e}"
+        )
+        raise
+
+
+def get_all_synced_runs() -> List[SyncedRun]:
+    """Get all sync records."""
+    try:
+        logger.debug("Querying all sync records")
+
+        with get_db_cursor() as cursor:
+            cursor.execute("""
+                SELECT id, run_id, run_version, google_event_id, synced_at,
+                       sync_status, error_message, created_at, updated_at
+                FROM synced_runs
+                ORDER BY synced_at DESC
+            """)
+
+            results = [
+                SyncedRun(
+                    id=row[0],
+                    run_id=row[1],
+                    run_version=row[2],
+                    google_event_id=row[3],
+                    synced_at=row[4],
+                    sync_status=row[5],
+                    error_message=row[6],
+                    created_at=row[7],
+                    updated_at=row[8],
+                )
+                for row in cursor.fetchall()
+            ]
+
+            logger.info(f"Retrieved all sync records: count={len(results)}")
+            return results
+    except Exception as e:
+        logger.exception(
+            f"Database error retrieving all sync records: "
+            f"exception_type={type(e).__name__}, error={e}"
+        )
+        raise
 
 
 def is_run_synced(run_id: str) -> bool:
@@ -211,26 +295,38 @@ def is_run_synced(run_id: str) -> bool:
 
 def get_failed_syncs() -> List[SyncedRun]:
     """Get all runs with failed sync status for retry."""
-    with get_db_cursor() as cursor:
-        cursor.execute("""
-            SELECT id, run_id, run_version, google_event_id, synced_at, 
-                   sync_status, error_message, created_at, updated_at
-            FROM synced_runs
-            WHERE sync_status = 'failed'
-            ORDER BY updated_at DESC
-        """)
+    try:
+        logger.debug("Querying failed sync records")
 
-        return [
-            SyncedRun(
-                id=row[0],
-                run_id=row[1],
-                run_version=row[2],
-                google_event_id=row[3],
-                synced_at=row[4],
-                sync_status=row[5],
-                error_message=row[6],
-                created_at=row[7],
-                updated_at=row[8],
-            )
-            for row in cursor.fetchall()
-        ]
+        with get_db_cursor() as cursor:
+            cursor.execute("""
+                SELECT id, run_id, run_version, google_event_id, synced_at,
+                       sync_status, error_message, created_at, updated_at
+                FROM synced_runs
+                WHERE sync_status = 'failed'
+                ORDER BY updated_at DESC
+            """)
+
+            results = [
+                SyncedRun(
+                    id=row[0],
+                    run_id=row[1],
+                    run_version=row[2],
+                    google_event_id=row[3],
+                    synced_at=row[4],
+                    sync_status=row[5],
+                    error_message=row[6],
+                    created_at=row[7],
+                    updated_at=row[8],
+                )
+                for row in cursor.fetchall()
+            ]
+
+            logger.info(f"Retrieved failed sync records: count={len(results)}")
+            return results
+    except Exception as e:
+        logger.exception(
+            f"Database error retrieving failed sync records: "
+            f"exception_type={type(e).__name__}, error={e}"
+        )
+        raise

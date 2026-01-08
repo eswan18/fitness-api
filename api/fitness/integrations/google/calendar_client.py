@@ -125,8 +125,9 @@ class GoogleCalendarClient:
                             "Successfully refreshed Google access token and persisted to database"
                         )
                     except Exception as db_error:
-                        logger.error(
-                            f"Failed to persist refreshed token to database: {db_error}"
+                        logger.exception(
+                            f"Failed to persist refreshed token to database: "
+                            f"exception_type={type(db_error).__name__}, error={db_error}"
                         )
                         logger.warning(
                             "Token refreshed in memory but not persisted - may need to refresh again on restart"
@@ -141,7 +142,9 @@ class GoogleCalendarClient:
                     except Exception as json_error:
                         # Failed to parse error response as JSON; proceed with empty error_data.
                         logger.warning(
-                            f"Failed to parse error response as JSON: {json_error}"
+                            f"Failed to parse token refresh error response as JSON: "
+                            f"exception_type={type(json_error).__name__}, error={json_error}, "
+                            f"raw_response={error_text[:500]}"
                         )
 
                     # Check for revoked/expired refresh token
@@ -151,7 +154,9 @@ class GoogleCalendarClient:
                     ):
                         logger.error(
                             f"Refresh token has been expired or revoked. "
-                            f"Re-authorization required. Error: {error_text}"
+                            f"Re-authorization required. status_code={response.status_code}, "
+                            f"error_code={error_data.get('error')}, "
+                            f"error_description={error_data.get('error_description', 'N/A')}"
                         )
                         # Raise a specific exception that callers can catch
                         raise ValueError(
@@ -159,7 +164,8 @@ class GoogleCalendarClient:
                         )
 
                     logger.error(
-                        f"Failed to refresh token: {response.status_code} - {error_text}"
+                        f"Failed to refresh token: status_code={response.status_code}, "
+                        f"error_data={error_data}, response_text={error_text[:500]}"
                     )
                     return False
 
@@ -167,7 +173,10 @@ class GoogleCalendarClient:
             # Re-raise ValueError (invalid_grant) so callers can handle it
             raise
         except Exception as e:
-            logger.error(f"Error refreshing access token: {e}")
+            logger.exception(
+                f"Unexpected error refreshing access token: "
+                f"exception_type={type(e).__name__}, error={e}"
+            )
             return False
 
     def _make_request(
@@ -181,11 +190,16 @@ class GoogleCalendarClient:
             )
             try:
                 if not self._refresh_access_token():
-                    logger.error("Failed to refresh token proactively")
+                    logger.error(
+                        f"Failed to refresh token proactively before {method} request to {url}"
+                    )
                     # Continue anyway - might still work, or will get 401
             except ValueError as e:
                 # Refresh token is revoked/expired - cannot proceed
-                logger.error(f"Cannot refresh token: {e}")
+                logger.error(
+                    f"Cannot refresh token for {method} request to {url}: "
+                    f"exception_type={type(e).__name__}, error={e}"
+                )
                 return None
 
         headers = self._get_headers()
@@ -197,26 +211,39 @@ class GoogleCalendarClient:
 
                 # If unauthorized, try to refresh token and retry once
                 if response.status_code == 401:
-                    logger.info("Received 401, refreshing token...")
+                    logger.warning(
+                        f"Received 401 Unauthorized for {method} request to {url}, "
+                        f"attempting token refresh and retry"
+                    )
                     try:
                         if self._refresh_access_token():
                             # Update headers with new token and retry
                             kwargs["headers"].update(self._get_headers())
                             response = client.request(method, url, **kwargs)
+                            logger.info(
+                                f"Successfully retried {method} request to {url} after token refresh, "
+                                f"status_code={response.status_code}"
+                            )
                         else:
                             logger.error(
-                                "Failed to refresh token, cannot retry request"
+                                f"Failed to refresh token after 401, cannot retry {method} request to {url}"
                             )
                             return response
                     except ValueError as e:
                         # Refresh token is revoked/expired - cannot retry
-                        logger.error(f"Cannot refresh token: {e}")
+                        logger.error(
+                            f"Cannot refresh token after 401 for {method} request to {url}: "
+                            f"exception_type={type(e).__name__}, error={e}"
+                        )
                         return None
 
                 return response
 
         except Exception as e:
-            logger.error(f"Error making request to {url}: {e}")
+            logger.exception(
+                f"Unexpected error making {method} request to {url}: "
+                f"exception_type={type(e).__name__}, error={e}"
+            )
             return None
 
     def create_workout_event(self, run: Run) -> Optional[str]:
@@ -259,12 +286,25 @@ class GoogleCalendarClient:
         if response and 200 <= response.status_code < 300:
             event = response.json()
             event_id = event.get("id")
-            logger.info(f"Created calendar event {event_id} for run {run.id}")
+            logger.info(
+                f"Successfully created calendar event: run_id={run.id}, "
+                f"event_id={event_id}, calendar_id={self.calendar_id}"
+            )
             return event_id
         else:
-            error_msg = response.text if response else "No response"
+            status_code = response.status_code if response else "N/A"
+            error_text = response.text if response else "No response received"
+            error_data = None
+            if response:
+                try:
+                    error_data = response.json()
+                except Exception:
+                    pass  # Not JSON, use text instead
+
             logger.error(
-                f"Failed to create calendar event for run {run.id}: {error_msg}"
+                f"Failed to create calendar event: run_id={run.id}, "
+                f"calendar_id={self.calendar_id}, status_code={status_code}, "
+                f"error_data={error_data}, response_text={error_text[:500]}"
             )
             return None
 
@@ -281,11 +321,26 @@ class GoogleCalendarClient:
         response = self._make_request("DELETE", url)
 
         if response and response.status_code == 204:
-            logger.info(f"Deleted calendar event {event_id}")
+            logger.info(
+                f"Successfully deleted calendar event: event_id={event_id}, "
+                f"calendar_id={self.calendar_id}"
+            )
             return True
         else:
-            error_msg = response.text if response else "No response"
-            logger.error(f"Failed to delete calendar event {event_id}: {error_msg}")
+            status_code = response.status_code if response else "N/A"
+            error_text = response.text if response else "No response received"
+            error_data = None
+            if response:
+                try:
+                    error_data = response.json()
+                except Exception:
+                    pass  # Not JSON, use text instead
+
+            logger.error(
+                f"Failed to delete calendar event: event_id={event_id}, "
+                f"calendar_id={self.calendar_id}, status_code={status_code}, "
+                f"error_data={error_data}, response_text={error_text[:500]}"
+            )
             return False
 
     def get_event(self, event_id: str) -> Optional[Dict[str, Any]]:
@@ -301,8 +356,24 @@ class GoogleCalendarClient:
         response = self._make_request("GET", url)
 
         if response and response.status_code == 200:
+            logger.info(
+                f"Successfully retrieved calendar event: event_id={event_id}, "
+                f"calendar_id={self.calendar_id}"
+            )
             return response.json()
         else:
-            error_msg = response.text if response else "No response"
-            logger.error(f"Failed to get calendar event {event_id}: {error_msg}")
+            status_code = response.status_code if response else "N/A"
+            error_text = response.text if response else "No response received"
+            error_data = None
+            if response:
+                try:
+                    error_data = response.json()
+                except Exception:
+                    pass  # Not JSON, use text instead
+
+            logger.error(
+                f"Failed to get calendar event: event_id={event_id}, "
+                f"calendar_id={self.calendar_id}, status_code={status_code}, "
+                f"error_data={error_data}, response_text={error_text[:500]}"
+            )
             return None

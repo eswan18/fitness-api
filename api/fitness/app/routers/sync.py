@@ -141,7 +141,10 @@ def sync_run_to_calendar(
     except Exception as e:
         # Handle any errors (Google API, database, etc.)
         error_msg = f"Failed to sync run {run_id}: {str(e)}"
-        logger.error(error_msg)
+        logger.exception(
+            f"Error syncing run to Google Calendar: run_id={run_id}, "
+            f"exception_type={type(e).__name__}, error={str(e)}"
+        )
 
         # Try to create/update a failed sync record
         try:
@@ -151,6 +154,7 @@ def sync_run_to_calendar(
                     sync_status="failed",
                     error_message=error_msg,
                 )
+                logger.info(f"Updated sync record to 'failed' status for run {run_id}")
             else:
                 create_synced_run(
                     run_id=run_id,
@@ -158,8 +162,12 @@ def sync_run_to_calendar(
                     sync_status="failed",
                     error_message=error_msg,
                 )
+                logger.info(f"Created failed sync record for run {run_id}")
         except Exception as db_error:
-            logger.error(f"Also failed to create/update sync record: {db_error}")
+            logger.exception(
+                f"Failed to persist sync failure to database: run_id={run_id}, "
+                f"exception_type={type(db_error).__name__}, error={str(db_error)}"
+            )
 
         return SyncResponse(
             success=False,
@@ -236,7 +244,11 @@ def unsync_run_from_calendar(
 
     except Exception as e:
         error_msg = f"Failed to unsync run {run_id}: {str(e)}"
-        logger.error(error_msg)
+        logger.exception(
+            f"Error unsyncing run from Google Calendar: run_id={run_id}, "
+            f"google_event_id={synced_run.google_event_id if synced_run else None}, "
+            f"exception_type={type(e).__name__}, error={str(e)}"
+        )
 
         return SyncResponse(
             success=False,
