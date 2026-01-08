@@ -39,7 +39,18 @@ def get_db_connection() -> Iterator[psycopg.Connection]:
 
 @contextmanager
 def get_db_cursor() -> Iterator[psycopg.Cursor]:
-    """Get a database cursor context manager."""
+    """Get a database cursor context manager.
+
+    Automatically commits the transaction on successful completion,
+    or rolls back on exception.
+    """
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
-            yield cursor
+            try:
+                yield cursor
+                # Commit the transaction on successful completion
+                conn.commit()
+            except Exception:
+                # Rollback on error (though psycopg does this automatically)
+                conn.rollback()
+                raise
