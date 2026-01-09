@@ -23,12 +23,17 @@ type DashboardState = {
   sex: "M" | "F";
   setSex: (sex: "M" | "F") => void;
 
-  // Auth state (memory only, NOT persisted)
-  username: string | null;
-  password: string | null;
+  // OAuth state (stored in sessionStorage, NOT localStorage)
+  accessToken: string | null;
+  refreshToken: string | null;
+  tokenExpiresAt: number | null;
   isAuthenticated: boolean;
-  setCredentials: (username: string, password: string) => void;
-  clearCredentials: () => void;
+  setTokens: (
+    accessToken: string,
+    refreshToken: string,
+    expiresIn: number
+  ) => void;
+  clearTokens: () => void;
 };
 
 // Defaults if nothing persisted
@@ -125,20 +130,42 @@ export const useDashboardStore = create<DashboardState>()(
       sex: DEFAULT_SEX,
       setSex: (sex) => set({ sex }),
 
-      // Auth state (initialized as not authenticated, NOT persisted)
-      username: null,
-      password: null,
+      // OAuth state (initialized as not authenticated, NOT persisted in localStorage)
+      accessToken: null,
+      refreshToken: null,
+      tokenExpiresAt: null,
       isAuthenticated: false,
 
-      setCredentials: (username, password) =>
-        set({ username, password, isAuthenticated: true }),
+      setTokens: (accessToken, refreshToken, expiresIn) => {
+        const expiresAt = Date.now() + expiresIn * 1000;
+        set({
+          accessToken,
+          refreshToken,
+          tokenExpiresAt: expiresAt,
+          isAuthenticated: true,
+        });
 
-      clearCredentials: () =>
-        set({ username: null, password: null, isAuthenticated: false }),
+        // Persist to sessionStorage
+        sessionStorage.setItem("oauth_access_token", accessToken);
+        sessionStorage.setItem("oauth_refresh_token", refreshToken);
+        sessionStorage.setItem("oauth_expires_at", expiresAt.toString());
+      },
+
+      clearTokens: () => {
+        set({
+          accessToken: null,
+          refreshToken: null,
+          tokenExpiresAt: null,
+          isAuthenticated: false,
+        });
+        sessionStorage.removeItem("oauth_access_token");
+        sessionStorage.removeItem("oauth_refresh_token");
+        sessionStorage.removeItem("oauth_expires_at");
+      },
     }),
     {
       name: "dashboard-store",
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         selectedTimePeriod: state.selectedTimePeriod,
@@ -202,6 +229,18 @@ export const useDashboardStore = create<DashboardState>()(
           setupSystemThemeListener(() => {
             applyTheme("system");
           });
+        }
+
+        // Restore OAuth tokens from sessionStorage on page load
+        const accessToken = sessionStorage.getItem("oauth_access_token");
+        const refreshToken = sessionStorage.getItem("oauth_refresh_token");
+        const expiresAt = sessionStorage.getItem("oauth_expires_at");
+
+        if (accessToken && refreshToken && expiresAt) {
+          (state as DashboardState).accessToken = accessToken;
+          (state as DashboardState).refreshToken = refreshToken;
+          (state as DashboardState).tokenExpiresAt = parseInt(expiresAt);
+          (state as DashboardState).isAuthenticated = true;
         }
       },
     },

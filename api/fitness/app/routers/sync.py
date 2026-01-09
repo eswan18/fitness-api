@@ -19,7 +19,7 @@ from fitness.models.sync import (
     SyncStatusResponse,
 )
 from fitness.integrations.google.calendar_client import GoogleCalendarClient
-from fitness.app.auth import verify_credentials
+from fitness.app.auth import verify_oauth_token
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def get_sync_status(run_id: str) -> SyncStatusResponse:
 
 @router.post("/runs/{run_id}", response_model=SyncResponse)
 def sync_run_to_calendar(
-    run_id: str, username: str = Depends(verify_credentials)
+    run_id: str, username: str = Depends(verify_oauth_token)
 ) -> SyncResponse:
     """Sync a run to Google Calendar using the Google Calendar API.
 
@@ -180,7 +180,7 @@ def sync_run_to_calendar(
 
 @router.delete("/runs/{run_id}", response_model=SyncResponse)
 def unsync_run_from_calendar(
-    run_id: str, username: str = Depends(verify_credentials)
+    run_id: str, username: str = Depends(verify_oauth_token)
 ) -> SyncResponse:
     """Remove a run's sync from Google Calendar using the Google Calendar API.
 

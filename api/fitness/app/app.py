@@ -25,7 +25,7 @@ from .routers import (
     summary_router,
 )
 from .models import EnvironmentResponse
-from .auth import verify_credentials
+from .auth import verify_oauth_token
 from fitness.utils.timezone import convert_runs_to_user_timezone
 
 """FastAPI application setup for the fitness API.
@@ -230,7 +230,7 @@ def get_environment() -> EnvironmentResponse:
 
 
 @app.get("/auth/verify")
-def verify_auth(username: str = Depends(verify_credentials)) -> dict[str, str]:
+def verify_auth(username: str = Depends(verify_oauth_token)) -> dict[str, str]:
     """Verify authentication credentials.
 
     This endpoint does nothing except validate credentials. It's used by the

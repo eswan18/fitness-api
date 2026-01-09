@@ -6,30 +6,39 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { startOAuthFlow } from "@/lib/oauth/client";
+import { notifyError } from "@/lib/errors";
 
 interface WelcomeModalProps {
   open: boolean;
-  onLogin: () => void;
-  onGuest: () => void;
 }
 
-export function WelcomeModal({ open, onLogin, onGuest }: WelcomeModalProps) {
+export function WelcomeModal({ open }: WelcomeModalProps) {
+  const handleLogin = async () => {
+    try {
+      await startOAuthFlow();
+    } catch (err) {
+      notifyError(err, "Failed to start login. Please try again.");
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(open) => !open && onGuest()}>
+    <Dialog open={open}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Welcome to Running Dashboard</DialogTitle>
           <DialogDescription>
-            Log in to edit runs and manage your data, or continue as a guest to
-            view read-only.
+            Track your running activities, analyze your training load, and
+            monitor your progress.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex gap-3">
-          <Button onClick={onLogin} className="flex-1">
-            Log In
-          </Button>
-          <Button onClick={onGuest} variant="outline" className="flex-1">
-            Continue as Guest
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Authentication is required to access your running data and manage
+            your activities.
+          </p>
+          <Button onClick={handleLogin} className="w-full">
+            Log In with OAuth
           </Button>
         </div>
       </DialogContent>

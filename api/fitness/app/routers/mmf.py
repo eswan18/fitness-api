@@ -6,7 +6,7 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 
-from fitness.app.auth import verify_credentials
+from fitness.app.auth import verify_oauth_token
 from fitness.models import Run
 from fitness.db.runs import get_existing_run_ids, bulk_create_runs
 from fitness.load.mmf import load_mmf_runs_from_file
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/mmf", tags=["mmf"])
 async def upload_mmf_csv(
     file: UploadFile = File(...),
     timezone: Optional[str] = None,
-    username: str = Depends(verify_credentials),
+    username: str = Depends(verify_oauth_token),
 ) -> dict:
     """Upload MapMyFitness CSV data and insert any new runs not in the database.
 

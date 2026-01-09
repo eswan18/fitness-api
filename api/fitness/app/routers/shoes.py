@@ -11,7 +11,7 @@ from fitness.db.shoes import (
 )
 from fitness.models.shoe import Shoe
 from fitness.app.models import UpdateShoeRequest
-from fitness.app.auth import verify_credentials
+from fitness.app.auth import verify_oauth_token
 
 router = APIRouter(prefix="/shoes", tags=["shoes"])
 
@@ -31,7 +31,7 @@ def read_shoes(retired: bool | None = None) -> list[Shoe]:
 def update_shoe(
     shoe_id: str,
     request: UpdateShoeRequest,
-    username: str = Depends(verify_credentials),
+    username: str = Depends(verify_oauth_token),
 ) -> dict:
     """Update shoe properties.
 

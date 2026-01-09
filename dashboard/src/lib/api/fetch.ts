@@ -18,6 +18,7 @@ import type {
   GoogleAuthStatus,
 } from "./types";
 import { useDashboardStore } from "@/store";
+import { ensureValidToken } from "@/lib/oauth/refresh";
 
 // Fetch functions
 //
@@ -363,14 +364,19 @@ export interface RefreshDataResponse {
 }
 
 export async function refreshData(): Promise<RefreshDataResponse> {
+  // Ensure token is valid, refresh if needed
+  const tokenValid = await ensureValidToken();
+  if (!tokenValid) {
+    throw new Error("Authentication required. Please log in again.");
+  }
+
   // Get auth from store
   const auth = useDashboardStore.getState();
-  const hasAuth = auth.username && auth.password;
+  const { accessToken } = auth;
 
   const headers: HeadersInit = {};
-  if (hasAuth) {
-    const credentials = btoa(`${auth.username}:${auth.password}`);
-    headers["Authorization"] = `Basic ${credentials}`;
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   const url = new URL(`${import.meta.env.VITE_API_URL}/strava/update-data`);
@@ -404,9 +410,15 @@ export async function uploadMmfCsv(
   file: File,
   timezone?: string,
 ): Promise<UploadMmfCsvResponse> {
+  // Ensure token is valid, refresh if needed
+  const tokenValid = await ensureValidToken();
+  if (!tokenValid) {
+    throw new Error("Authentication required. Please log in again.");
+  }
+
   // Get auth from store
   const auth = useDashboardStore.getState();
-  const hasAuth = auth.username && auth.password;
+  const { accessToken } = auth;
 
   const formData = new FormData();
   formData.append("file", file);
@@ -415,9 +427,8 @@ export async function uploadMmfCsv(
   }
 
   const headers: HeadersInit = {};
-  if (hasAuth) {
-    const credentials = btoa(`${auth.username}:${auth.password}`);
-    headers["Authorization"] = `Basic ${credentials}`;
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   const url = new URL(`${import.meta.env.VITE_API_URL}/mmf/upload-csv`);
@@ -449,16 +460,21 @@ export async function updateShoe(
   shoeId: string,
   request: RetireShoeRequest,
 ): Promise<{ message: string }> {
+  // Ensure token is valid, refresh if needed
+  const tokenValid = await ensureValidToken();
+  if (!tokenValid) {
+    throw new Error("Authentication required. Please log in again.");
+  }
+
   // Get auth from store
   const auth = useDashboardStore.getState();
-  const hasAuth = auth.username && auth.password;
+  const { accessToken } = auth;
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
   };
-  if (hasAuth) {
-    const credentials = btoa(`${auth.username}:${auth.password}`);
-    headers["Authorization"] = `Basic ${credentials}`;
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   const url = new URL(
@@ -545,16 +561,21 @@ export async function updateRun(
   runId: string,
   request: UpdateRunRequest,
 ): Promise<UpdateRunResponse> {
+  // Ensure token is valid, refresh if needed
+  const tokenValid = await ensureValidToken();
+  if (!tokenValid) {
+    throw new Error("Authentication required. Please log in again.");
+  }
+
   // Get auth from store
   const auth = useDashboardStore.getState();
-  const hasAuth = auth.username && auth.password;
+  const { accessToken } = auth;
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
   };
-  if (hasAuth) {
-    const credentials = btoa(`${auth.username}:${auth.password}`);
-    headers["Authorization"] = `Basic ${credentials}`;
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   const url = new URL(
@@ -614,14 +635,19 @@ export async function fetchGoogleAuthStatus(): Promise<GoogleAuthStatus> {
 // Google Calendar sync API
 
 export async function syncRun(runId: string): Promise<SyncResponse> {
+  // Ensure token is valid, refresh if needed
+  const tokenValid = await ensureValidToken();
+  if (!tokenValid) {
+    throw new Error("Authentication required. Please log in again.");
+  }
+
   // Get auth from store
   const auth = useDashboardStore.getState();
-  const hasAuth = auth.username && auth.password;
+  const { accessToken } = auth;
 
   const headers: HeadersInit = {};
-  if (hasAuth) {
-    const credentials = btoa(`${auth.username}:${auth.password}`);
-    headers["Authorization"] = `Basic ${credentials}`;
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   const url = new URL(
@@ -646,14 +672,19 @@ export async function syncRun(runId: string): Promise<SyncResponse> {
 }
 
 export async function unsyncRun(runId: string): Promise<SyncResponse> {
+  // Ensure token is valid, refresh if needed
+  const tokenValid = await ensureValidToken();
+  if (!tokenValid) {
+    throw new Error("Authentication required. Please log in again.");
+  }
+
   // Get auth from store
   const auth = useDashboardStore.getState();
-  const hasAuth = auth.username && auth.password;
+  const { accessToken } = auth;
 
   const headers: HeadersInit = {};
-  if (hasAuth) {
-    const credentials = btoa(`${auth.username}:${auth.password}`);
-    headers["Authorization"] = `Basic ${credentials}`;
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   const url = new URL(

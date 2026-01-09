@@ -20,7 +20,7 @@ from fitness.db.runs_history import (
     get_run_version,
     RunHistoryRecord,
 )
-from fitness.app.auth import verify_credentials
+from fitness.app.auth import verify_oauth_token
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ class RunHistoryResponse(BaseModel):
 def update_run(
     run_id: str,
     update_request: RunUpdateRequest,
-    username: str = Depends(verify_credentials),
+    username: str = Depends(verify_oauth_token),
 ) -> Dict[str, Any]:
     """
     Update a run with change tracking.
@@ -252,7 +252,7 @@ def restore_run_to_version(
     run_id: str,
     version_number: int,
     restored_by: str,
-    username: str = Depends(verify_credentials),
+    username: str = Depends(verify_oauth_token),
 ) -> Dict[str, Any]:
     """
     Restore a run to a previous version.
