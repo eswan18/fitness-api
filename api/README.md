@@ -160,7 +160,7 @@ Google Calendar sync allows you to automatically create calendar events for your
 
 ### OAuth Token Lifecycle
 
-**🔄 Automatic Token Management**: The application handles token refresh automatically!
+**🔄 Automatic Token Management**: The application handles token refresh automatically! At least I think so.
 
 - **Access Token**: Expires after ~1 hour, automatically refreshed using refresh token
 - **Refresh Token**: Long-lived (typically 6 months to indefinite), stored in the database

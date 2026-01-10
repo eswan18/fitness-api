@@ -2,7 +2,16 @@
 
 A Python API (in `./api`) and a React front end (in `./dashboard`) that together display my running data from Strava and MapMyRun.
 
-![dashboard](./images/dashboard.png)
+## Authentication
+
+This application uses OAuth 2.0 for authentication via the [Identity Provider](https://github.com/eswan18/identity). The dashboard handles the OAuth login flow automatically when accessing protected features (e.g., updating data, editing runs).
+
+**Setup Requirements:**
+- Identity provider running and configured (see identity repo README)
+- OAuth client registered for the dashboard
+- Environment variables configured in both `api/.env` and `dashboard/.env`
+
+See `api/README.md` for detailed authentication setup instructions.
 
 ## Testing
 
