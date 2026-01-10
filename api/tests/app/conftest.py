@@ -16,7 +16,7 @@ def auth_client() -> TestClient:
     Mocks the verify_oauth_token dependency to validate test tokens.
     """
     # Create a mock that checks the token value
-    async def mock_validate(token: str):
+    def mock_validate(token: str):
         if token == "test_token":
             return {
                 'username': 'test_user',
@@ -28,8 +28,8 @@ def auth_client() -> TestClient:
 
     # Override the validate function
     from fitness.app import oauth
-    original_validate = oauth.validate_access_token
-    oauth.validate_access_token = mock_validate
+    original_validate = oauth.validate_jwt_token
+    oauth.validate_jwt_token = mock_validate
 
     try:
         client = TestClient(app)
@@ -38,4 +38,4 @@ def auth_client() -> TestClient:
         yield client
     finally:
         # Restore original
-        oauth.validate_access_token = original_validate
+        oauth.validate_jwt_token = original_validate

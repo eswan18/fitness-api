@@ -1,16 +1,22 @@
-"""OAuth 2.0 token validation via UserInfo endpoint."""
+"""JWT validation for OAuth 2.0 access tokens."""
 
 import os
+import time
 import logging
-import httpx
 from typing import Optional, Dict, Any
+
+import jwt
+from jwt import PyJWKClient
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 logger = logging.getLogger(__name__)
-
-# OAuth security scheme
 oauth_scheme = HTTPBearer(auto_error=False)
+
+# JWKS client cache
+_jwks_client: Optional[PyJWKClient] = None
+_jwks_cache_time: float = 0
+JWKS_CACHE_DURATION = 3600  # 1 hour
 
 
 def get_identity_provider_url() -> str:
@@ -19,34 +25,55 @@ def get_identity_provider_url() -> str:
     return url.rstrip("/")
 
 
-async def validate_access_token(token: str) -> Optional[Dict[str, Any]]:
-    """Validate access token via UserInfo endpoint.
+def get_jwt_audience() -> str:
+    """Get expected JWT audience from environment."""
+    return os.getenv("JWT_AUDIENCE", "http://localhost:8000")
 
-    Returns user info dict if valid, None if invalid.
+
+def get_jwks_client() -> PyJWKClient:
+    """Get or refresh JWKS client for JWT validation."""
+    global _jwks_client, _jwks_cache_time
+
+    current_time = time.time()
+    if _jwks_client is None or (current_time - _jwks_cache_time) > JWKS_CACHE_DURATION:
+        identity_url = get_identity_provider_url()
+        jwks_url = f"{identity_url}/.well-known/jwks.json"
+        _jwks_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=JWKS_CACHE_DURATION)
+        _jwks_cache_time = current_time
+        logger.info(f"Refreshed JWKS client from {jwks_url}")
+
+    return _jwks_client
+
+
+def validate_jwt_token(token: str) -> Optional[Dict[str, Any]]:
+    """Validate JWT access token locally using JWKS.
+
+    Returns decoded claims if valid, None if invalid.
     """
     try:
+        jwks_client = get_jwks_client()
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+
         identity_url = get_identity_provider_url()
-        userinfo_url = f"{identity_url}/oauth/userinfo"
+        audience = get_jwt_audience()
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                userinfo_url,
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=5.0,
-            )
-
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 401:
-            logger.warning("Invalid or expired token")
-            return None
-        else:
-            logger.error(
-                f"Unexpected response from UserInfo: {response.status_code}"
-            )
-            return None
+        decoded = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["ES256"],
+            issuer=identity_url,
+            audience=audience,
+            options={"require": ["exp", "iss", "sub", "aud"]},
+        )
+        return decoded
+    except jwt.ExpiredSignatureError:
+        logger.warning("JWT token expired")
+        return None
+    except jwt.InvalidTokenError as e:
+        logger.warning(f"Invalid JWT token: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Token validation error: {e}")
+        logger.error(f"JWT validation error: {e}")
         return None
 
 
@@ -65,22 +92,21 @@ async def verify_oauth_token(
         )
 
     token = credentials.credentials
-    user_info = await validate_access_token(token)
+    claims = validate_jwt_token(token)
 
-    if not user_info:
+    if not claims:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Extract username from user info, checking for its existence
-    username = user_info.get("username")
+    username = claims.get("username")
     if not username:
-        logger.error(f"UserInfo response missing username field: {user_info}")
+        logger.error(f"JWT missing username claim: {claims}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Identity provider returned incomplete user information",
+            detail="Token missing required claims",
         )
 
     return username
