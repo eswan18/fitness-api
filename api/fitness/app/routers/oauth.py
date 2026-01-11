@@ -1,6 +1,7 @@
 import os
 import logging
 
+from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import RedirectResponse
 
@@ -21,6 +22,12 @@ PUBLIC_DASHBOARD_BASE_URL = os.environ["PUBLIC_DASHBOARD_BASE_URL"]
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/oauth", tags=["oauth"])
+
+
+class OAuthAuthorizeUrl(BaseModel):
+    """Response containing an OAuth authorization URL."""
+
+    url: str
 
 
 @router.get("/strava/status", response_model=OAuthIntegrationStatus)
@@ -45,6 +52,19 @@ def strava_oauth_authorize(user: User = Depends(require_editor)) -> RedirectResp
         redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/strava/callback"
     )
     return RedirectResponse(url)
+
+
+@router.get("/strava/authorize-url", response_model=OAuthAuthorizeUrl)
+def strava_oauth_authorize_url(_user: User = Depends(require_editor)) -> OAuthAuthorizeUrl:
+    """Get the Strava OAuth authorization URL.
+
+    Returns the URL as JSON so the frontend can redirect after authenticating.
+    Requires editor role as this connects an external data source.
+    """
+    url = strava.build_oauth_authorize_url(
+        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/strava/callback"
+    )
+    return OAuthAuthorizeUrl(url=url)
 
 
 @router.get("/strava/callback")
@@ -95,6 +115,19 @@ def google_oauth_authorize(user: User = Depends(require_editor)) -> RedirectResp
         redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/google/callback"
     )
     return RedirectResponse(url)
+
+
+@router.get("/google/authorize-url", response_model=OAuthAuthorizeUrl)
+def google_oauth_authorize_url(_user: User = Depends(require_editor)) -> OAuthAuthorizeUrl:
+    """Get the Google OAuth authorization URL.
+
+    Returns the URL as JSON so the frontend can redirect after authenticating.
+    Requires editor role as this connects an external data source.
+    """
+    url = google.auth.build_oauth_authorize_url(
+        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/google/callback"
+    )
+    return OAuthAuthorizeUrl(url=url)
 
 
 @router.get("/google/callback")

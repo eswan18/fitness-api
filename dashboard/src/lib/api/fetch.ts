@@ -663,6 +663,34 @@ export async function fetchGoogleAuthStatus(): Promise<GoogleAuthStatus> {
   return res.json() as Promise<GoogleAuthStatus>;
 }
 
+export interface OAuthAuthorizeUrl {
+  url: string;
+}
+
+export async function fetchStravaAuthorizeUrl(): Promise<OAuthAuthorizeUrl> {
+  const headers = await getAuthHeaders();
+  const url = new URL(
+    `${import.meta.env.VITE_API_URL}/oauth/strava/authorize-url`,
+  );
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Strava authorize URL: ${res.statusText}`);
+  }
+  return res.json() as Promise<OAuthAuthorizeUrl>;
+}
+
+export async function fetchGoogleAuthorizeUrl(): Promise<OAuthAuthorizeUrl> {
+  const headers = await getAuthHeaders();
+  const url = new URL(
+    `${import.meta.env.VITE_API_URL}/oauth/google/authorize-url`,
+  );
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Google authorize URL: ${res.statusText}`);
+  }
+  return res.json() as Promise<OAuthAuthorizeUrl>;
+}
+
 // Google Calendar sync API
 
 export async function syncRun(runId: string): Promise<SyncResponse> {

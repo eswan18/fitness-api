@@ -102,6 +102,41 @@ class TestStravaAuthorize:
         assert response.status_code == 403
 
 
+class TestStravaAuthorizeUrl:
+    """Test GET /oauth/strava/authorize-url endpoint."""
+
+    def test_authorize_url_returns_json(self, editor_client: TestClient):
+        """Test that authorize-url endpoint returns URL as JSON."""
+        with patch(
+            "fitness.app.routers.oauth.strava.build_oauth_authorize_url"
+        ) as mock_build:
+            mock_build.return_value = (
+                "https://www.strava.com/oauth/authorize?client_id=123"
+            )
+            with patch(
+                "fitness.app.routers.oauth.PUBLIC_API_BASE_URL",
+                "https://api.example.com",
+            ):
+                response = editor_client.get("/oauth/strava/authorize-url")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["url"] == "https://www.strava.com/oauth/authorize?client_id=123"
+        mock_build.assert_called_once_with(
+            redirect_uri="https://api.example.com/oauth/strava/callback"
+        )
+
+    def test_authorize_url_requires_editor(self, viewer_client: TestClient):
+        """Test that authorize-url endpoint requires editor role."""
+        response = viewer_client.get("/oauth/strava/authorize-url")
+        assert response.status_code == 403
+
+    def test_authorize_url_requires_auth(self, client: TestClient):
+        """Test that authorize-url endpoint requires authentication."""
+        response = client.get("/oauth/strava/authorize-url")
+        assert response.status_code == 401
+
+
 class TestStravaCallback:
     """Test GET /oauth/strava/callback endpoint."""
 
@@ -255,6 +290,43 @@ class TestGoogleAuthorize:
         """Test that authorize endpoint requires editor role."""
         response = viewer_client.get("/oauth/google/authorize", follow_redirects=False)
         assert response.status_code == 403
+
+
+class TestGoogleAuthorizeUrl:
+    """Test GET /oauth/google/authorize-url endpoint."""
+
+    def test_authorize_url_returns_json(self, editor_client: TestClient):
+        """Test that authorize-url endpoint returns URL as JSON."""
+        with patch(
+            "fitness.app.routers.oauth.google.auth.build_oauth_authorize_url"
+        ) as mock_build:
+            mock_build.return_value = (
+                "https://accounts.google.com/o/oauth2/v2/auth?client_id=123"
+            )
+            with patch(
+                "fitness.app.routers.oauth.PUBLIC_API_BASE_URL",
+                "https://api.example.com",
+            ):
+                response = editor_client.get("/oauth/google/authorize-url")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert (
+            data["url"] == "https://accounts.google.com/o/oauth2/v2/auth?client_id=123"
+        )
+        mock_build.assert_called_once_with(
+            redirect_uri="https://api.example.com/oauth/google/callback"
+        )
+
+    def test_authorize_url_requires_editor(self, viewer_client: TestClient):
+        """Test that authorize-url endpoint requires editor role."""
+        response = viewer_client.get("/oauth/google/authorize-url")
+        assert response.status_code == 403
+
+    def test_authorize_url_requires_auth(self, client: TestClient):
+        """Test that authorize-url endpoint requires authentication."""
+        response = client.get("/oauth/google/authorize-url")
+        assert response.status_code == 401
 
 
 class TestGoogleCallback:
