@@ -59,13 +59,31 @@ def validate_jwt_token(token: str) -> Optional[Dict[str, Any]]:
 
     Returns decoded claims if valid, None if invalid.
     """
+    identity_url = get_identity_provider_url()
+    audience = get_jwt_audience()
+
+    logger.info(f"=== JWT VALIDATION DEBUG ===")
+    logger.info(f"Token (first 50 chars): {token[:50]}...")
+    logger.info(f"Expected issuer: {identity_url}")
+    logger.info(f"Expected audience: {audience}")
+
+    # Decode without verification to see what's in the token
     try:
+        unverified = jwt.decode(token, options={"verify_signature": False})
+        logger.info(f"Token issuer (iss): {unverified.get('iss')}")
+        logger.info(f"Token audience (aud): {unverified.get('aud')}")
+        logger.info(f"Token subject (sub): {unverified.get('sub')}")
+    except Exception as e:
+        logger.error(f"Failed to decode token without verification: {e}")
+
+    try:
+        logger.info(f"Fetching JWKS client...")
         jwks_client = get_jwks_client()
+        logger.info(f"Getting signing key from JWT...")
         signing_key = jwks_client.get_signing_key_from_jwt(token)
+        logger.info(f"Got signing key with kid: {signing_key.key_id}")
 
-        identity_url = get_identity_provider_url()
-        audience = get_jwt_audience()
-
+        logger.info(f"Attempting to decode and verify token...")
         decoded = jwt.decode(
             token,
             signing_key.key,
@@ -74,15 +92,16 @@ def validate_jwt_token(token: str) -> Optional[Dict[str, Any]]:
             audience=audience,
             options={"require": ["exp", "iss", "sub", "aud"]},
         )
+        logger.info(f"=== JWT VALIDATION SUCCESS ===")
         return decoded
     except jwt.ExpiredSignatureError:
         logger.warning("JWT token expired")
         return None
     except jwt.InvalidTokenError as e:
-        logger.warning(f"Invalid JWT token: {e}")
+        logger.warning(f"Invalid JWT token: {type(e).__name__}: {e}")
         return None
     except Exception as e:
-        logger.error(f"JWT validation error: {e}")
+        logger.error(f"JWT validation error: {type(e).__name__}: {e}")
         return None
 
 
