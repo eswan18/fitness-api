@@ -20,6 +20,25 @@ import type {
 import { useDashboardStore } from "@/store";
 import { ensureValidToken } from "@/lib/oauth/refresh";
 
+/**
+ * Get authorization headers for authenticated API requests.
+ * Ensures token is valid (refreshing if needed) and returns headers with Bearer token.
+ * Throws if authentication is required but no valid token is available.
+ */
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const tokenValid = await ensureValidToken();
+  if (!tokenValid) {
+    throw new Error("Authentication required. Please log in again.");
+  }
+
+  const { accessToken } = useDashboardStore.getState();
+  const headers: HeadersInit = {};
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
+  return headers;
+}
+
 // Fetch functions
 //
 // To pull data from the API
@@ -27,13 +46,14 @@ import { ensureValidToken } from "@/lib/oauth/refresh";
 export async function fetchShoeMileage(
   includeRetired: boolean = false,
 ): Promise<ShoeMileage[]> {
+  const headers = await getAuthHeaders();
   const url = new URL(
     `${import.meta.env.VITE_API_URL}/metrics/mileage/by-shoe`,
   );
   if (includeRetired) {
     url.searchParams.set("include_retired", "true");
   }
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error("Failed to fetch shoe mileage");
   return res.json() as Promise<ShoeMileage[]>;
 }
@@ -49,6 +69,7 @@ export async function fetchDayMileage({
   endDate,
   userTimezone,
 }: FetchDayMileageParams = {}): Promise<DayMileage[]> {
+  const headers = await getAuthHeaders();
   const url = new URL(`${import.meta.env.VITE_API_URL}/metrics/mileage/by-day`);
   if (startDate) {
     url.searchParams.set("start", toDateString(startDate));
@@ -59,7 +80,7 @@ export async function fetchDayMileage({
   if (userTimezone) {
     url.searchParams.set("user_timezone", userTimezone);
   }
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error("Failed to fetch day mileage");
   const rawDayMileage = await (res.json() as Promise<RawDayMileage[]>);
   return rawDayMileage.map(dayMileageFromRawDayMileage);
@@ -78,6 +99,7 @@ export async function fetchRollingDayMileage({
   window,
   userTimezone,
 }: FetchRollingDayMileageParams = {}): Promise<DayMileage[]> {
+  const headers = await getAuthHeaders();
   const url = new URL(
     `${import.meta.env.VITE_API_URL}/metrics/mileage/rolling-by-day`,
   );
@@ -93,7 +115,7 @@ export async function fetchRollingDayMileage({
   if (userTimezone) {
     url.searchParams.set("user_timezone", userTimezone);
   }
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error("Failed to fetch rolling day mileage");
   const rawDayMileage = await (res.json() as Promise<RawDayMileage[]>);
   return rawDayMileage.map(dayMileageFromRawDayMileage);
@@ -117,6 +139,7 @@ export async function fetchRunDetails({
   sortOrder = "desc",
   synced,
 }: FetchRunsParams = {}): Promise<RunDetail[]> {
+  const headers = await getAuthHeaders();
   // Use unambiguous path to avoid collision with dynamic /runs/{run_id}
   const url = new URL(`${import.meta.env.VITE_API_URL}/runs-details`);
   if (startDate) {
@@ -135,7 +158,7 @@ export async function fetchRunDetails({
   if (synced === "synced") url.searchParams.set("synced", "true");
   else if (synced === "unsynced") url.searchParams.set("synced", "false");
 
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error("Failed to fetch run details");
 
   const rawDetails = (await res.json()) as RawRunDetail[];
@@ -158,6 +181,7 @@ export async function fetchTotalMileage({
   endDate,
   userTimezone,
 }: fetchTotalMileageParams = {}): Promise<number> {
+  const headers = await getAuthHeaders();
   const url = new URL(`${import.meta.env.VITE_API_URL}/metrics/mileage/total`);
   if (startDate) {
     url.searchParams.set("start", toDateString(startDate));
@@ -168,7 +192,7 @@ export async function fetchTotalMileage({
   if (userTimezone) {
     url.searchParams.set("user_timezone", userTimezone);
   }
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error("Failed to fetch mileage");
   const totalMileage = (await res.json()) as number;
   return totalMileage;
@@ -185,6 +209,7 @@ export async function fetchTotalSeconds({
   endDate,
   userTimezone,
 }: fetchTotalSecondsParams = {}): Promise<number> {
+  const headers = await getAuthHeaders();
   const url = new URL(`${import.meta.env.VITE_API_URL}/metrics/seconds/total`);
   if (startDate) {
     url.searchParams.set("start", toDateString(startDate));
@@ -195,7 +220,7 @@ export async function fetchTotalSeconds({
   if (userTimezone) {
     url.searchParams.set("user_timezone", userTimezone);
   }
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error("Failed to fetch seconds");
   const totalSeconds = (await res.json()) as number;
   return totalSeconds;
@@ -218,6 +243,7 @@ export async function fetchDayTrainingLoad({
   sex,
   userTimezone,
 }: fetchDayTrainingLoadParams): Promise<DayTrainingLoad[]> {
+  const headers = await getAuthHeaders();
   const url = new URL(
     `${import.meta.env.VITE_API_URL}/metrics/training-load/by-day`,
   );
@@ -229,7 +255,7 @@ export async function fetchDayTrainingLoad({
   if (userTimezone) {
     url.searchParams.set("user_timezone", userTimezone);
   }
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error("Failed to fetch training load");
   const rawDayTrainingLoad = await (res.json() as Promise<
     RawDayTrainingLoad[]
@@ -334,6 +360,7 @@ export async function fetchDayTrimp(
   end?: Date,
   userTimezone?: string,
 ): Promise<DayTrimp[]> {
+  const headers = await getAuthHeaders();
   const url = new URL(`${import.meta.env.VITE_API_URL}/metrics/trimp/by-day`);
   if (start) {
     url.searchParams.set("start", toDateString(start));
@@ -344,7 +371,7 @@ export async function fetchDayTrimp(
   if (userTimezone) {
     url.searchParams.set("user_timezone", userTimezone);
   }
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     throw new Error(`Failed to fetch day TRIMP: ${res.statusText}`);
   }
@@ -513,11 +540,12 @@ export async function unretireShoe(
 }
 
 export async function fetchShoes(retired?: boolean): Promise<Shoe[]> {
+  const headers = await getAuthHeaders();
   const url = new URL(`${import.meta.env.VITE_API_URL}/shoes`);
   if (retired !== undefined) {
     url.searchParams.set("retired", retired.toString());
   }
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     throw new Error(`Failed to fetch shoes: ${res.statusText}`);
   }
@@ -606,8 +634,9 @@ export interface EnvironmentResponse {
 }
 
 export async function fetchEnvironment(): Promise<EnvironmentResponse> {
+  const headers = await getAuthHeaders();
   const url = new URL(`${import.meta.env.VITE_API_URL}/environment`);
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     throw new Error(`Failed to fetch environment: ${res.statusText}`);
   }
@@ -615,8 +644,9 @@ export async function fetchEnvironment(): Promise<EnvironmentResponse> {
 }
 
 export async function fetchStravaAuthStatus(): Promise<StravaAuthStatus> {
+  const headers = await getAuthHeaders();
   const url = new URL(`${import.meta.env.VITE_API_URL}/oauth/strava/status`);
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     throw new Error(`Failed to fetch Strava auth status: ${res.statusText}`);
   }
@@ -624,8 +654,9 @@ export async function fetchStravaAuthStatus(): Promise<StravaAuthStatus> {
 }
 
 export async function fetchGoogleAuthStatus(): Promise<GoogleAuthStatus> {
+  const headers = await getAuthHeaders();
   const url = new URL(`${import.meta.env.VITE_API_URL}/oauth/google/status`);
-  const res = await fetch(url);
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     throw new Error(`Failed to fetch Google auth status: ${res.statusText}`);
   }
