@@ -108,7 +108,7 @@ def test_strava_load(make_sample_strava_activity, make_sample_strava_gear, monke
     mock_client.get_gear.return_value = [gear1, gear2]
     runs = load_strava_runs(mock_client)
     assert len(runs) == 2
-    assert runs[0].gear.nickname == "Brooks Shoes"  # type: ignore[possibly-unbound-attribute]
-    assert runs[1].gear.nickname == "Nike Shoes"  # type: ignore[possibly-unbound-attribute]
+    assert runs[0].gear.nickname == "Brooks Shoes"
+    assert runs[1].gear.nickname == "Nike Shoes"
 
     mock_client.get_gear.assert_called_once_with({"1", "2"})

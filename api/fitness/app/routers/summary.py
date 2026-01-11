@@ -4,7 +4,7 @@ import zoneinfo
 
 from fastapi import APIRouter, Depends
 
-from fitness.app.models import TrmnlSummary, Sex
+from fitness.app.models import TrmnlSummary, Sex, LoadSeries
 from fitness.app.dependencies import all_runs
 from fitness.app.auth import require_viewer
 from fitness.agg import total_mileage, total_seconds
@@ -70,27 +70,27 @@ def get_trmnl_summary(
 
     reversed_data = list(reversed(training_load_data))
     load_data = [
-        {
-            "name": "tsb",
-            "data": [
-                [day_data.date.isoformat(), day_data.training_load.tsb]
+        LoadSeries(
+            name="tsb",
+            data=[
+                (day_data.date.isoformat(), day_data.training_load.tsb)
                 for day_data in reversed_data
             ],
-        },
-        {
-            "name": "atl",
-            "data": [
-                [day_data.date.isoformat(), day_data.training_load.atl]
+        ),
+        LoadSeries(
+            name="atl",
+            data=[
+                (day_data.date.isoformat(), day_data.training_load.atl)
                 for day_data in reversed_data
             ],
-        },
-        {
-            "name": "ctl",
-            "data": [
-                [day_data.date.isoformat(), day_data.training_load.ctl]
+        ),
+        LoadSeries(
+            name="ctl",
+            data=[
+                (day_data.date.isoformat(), day_data.training_load.ctl)
                 for day_data in reversed_data
             ],
-        },
+        ),
     ]
 
     return TrmnlSummary(

@@ -60,7 +60,7 @@ app.include_router(strava_router)
 app.include_router(mmf_router)
 app.include_router(summary_router)
 app.add_middleware(
-    CORSMiddleware,
+    CORSMiddleware,  # type: ignore[arg-type]
     allow_origins=[
         "http://localhost:5173",  # Vite dev server
         "http://127.0.0.1:5173",

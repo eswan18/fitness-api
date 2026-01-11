@@ -4,6 +4,8 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
+from psycopg import sql
+
 from fitness.models.sync import SyncedRun, SyncStatus
 from .connection import get_db_cursor
 
@@ -89,6 +91,8 @@ def create_synced_run(
             )
 
             result = cursor.fetchone()
+            if result is None:
+                raise RuntimeError(f"Failed to create sync record for run_id={run_id}")
             sync_id, created_at, updated_at = result
 
             logger.info(
@@ -145,26 +149,26 @@ def update_synced_run(
 
         with get_db_cursor() as cursor:
             # Build dynamic UPDATE query based on provided fields
-            update_fields = []
-            params = []
+            update_fields: list[sql.Composable] = []
+            params: list = []
 
             if run_version is not None:
-                update_fields.append("run_version = %s")
+                update_fields.append(sql.SQL("run_version = %s"))
                 params.append(run_version)
 
             if google_event_id is not None:
-                update_fields.append("google_event_id = %s")
+                update_fields.append(sql.SQL("google_event_id = %s"))
                 params.append(google_event_id)
 
             if sync_status is not None:
-                update_fields.append("sync_status = %s")
+                update_fields.append(sql.SQL("sync_status = %s"))
                 params.append(sync_status)
 
             if error_message is not None:
-                update_fields.append("error_message = %s")
+                update_fields.append(sql.SQL("error_message = %s"))
                 params.append(error_message)
             elif clear_error_message:
-                update_fields.append("error_message = NULL")
+                update_fields.append(sql.SQL("error_message = NULL"))
                 # No parameter needed for NULL
 
             if not update_fields:
@@ -175,19 +179,19 @@ def update_synced_run(
                 return get_synced_run(run_id)
 
             # Always update the updated_at timestamp
-            update_fields.append("updated_at = %s")
+            update_fields.append(sql.SQL("updated_at = %s"))
             params.append(datetime.now())
 
             # Add run_id for WHERE clause
             params.append(run_id)
 
-            query = f"""
+            query = sql.SQL("""
                 UPDATE synced_runs
-                SET {", ".join(update_fields)}
+                SET {update_fields}
                 WHERE run_id = %s
                 RETURNING id, run_id, run_version, google_event_id, synced_at,
                           sync_status, error_message, created_at, updated_at
-            """
+            """).format(update_fields=sql.SQL(", ").join(update_fields))
 
             cursor.execute(query, params)
             row = cursor.fetchone()

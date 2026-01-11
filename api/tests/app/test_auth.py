@@ -101,7 +101,7 @@ class TestProtectedMutationEndpoints:
             body = {"retired_at": "2024-01-01"}
 
         kwargs = {"json": body} if body else {}
-        response = client.request(method, path, **kwargs)
+        response = client.request(method, path, **kwargs)  # type: ignore[arg-type]
         assert response.status_code == 401
         assert "WWW-Authenticate" in response.headers
 
@@ -128,7 +128,7 @@ class TestProtectedMutationEndpoints:
             body = {"retired_at": "2024-01-01"}
 
         kwargs = {"json": body} if body else {}
-        response = viewer_client.request(method, path, **kwargs)
+        response = viewer_client.request(method, path, **kwargs)  # type: ignore[arg-type]
         assert response.status_code == 403
 
     @pytest.mark.parametrize(

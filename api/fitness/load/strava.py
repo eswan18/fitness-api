@@ -44,9 +44,9 @@ def load_strava_runs(client: StravaClient) -> list[StravaActivityWithGear]:
 
         gear_by_id = {g.id: g for g in gear}
         runs_w_gear = [
-            run.with_gear(gear=gear_by_id.get(run.gear_id))
+            run.with_gear(gear=gear_by_id[run.gear_id])
             for run in runs
-            if run.gear_id is not None
+            if run.gear_id is not None and run.gear_id in gear_by_id
         ]
 
         logger.info(

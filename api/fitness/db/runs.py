@@ -2,6 +2,8 @@ import logging
 from datetime import date
 from typing import List, Optional
 
+from psycopg import sql
+
 from fitness.models import Run
 from fitness.models.run_detail import RunDetail
 from fitness.models.shoe import generate_shoe_id
@@ -195,19 +197,21 @@ def get_run_details_in_date_range(
     Joins `runs` to `shoes` and `synced_runs`.
     """
     with get_db_cursor() as cursor:
-        base_where = ["DATE(r.datetime_utc) BETWEEN %s AND %s"]
+        base_where = [sql.SQL("DATE(r.datetime_utc) BETWEEN %s AND %s")]
         params: list = [start_date, end_date]
         if not include_deleted:
-            base_where.append("r.deleted_at IS NULL")
+            base_where.append(sql.SQL("r.deleted_at IS NULL"))
         if synced is True:
-            base_where.append("sr.sync_status = 'synced'")
+            base_where.append(sql.SQL("sr.sync_status = 'synced'"))
         elif synced is False:
             base_where.append(
-                "(sr.sync_status IS DISTINCT FROM 'synced' OR sr.run_id IS NULL)"
+                sql.SQL(
+                    "(sr.sync_status IS DISTINCT FROM 'synced' OR sr.run_id IS NULL)"
+                )
             )
 
-        where_clause = " AND ".join(base_where)
-        query = f"""
+        where_clause = sql.SQL(" AND ").join(base_where)
+        query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
                    COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
                    sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version
@@ -216,7 +220,7 @@ def get_run_details_in_date_range(
             LEFT JOIN synced_runs sr ON sr.run_id = r.id
             WHERE {where_clause}
             ORDER BY r.datetime_utc DESC
-        """
+        """).format(where_clause=where_clause)
         cursor.execute(query, params)
         rows = cursor.fetchall()
         return [_row_to_run_detail(row) for row in rows]
@@ -227,18 +231,24 @@ def get_all_run_details(
 ) -> List[RunDetail]:
     """Get all detailed runs with shoes and sync info."""
     with get_db_cursor() as cursor:
-        base_where = []
+        base_where: list[sql.Composable] = []
         params: list = []
         if not include_deleted:
-            base_where.append("r.deleted_at IS NULL")
+            base_where.append(sql.SQL("r.deleted_at IS NULL"))
         if synced is True:
-            base_where.append("sr.sync_status = 'synced'")
+            base_where.append(sql.SQL("sr.sync_status = 'synced'"))
         elif synced is False:
             base_where.append(
-                "(sr.sync_status IS DISTINCT FROM 'synced' OR sr.run_id IS NULL)"
+                sql.SQL(
+                    "(sr.sync_status IS DISTINCT FROM 'synced' OR sr.run_id IS NULL)"
+                )
             )
-        where_clause = f"WHERE {' AND '.join(base_where)}" if base_where else ""
-        query = f"""
+        where_clause = (
+            sql.SQL("WHERE ") + sql.SQL(" AND ").join(base_where)
+            if base_where
+            else sql.SQL("")
+        )
+        query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
                    COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
                    sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version
@@ -247,7 +257,7 @@ def get_all_run_details(
             LEFT JOIN synced_runs sr ON sr.run_id = r.id
             {where_clause}
             ORDER BY r.datetime_utc DESC
-        """
+        """).format(where_clause=where_clause)
         cursor.execute(query, params)
         rows = cursor.fetchall()
         return [_row_to_run_detail(row) for row in rows]

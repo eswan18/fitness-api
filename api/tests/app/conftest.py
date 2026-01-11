@@ -1,10 +1,11 @@
 import pytest
 from uuid import UUID
 from datetime import datetime, timezone
+from typing import Generator
 from fastapi.testclient import TestClient
 
 from fitness.app.app import app
-from fitness.models.user import User
+from fitness.models.user import User, Role
 
 
 # Shared test user data
@@ -12,7 +13,7 @@ TEST_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 TEST_IDP_USER_ID = UUID("00000000-0000-0000-0000-000000000002")
 
 
-def _create_test_user(role: str = "viewer") -> User:
+def _create_test_user(role: Role = "viewer") -> User:
     """Create a test user with specified role."""
     return User(
         id=TEST_USER_ID,
@@ -31,7 +32,7 @@ def client() -> TestClient:
 
 
 @pytest.fixture(scope="function")
-def auth_client() -> TestClient:
+def auth_client() -> Generator[TestClient, None, None]:
     """Test client with mocked OAuth authentication (editor role).
 
     Mocks the verify_oauth_token dependency to validate test tokens.
@@ -39,7 +40,7 @@ def auth_client() -> TestClient:
     """
 
     # Create a mock that checks the token value
-    def mock_validate(token: str):
+    def mock_validate(token: str) -> dict[str, str] | None:
         if token == "test_token":
             return {
                 "username": "test_user",
@@ -49,7 +50,9 @@ def auth_client() -> TestClient:
         # Invalid token
         return None
 
-    def mock_get_or_create_user(idp_user_id, email, username):
+    def mock_get_or_create_user(
+        idp_user_id: UUID, email: str | None, username: str | None
+    ) -> User:
         return _create_test_user(role="editor")
 
     # Override the validate function and user creation
@@ -58,8 +61,8 @@ def auth_client() -> TestClient:
 
     original_validate = oauth.validate_jwt_token
     original_get_or_create = oauth.get_or_create_user
-    oauth.validate_jwt_token = mock_validate
-    oauth.get_or_create_user = mock_get_or_create_user
+    oauth.validate_jwt_token = mock_validate  # type: ignore[assignment]
+    oauth.get_or_create_user = mock_get_or_create_user  # type: ignore[assignment]
 
     try:
         client = TestClient(app)
@@ -73,10 +76,10 @@ def auth_client() -> TestClient:
 
 
 @pytest.fixture(scope="function")
-def viewer_client() -> TestClient:
+def viewer_client() -> Generator[TestClient, None, None]:
     """Test client with mocked OAuth authentication (viewer role)."""
 
-    def mock_validate(token: str):
+    def mock_validate(token: str) -> dict[str, str] | None:
         if token == "viewer_token":
             return {
                 "username": "viewer_user",
@@ -85,15 +88,17 @@ def viewer_client() -> TestClient:
             }
         return None
 
-    def mock_get_or_create_user(idp_user_id, email, username):
+    def mock_get_or_create_user(
+        idp_user_id: UUID, email: str | None, username: str | None
+    ) -> User:
         return _create_test_user(role="viewer")
 
     from fitness.app import oauth
 
     original_validate = oauth.validate_jwt_token
     original_get_or_create = oauth.get_or_create_user
-    oauth.validate_jwt_token = mock_validate
-    oauth.get_or_create_user = mock_get_or_create_user
+    oauth.validate_jwt_token = mock_validate  # type: ignore[assignment]
+    oauth.get_or_create_user = mock_get_or_create_user  # type: ignore[assignment]
 
     try:
         client = TestClient(app)
@@ -105,10 +110,10 @@ def viewer_client() -> TestClient:
 
 
 @pytest.fixture(scope="function")
-def editor_client() -> TestClient:
+def editor_client() -> Generator[TestClient, None, None]:
     """Test client with mocked OAuth authentication (editor role)."""
 
-    def mock_validate(token: str):
+    def mock_validate(token: str) -> dict[str, str] | None:
         if token == "editor_token":
             return {
                 "username": "editor_user",
@@ -117,15 +122,17 @@ def editor_client() -> TestClient:
             }
         return None
 
-    def mock_get_or_create_user(idp_user_id, email, username):
+    def mock_get_or_create_user(
+        idp_user_id: UUID, email: str | None, username: str | None
+    ) -> User:
         return _create_test_user(role="editor")
 
     from fitness.app import oauth
 
     original_validate = oauth.validate_jwt_token
     original_get_or_create = oauth.get_or_create_user
-    oauth.validate_jwt_token = mock_validate
-    oauth.get_or_create_user = mock_get_or_create_user
+    oauth.validate_jwt_token = mock_validate  # type: ignore[assignment]
+    oauth.get_or_create_user = mock_get_or_create_user  # type: ignore[assignment]
 
     try:
         client = TestClient(app)

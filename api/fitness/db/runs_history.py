@@ -1,9 +1,12 @@
 import logging
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, cast
 from dataclasses import dataclass
 
+from psycopg import sql
+
 from fitness.models import Run
+from fitness.models.run import RunType, RunSource
 from .connection import get_db_cursor, get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -37,10 +40,10 @@ class RunHistoryRecord:
         return Run(
             id=self.run_id,
             datetime_utc=self.datetime_utc,
-            type=self.type,
+            type=cast(RunType, self.type),
             distance=self.distance,
             duration=self.duration,
-            source=self.source,
+            source=cast(RunSource, self.source),
             avg_heart_rate=self.avg_heart_rate,
             shoe_id=self.shoe_id,
         )
@@ -234,19 +237,19 @@ def update_run_with_history(
                 new_version = current_version + 1
 
                 # Build the UPDATE query dynamically based on provided updates
-                set_clauses = []
-                params = []
+                set_clauses: list[sql.Composable] = []
+                params: list[Any] = []
 
                 for field, value in updates.items():
-                    set_clauses.append(f"{field} = %s")
+                    set_clauses.append(sql.SQL("{} = %s").format(sql.Identifier(field)))
                     params.append(value)
 
                 # Add metadata updates
                 set_clauses.extend(
                     [
-                        "last_edited_at = CURRENT_TIMESTAMP",
-                        "last_edited_by = %s",
-                        "version = %s",
+                        sql.SQL("last_edited_at = CURRENT_TIMESTAMP"),
+                        sql.SQL("last_edited_by = %s"),
+                        sql.SQL("version = %s"),
                     ]
                 )
                 params.extend([changed_by, new_version])
@@ -255,11 +258,11 @@ def update_run_with_history(
                 params.append(run_id)
 
                 # Execute the update of the current run row
-                update_query = f"""
-                    UPDATE runs 
-                    SET {", ".join(set_clauses)}
+                update_query = sql.SQL("""
+                    UPDATE runs
+                    SET {set_clauses}
                     WHERE id = %s
-                """
+                """).format(set_clauses=sql.SQL(", ").join(set_clauses))
 
                 cursor.execute(update_query, params)
 

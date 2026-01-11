@@ -2,6 +2,8 @@ import logging
 from datetime import date
 from typing import List, Optional
 
+from psycopg import sql
+
 from fitness.models.shoe import Shoe
 from .connection import get_db_cursor
 
@@ -20,34 +22,37 @@ def get_shoes(
     """
     with get_db_cursor() as cursor:
         # Build WHERE clause conditions
-        conditions = []
+        conditions: list[sql.Composable] = []
 
         if not include_deleted:
-            conditions.append("deleted_at IS NULL")
+            conditions.append(sql.SQL("deleted_at IS NULL"))
 
         if retired is True:
-            conditions.append("retired_at IS NOT NULL")
+            conditions.append(sql.SQL("retired_at IS NOT NULL"))
         elif retired is False:
-            conditions.append("retired_at IS NULL")
+            conditions.append(sql.SQL("retired_at IS NULL"))
         # If retired is None, no retirement filter is applied
 
         # Build the query
-        where_clause = ""
-        if conditions:
-            where_clause = "WHERE " + " AND ".join(conditions)
+        where_clause = (
+            sql.SQL("WHERE ") + sql.SQL(" AND ").join(conditions)
+            if conditions
+            else sql.SQL("")
+        )
 
         # Choose ORDER BY based on retirement filter
-        if retired is True:
-            order_by = "ORDER BY retired_at DESC"
-        else:
-            order_by = "ORDER BY name"
+        order_by = (
+            sql.SQL("ORDER BY retired_at DESC")
+            if retired is True
+            else sql.SQL("ORDER BY name")
+        )
 
-        query = f"""
+        query = sql.SQL("""
             SELECT id, name, retired_at, notes, retirement_notes, deleted_at
             FROM shoes
             {where_clause}
             {order_by}
-        """
+        """).format(where_clause=where_clause, order_by=order_by)
 
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -130,15 +135,13 @@ def get_existing_shoes_by_names(shoe_names: set[str]) -> dict[str, str]:
     logger.debug(f"Checking existence of {len(shoe_names)} shoes: {shoe_names}")
 
     with get_db_cursor() as cursor:
-        # Create placeholders for IN clause
-        placeholders = ",".join(["%s"] * len(shoe_names))
-        cursor.execute(
-            f"""
-            SELECT name, id FROM shoes 
+        # Create placeholders for IN clause using sql.SQL
+        placeholders = sql.SQL(",").join(sql.Placeholder() * len(shoe_names))
+        query = sql.SQL("""
+            SELECT name, id FROM shoes
             WHERE name IN ({placeholders}) AND deleted_at IS NULL
-        """,
-            list(shoe_names),
-        )
+        """).format(placeholders=placeholders)
+        cursor.execute(query, list(shoe_names))
 
         result = {name: shoe_id for name, shoe_id in cursor.fetchall()}
         logger.debug(f"Found {len(result)} existing shoes in database")
