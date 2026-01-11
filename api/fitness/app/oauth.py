@@ -30,8 +30,11 @@ def get_identity_provider_url() -> str:
 
 
 def get_jwt_audience() -> str:
-    """Get expected JWT audience from environment."""
-    return os.getenv("JWT_AUDIENCE", "http://localhost:8000")
+    """Get expected JWT audience from environment.
+
+    This is a required environment variable validated at startup.
+    """
+    return os.environ["JWT_AUDIENCE"]
 
 
 def get_jwks_client() -> PyJWKClient:
