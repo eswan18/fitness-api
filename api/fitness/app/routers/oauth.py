@@ -1,7 +1,7 @@
 import os
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import RedirectResponse
 
 from fitness.db.oauth_credentials import (
@@ -10,6 +10,8 @@ from fitness.db.oauth_credentials import (
     upsert_credentials,
     OAuthIntegrationStatus,
 )
+from fitness.models.user import User
+from fitness.app.auth import require_viewer, require_editor
 from fitness.integrations import strava
 from fitness.integrations import google
 
@@ -22,7 +24,7 @@ router = APIRouter(prefix="/oauth", tags=["oauth"])
 
 
 @router.get("/strava/status", response_model=OAuthIntegrationStatus)
-def strava_auth_status() -> OAuthIntegrationStatus:
+def strava_auth_status(_user: User = Depends(require_viewer)) -> OAuthIntegrationStatus:
     """Get the current authorization status for Strava.
 
     Returns whether the user has authorized Strava and if the access token is valid.
@@ -34,8 +36,11 @@ def strava_auth_status() -> OAuthIntegrationStatus:
 
 
 @router.get("/strava/authorize")
-def strava_oauth_authorize() -> RedirectResponse:
-    """Log into Strava and redirect to the callback endpoint."""
+def strava_oauth_authorize(user: User = Depends(require_editor)) -> RedirectResponse:
+    """Log into Strava and redirect to the callback endpoint.
+
+    Requires editor role as this connects an external data source.
+    """
     url = strava.build_oauth_authorize_url(
         redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/strava/callback"
     )
@@ -69,7 +74,7 @@ async def strava_oauth_callback(
 
 
 @router.get("/google/status", response_model=OAuthIntegrationStatus)
-def google_auth_status() -> OAuthIntegrationStatus:
+def google_auth_status(_user: User = Depends(require_viewer)) -> OAuthIntegrationStatus:
     """Get the current authorization status for Google.
 
     Returns whether the user has authorized Google and if the access token is valid.
@@ -81,8 +86,11 @@ def google_auth_status() -> OAuthIntegrationStatus:
 
 
 @router.get("/google/authorize")
-def google_oauth_authorize() -> RedirectResponse:
-    """Log into Google and redirect to the callback endpoint."""
+def google_oauth_authorize(user: User = Depends(require_editor)) -> RedirectResponse:
+    """Log into Google and redirect to the callback endpoint.
+
+    Requires editor role as this connects an external data source.
+    """
     url = google.auth.build_oauth_authorize_url(
         redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/google/callback"
     )

@@ -1,14 +1,18 @@
-"""JWT validation for OAuth 2.0 access tokens."""
+"""JWT validation for OAuth 2.0 access tokens and role-based authorization."""
 
 import os
 import time
 import logging
 from typing import Optional, Dict, Any
+from uuid import UUID
 
 import jwt
 from jwt import PyJWKClient
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+from fitness.models.user import User
+from fitness.db.users import get_or_create_user
 
 logger = logging.getLogger(__name__)
 oauth_scheme = HTTPBearer(auto_error=False)
@@ -38,7 +42,9 @@ def get_jwks_client() -> PyJWKClient:
     if _jwks_client is None or (current_time - _jwks_cache_time) > JWKS_CACHE_DURATION:
         identity_url = get_identity_provider_url()
         jwks_url = f"{identity_url}/.well-known/jwks.json"
-        _jwks_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=JWKS_CACHE_DURATION)
+        _jwks_client = PyJWKClient(
+            jwks_url, cache_keys=True, lifespan=JWKS_CACHE_DURATION
+        )
         _jwks_cache_time = current_time
         logger.info(f"Refreshed JWKS client from {jwks_url}")
 
@@ -110,3 +116,94 @@ async def verify_oauth_token(
         )
 
     return username
+
+
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(oauth_scheme),
+) -> User:
+    """FastAPI dependency to get the current authenticated user.
+
+    Validates the JWT token, extracts claims, and gets or creates the user record.
+    User profile (email, username) is updated on each login.
+
+    Returns:
+        User object with role information.
+
+    Raises:
+        HTTPException 401 if token is missing or invalid.
+    """
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = credentials.credentials
+    claims = validate_jwt_token(token)
+
+    if not claims:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Extract required claims
+    sub = claims.get("sub")
+    if not sub:
+        logger.error(f"JWT missing sub claim: {claims}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token missing required claims",
+        )
+
+    # Extract optional profile claims
+    email = claims.get("email")
+    username = claims.get("username")
+
+    # Get or create user, updating profile info
+    try:
+        idp_user_id = UUID(sub)
+    except ValueError:
+        logger.error(f"Invalid UUID in sub claim: {sub}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid token claims",
+        )
+
+    user = get_or_create_user(idp_user_id, email, username)
+    return user
+
+
+async def require_viewer(user: User = Depends(get_current_user)) -> User:
+    """FastAPI dependency requiring at least viewer role.
+
+    Any authenticated user can access (viewer or editor).
+    This is the minimum authorization level for protected endpoints.
+
+    Returns:
+        User object.
+    """
+    # All authenticated users have at least viewer access
+    return user
+
+
+async def require_editor(user: User = Depends(get_current_user)) -> User:
+    """FastAPI dependency requiring editor role.
+
+    Only users with 'editor' role can access.
+    Used for endpoints that modify data.
+
+    Returns:
+        User object if authorized.
+
+    Raises:
+        HTTPException 403 if user doesn't have editor role.
+    """
+    if user.role != "editor":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Editor access required",
+        )
+    return user

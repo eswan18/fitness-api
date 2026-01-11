@@ -8,6 +8,7 @@ from .sync import (
     SyncStatusResponse,
     SyncStatus,
 )
+from .user import User, Role
 from typing import Literal
 
 Sex = Literal["M", "F"]
@@ -28,4 +29,6 @@ __all__ = [
     "SyncResponse",
     "SyncStatusResponse",
     "SyncStatus",
+    "User",
+    "Role",
 ]

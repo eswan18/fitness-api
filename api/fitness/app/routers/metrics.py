@@ -15,7 +15,8 @@ from fitness.db.shoes import get_shoes
 from fitness.agg.training_load import trimp_by_day
 from fitness.app.constants import DEFAULT_START, DEFAULT_END
 from fitness.app.dependencies import all_runs
-from fitness.models import Run, Sex, DayTrainingLoad, ShoeMileage
+from fitness.app.auth import require_viewer
+from fitness.models import Run, Sex, DayTrainingLoad, ShoeMileage, User
 from fitness.app.models import (
     DayMileage,
 )
@@ -29,6 +30,7 @@ def read_total_seconds(
     end: date = DEFAULT_END,
     user_timezone: str | None = None,
     runs: list[Run] = Depends(all_runs),
+    _user: User = Depends(require_viewer),
 ) -> float:
     """Get total seconds.
 
@@ -47,6 +49,7 @@ def read_total_mileage(
     end: date = DEFAULT_END,
     user_timezone: str | None = None,
     runs: list[Run] = Depends(all_runs),
+    _user: User = Depends(require_viewer),
 ) -> float:
     """Get total mileage.
 
@@ -65,6 +68,7 @@ def read_mileage_by_day(
     end: date = DEFAULT_END,
     user_timezone: str | None = None,
     runs: list[Run] = Depends(all_runs),
+    _user: User = Depends(require_viewer),
 ) -> list[DayMileage]:
     """Get mileage by day.
 
@@ -82,6 +86,7 @@ def read_rolling_mileage_by_day(
     window: int = 1,
     user_timezone: str | None = None,
     runs: list[Run] = Depends(all_runs),
+    _user: User = Depends(require_viewer),
 ) -> list[DayMileage]:
     """Get rolling sum of mileage over a window by day.
 
@@ -97,7 +102,9 @@ def read_rolling_mileage_by_day(
 
 @router.get("/mileage/by-shoe", response_model=List[ShoeMileage])
 def read_miles_by_shoe(
-    include_retired: bool = False, runs: list[Run] = Depends(all_runs)
+    include_retired: bool = False,
+    runs: list[Run] = Depends(all_runs),
+    _user: User = Depends(require_viewer),
 ) -> list[ShoeMileage]:
     """
     Get mileage by shoe with complete shoe information.
@@ -121,6 +128,7 @@ def read_training_load_by_day(
     sex: Sex,
     user_timezone: str | None = None,
     runs: list[Run] = Depends(all_runs),
+    _user: User = Depends(require_viewer),
 ) -> list[DayTrainingLoad]:
     """Get training load by day.
 
@@ -146,6 +154,7 @@ def read_trimp_by_day(
     sex: Sex = "M",
     user_timezone: str | None = None,
     runs: list[Run] = Depends(all_runs),
+    _user: User = Depends(require_viewer),
 ) -> list[dict]:
     """Get TRIMP values by day.
 

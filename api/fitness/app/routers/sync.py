@@ -18,8 +18,9 @@ from fitness.models.sync import (
     SyncResponse,
     SyncStatusResponse,
 )
+from fitness.models.user import User
 from fitness.integrations.google.calendar_client import GoogleCalendarClient
-from fitness.app.auth import verify_oauth_token
+from fitness.app.auth import require_viewer, require_editor
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,10 @@ router = APIRouter(prefix="/sync", tags=["sync"])
 
 
 @router.get("/runs/{run_id}/status", response_model=SyncStatusResponse)
-def get_sync_status(run_id: str) -> SyncStatusResponse:
+def get_sync_status(
+    run_id: str,
+    _user: User = Depends(require_viewer),
+) -> SyncStatusResponse:
     """Get the Google Calendar sync status for a specific run.
 
     Args:
@@ -62,7 +66,8 @@ def get_sync_status(run_id: str) -> SyncStatusResponse:
 
 @router.post("/runs/{run_id}", response_model=SyncResponse)
 def sync_run_to_calendar(
-    run_id: str, username: str = Depends(verify_oauth_token)
+    run_id: str,
+    user: User = Depends(require_editor),
 ) -> SyncResponse:
     """Sync a run to Google Calendar using the Google Calendar API.
 
@@ -180,7 +185,8 @@ def sync_run_to_calendar(
 
 @router.delete("/runs/{run_id}", response_model=SyncResponse)
 def unsync_run_from_calendar(
-    run_id: str, username: str = Depends(verify_oauth_token)
+    run_id: str,
+    user: User = Depends(require_editor),
 ) -> SyncResponse:
     """Remove a run's sync from Google Calendar using the Google Calendar API.
 
@@ -260,7 +266,7 @@ def unsync_run_from_calendar(
 
 
 @router.get("/runs", response_model=List[SyncedRun])
-def get_all_sync_records() -> List[SyncedRun]:
+def get_all_sync_records(_user: User = Depends(require_viewer)) -> List[SyncedRun]:
     """Get all sync records for debugging/admin purposes.
 
     Returns:
@@ -270,7 +276,7 @@ def get_all_sync_records() -> List[SyncedRun]:
 
 
 @router.get("/runs/failed", response_model=List[SyncedRun])
-def get_failed_sync_records() -> List[SyncedRun]:
+def get_failed_sync_records(_user: User = Depends(require_viewer)) -> List[SyncedRun]:
     """Get all runs with failed sync status for retry/debugging.
 
     Returns:

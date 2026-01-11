@@ -20,7 +20,8 @@ from fitness.db.runs_history import (
     get_run_version,
     RunHistoryRecord,
 )
-from fitness.app.auth import verify_oauth_token
+from fitness.app.auth import require_viewer, require_editor
+from fitness.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ class RunHistoryResponse(BaseModel):
 def update_run(
     run_id: str,
     update_request: RunUpdateRequest,
-    username: str = Depends(verify_oauth_token),
+    user: User = Depends(require_editor),
 ) -> Dict[str, Any]:
     """
     Update a run with change tracking.
@@ -161,7 +162,9 @@ def update_run(
 
 @router.get("/{run_id}/history", response_model=List[RunHistoryResponse])
 def get_run_edit_history(
-    run_id: str, limit: Optional[int] = 50
+    run_id: str,
+    limit: Optional[int] = 50,
+    _user: User = Depends(require_viewer),
 ) -> List[RunHistoryResponse]:
     """
     Get the edit history for a specific run.
@@ -208,7 +211,11 @@ def get_run_edit_history(
 
 
 @router.get("/{run_id}/history/{version_number}", response_model=RunHistoryResponse)
-def get_run_specific_version(run_id: str, version_number: int) -> RunHistoryResponse:
+def get_run_specific_version(
+    run_id: str,
+    version_number: int,
+    _user: User = Depends(require_viewer),
+) -> RunHistoryResponse:
     """
     Get a specific version of a run from its history.
 
@@ -252,7 +259,7 @@ def restore_run_to_version(
     run_id: str,
     version_number: int,
     restored_by: str,
-    username: str = Depends(verify_oauth_token),
+    user: User = Depends(require_editor),
 ) -> Dict[str, Any]:
     """
     Restore a run to a previous version.

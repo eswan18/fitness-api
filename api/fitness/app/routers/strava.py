@@ -4,7 +4,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 
 from fitness.app.dependencies import strava_client
-from fitness.app.auth import verify_oauth_token
+from fitness.app.auth import require_editor
+from fitness.models.user import User
 from fitness.integrations.strava.client import StravaClient
 from fitness.models import Run
 from fitness.db.runs import get_existing_run_ids, bulk_create_runs
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/strava", tags=["strava"])
 
 @router.post("/update-data", response_model=dict)
 async def update_strava_data(
-    username: str = Depends(verify_oauth_token),
+    user: User = Depends(require_editor),
     strava_client: StravaClient = Depends(strava_client),
 ) -> dict:
     """Fetch Strava data and insert any new runs not in the database.

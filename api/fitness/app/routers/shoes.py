@@ -10,14 +10,18 @@ from fitness.db.shoes import (
     unretire_shoe_by_id,
 )
 from fitness.models.shoe import Shoe
+from fitness.models.user import User
 from fitness.app.models import UpdateShoeRequest
-from fitness.app.auth import verify_oauth_token
+from fitness.app.auth import require_viewer, require_editor
 
 router = APIRouter(prefix="/shoes", tags=["shoes"])
 
 
 @router.get("/", response_model=List[Shoe])
-def read_shoes(retired: bool | None = None) -> list[Shoe]:
+def read_shoes(
+    retired: bool | None = None,
+    _user: User = Depends(require_viewer),
+) -> list[Shoe]:
     """Get shoes, optionally filtered by retirement status.
 
     Args:
@@ -31,7 +35,7 @@ def read_shoes(retired: bool | None = None) -> list[Shoe]:
 def update_shoe(
     shoe_id: str,
     request: UpdateShoeRequest,
-    username: str = Depends(verify_oauth_token),
+    user: User = Depends(require_editor),
 ) -> dict:
     """Update shoe properties.
 

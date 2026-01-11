@@ -10,10 +10,10 @@ from fitness.db.oauth_credentials import OAuthCredentials
 class TestStravaAuthStatus:
     """Test GET /oauth/strava/status endpoint."""
 
-    def test_status_no_credentials(self, client: TestClient):
+    def test_status_no_credentials(self, viewer_client: TestClient):
         """Test status endpoint when no credentials exist."""
         with patch("fitness.app.routers.oauth.get_credentials", return_value=None):
-            response = client.get("/oauth/strava/status")
+            response = viewer_client.get("/oauth/strava/status")
 
         assert response.status_code == 200
         data = response.json()
@@ -21,9 +21,9 @@ class TestStravaAuthStatus:
         assert data["access_token_valid"] is None
         assert data["expires_at"] is None
 
-    def test_status_with_valid_credentials(self, client: TestClient):
+    def test_status_with_valid_credentials(self, viewer_client: TestClient):
         """Test status endpoint when valid credentials exist."""
-        future_expiry = datetime.now(timezone.utc).replace(year=2025, month=12, day=31)
+        future_expiry = datetime.now(timezone.utc).replace(year=2030, month=12, day=31)
         creds = OAuthCredentials(
             provider="strava",
             client_id="test_client_id",
@@ -34,7 +34,7 @@ class TestStravaAuthStatus:
         )
 
         with patch("fitness.app.routers.oauth.get_credentials", return_value=creds):
-            response = client.get("/oauth/strava/status")
+            response = viewer_client.get("/oauth/strava/status")
 
         assert response.status_code == 200
         data = response.json()
@@ -42,7 +42,7 @@ class TestStravaAuthStatus:
         assert data["access_token_valid"] is True
         assert data["expires_at"] is not None
 
-    def test_status_with_expired_credentials(self, client: TestClient):
+    def test_status_with_expired_credentials(self, viewer_client: TestClient):
         """Test status endpoint when credentials are expired."""
         past_expiry = datetime.now(timezone.utc).replace(year=2020, month=1, day=1)
         creds = OAuthCredentials(
@@ -55,18 +55,23 @@ class TestStravaAuthStatus:
         )
 
         with patch("fitness.app.routers.oauth.get_credentials", return_value=creds):
-            response = client.get("/oauth/strava/status")
+            response = viewer_client.get("/oauth/strava/status")
 
         assert response.status_code == 200
         data = response.json()
         assert data["authorized"] is True
         assert data["access_token_valid"] is False
 
+    def test_status_requires_auth(self, client: TestClient):
+        """Test that status endpoint requires authentication."""
+        response = client.get("/oauth/strava/status")
+        assert response.status_code == 401
+
 
 class TestStravaAuthorize:
     """Test GET /oauth/strava/authorize endpoint."""
 
-    def test_authorize_redirects(self, client: TestClient):
+    def test_authorize_redirects(self, editor_client: TestClient):
         """Test that authorize endpoint redirects to Strava OAuth URL."""
         with patch(
             "fitness.app.routers.oauth.strava.build_oauth_authorize_url"
@@ -78,7 +83,9 @@ class TestStravaAuthorize:
                 "fitness.app.routers.oauth.PUBLIC_API_BASE_URL",
                 "https://api.example.com",
             ):
-                response = client.get("/oauth/strava/authorize", follow_redirects=False)
+                response = editor_client.get(
+                    "/oauth/strava/authorize", follow_redirects=False
+                )
 
         assert response.status_code == 307  # Temporary redirect
         assert (
@@ -88,6 +95,11 @@ class TestStravaAuthorize:
         mock_build.assert_called_once_with(
             redirect_uri="https://api.example.com/oauth/strava/callback"
         )
+
+    def test_authorize_requires_editor(self, viewer_client: TestClient):
+        """Test that authorize endpoint requires editor role."""
+        response = viewer_client.get("/oauth/strava/authorize", follow_redirects=False)
+        assert response.status_code == 403
 
 
 class TestStravaCallback:
@@ -104,7 +116,7 @@ class TestStravaCallback:
     def test_callback_success(self, mock_upsert, client: TestClient):
         """Test successful OAuth callback."""
         # Mock the token exchange
-        future_date = datetime.now(timezone.utc).replace(year=2025, month=12, day=31)
+        future_date = datetime.now(timezone.utc).replace(year=2030, month=12, day=31)
         mock_token = type(
             "Token",
             (),
@@ -153,10 +165,10 @@ class TestStravaCallback:
 class TestGoogleAuthStatus:
     """Test GET /oauth/google/status endpoint."""
 
-    def test_status_no_credentials(self, client: TestClient):
+    def test_status_no_credentials(self, viewer_client: TestClient):
         """Test status endpoint when no credentials exist."""
         with patch("fitness.app.routers.oauth.get_credentials", return_value=None):
-            response = client.get("/oauth/google/status")
+            response = viewer_client.get("/oauth/google/status")
 
         assert response.status_code == 200
         data = response.json()
@@ -164,9 +176,9 @@ class TestGoogleAuthStatus:
         assert data["access_token_valid"] is None
         assert data["expires_at"] is None
 
-    def test_status_with_valid_credentials(self, client: TestClient):
+    def test_status_with_valid_credentials(self, viewer_client: TestClient):
         """Test status endpoint when valid credentials exist."""
-        future_expiry = datetime.now(timezone.utc).replace(year=2025, month=12, day=31)
+        future_expiry = datetime.now(timezone.utc).replace(year=2030, month=12, day=31)
         creds = OAuthCredentials(
             provider="google",
             client_id="test_client_id",
@@ -177,7 +189,7 @@ class TestGoogleAuthStatus:
         )
 
         with patch("fitness.app.routers.oauth.get_credentials", return_value=creds):
-            response = client.get("/oauth/google/status")
+            response = viewer_client.get("/oauth/google/status")
 
         assert response.status_code == 200
         data = response.json()
@@ -185,7 +197,7 @@ class TestGoogleAuthStatus:
         assert data["access_token_valid"] is True
         assert data["expires_at"] is not None
 
-    def test_status_with_expired_credentials(self, client: TestClient):
+    def test_status_with_expired_credentials(self, viewer_client: TestClient):
         """Test status endpoint when credentials are expired."""
         past_expiry = datetime.now(timezone.utc).replace(year=2020, month=1, day=1)
         creds = OAuthCredentials(
@@ -198,18 +210,23 @@ class TestGoogleAuthStatus:
         )
 
         with patch("fitness.app.routers.oauth.get_credentials", return_value=creds):
-            response = client.get("/oauth/google/status")
+            response = viewer_client.get("/oauth/google/status")
 
         assert response.status_code == 200
         data = response.json()
         assert data["authorized"] is True
         assert data["access_token_valid"] is False
 
+    def test_status_requires_auth(self, client: TestClient):
+        """Test that status endpoint requires authentication."""
+        response = client.get("/oauth/google/status")
+        assert response.status_code == 401
+
 
 class TestGoogleAuthorize:
     """Test GET /oauth/google/authorize endpoint."""
 
-    def test_authorize_redirects(self, client: TestClient):
+    def test_authorize_redirects(self, editor_client: TestClient):
         """Test that authorize endpoint redirects to Google OAuth URL."""
         with patch(
             "fitness.app.routers.oauth.google.auth.build_oauth_authorize_url"
@@ -221,7 +238,9 @@ class TestGoogleAuthorize:
                 "fitness.app.routers.oauth.PUBLIC_API_BASE_URL",
                 "https://api.example.com",
             ):
-                response = client.get("/oauth/google/authorize", follow_redirects=False)
+                response = editor_client.get(
+                    "/oauth/google/authorize", follow_redirects=False
+                )
 
         assert response.status_code == 307  # Temporary redirect
         assert (
@@ -231,6 +250,11 @@ class TestGoogleAuthorize:
         mock_build.assert_called_once_with(
             redirect_uri="https://api.example.com/oauth/google/callback"
         )
+
+    def test_authorize_requires_editor(self, viewer_client: TestClient):
+        """Test that authorize endpoint requires editor role."""
+        response = viewer_client.get("/oauth/google/authorize", follow_redirects=False)
+        assert response.status_code == 403
 
 
 class TestGoogleCallback:
@@ -255,7 +279,7 @@ class TestGoogleCallback:
     def test_callback_success(self, mock_upsert, client: TestClient):
         """Test successful OAuth callback."""
         # Mock the token exchange
-        future_date = datetime.now(timezone.utc).replace(year=2025, month=12, day=31)
+        future_date = datetime.now(timezone.utc).replace(year=2030, month=12, day=31)
         mock_token = type(
             "Token",
             (),

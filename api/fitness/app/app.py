@@ -25,7 +25,8 @@ from .routers import (
     summary_router,
 )
 from .models import EnvironmentResponse
-from .auth import verify_oauth_token
+from .auth import require_viewer
+from fitness.models.user import User
 from fitness.utils.timezone import convert_runs_to_user_timezone
 
 """FastAPI application setup for the fitness API.
@@ -103,6 +104,7 @@ def read_all_runs(
     sort_by: RunSortBy = "date",
     sort_order: SortOrder = "desc",
     runs: list[Run] = Depends(all_runs),
+    _user: User = Depends(require_viewer),
 ) -> list[Run]:
     """Get all runs with optional sorting.
 
@@ -136,6 +138,7 @@ def read_run_details(
     sort_by: RunSortBy = "date",
     sort_order: SortOrder = "desc",
     synced: bool | None = None,
+    _user: User = Depends(require_viewer),
 ) -> list[RunDetail]:
     """Get detailed runs with shoes and sync info.
 
@@ -163,6 +166,7 @@ def read_run_details_alt(
     sort_by: RunSortBy = "date",
     sort_order: SortOrder = "desc",
     synced: bool | None = None,
+    _user: User = Depends(require_viewer),
 ) -> list[RunDetail]:
     return read_run_details(
         start=start, end=end, sort_by=sort_by, sort_order=sort_order, synced=synced
@@ -223,14 +227,14 @@ def health_check(response: Response) -> dict[str, str]:
 
 
 @app.get("/environment", response_model=EnvironmentResponse)
-def get_environment() -> EnvironmentResponse:
+def get_environment(_user: User = Depends(require_viewer)) -> EnvironmentResponse:
     """Get the current environment configuration."""
     environment = get_current_environment()
     return EnvironmentResponse(environment=environment)
 
 
 @app.get("/auth/verify")
-def verify_auth(username: str = Depends(verify_oauth_token)) -> dict[str, str]:
+def verify_auth(user: User = Depends(require_viewer)) -> dict[str, str]:
     """Verify authentication credentials.
 
     This endpoint does nothing except validate credentials. It's used by the
@@ -242,4 +246,4 @@ def verify_auth(username: str = Depends(verify_oauth_token)) -> dict[str, str]:
     Raises:
         HTTPException 401 if credentials are invalid.
     """
-    return {"status": "authenticated", "username": username}
+    return {"status": "authenticated", "username": user.username or ""}
