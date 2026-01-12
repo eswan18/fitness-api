@@ -7,8 +7,8 @@ previous version.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
@@ -22,8 +22,20 @@ from fitness.db.runs_history import (
 )
 from fitness.app.auth import require_viewer, require_editor
 from fitness.models.user import User
+from fitness.models import Run
 
 logger = logging.getLogger(__name__)
+
+
+def _get_run_or_404(run_id: str) -> Run:
+    """Get a run by ID or raise 404 if not found."""
+    run = get_run_by_id(run_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run with ID {run_id} not found",
+        )
+    return run
 
 router = APIRouter(prefix="/runs", tags=["run-editing"])
 
@@ -31,19 +43,19 @@ router = APIRouter(prefix="/runs", tags=["run-editing"])
 class RunUpdateRequest(BaseModel):
     """Request model for updating a run."""
 
-    distance: Optional[float] = Field(None, ge=0, description="Distance in miles")
-    duration: Optional[float] = Field(None, ge=0, description="Duration in seconds")
-    avg_heart_rate: Optional[float] = Field(
+    distance: float | None = Field(None, ge=0, description="Distance in miles")
+    duration: float | None = Field(None, ge=0, description="Duration in seconds")
+    avg_heart_rate: float | None = Field(
         None, ge=0, le=220, description="Average heart rate"
     )
-    type: Optional[str] = Field(
+    type: str | None = Field(
         None, pattern="^(Outdoor Run|Treadmill Run)$", description="Run type"
     )
-    shoe_id: Optional[str] = Field(None, description="Shoe ID (foreign key)")
-    datetime_utc: Optional[datetime] = Field(
+    shoe_id: str | None = Field(None, description="Shoe ID (foreign key)")
+    datetime_utc: datetime | None = Field(
         None, description="When the run occurred (UTC)"
     )
-    change_reason: Optional[str] = Field(None, description="Reason for the change")
+    change_reason: str | None = Field(None, description="Reason for the change")
     changed_by: str = Field(..., description="User making the change")
 
 
@@ -59,11 +71,11 @@ class RunHistoryResponse(BaseModel):
     distance: float
     duration: float
     source: str
-    avg_heart_rate: Optional[float]
-    shoe_id: Optional[str]
+    avg_heart_rate: float | None
+    shoe_id: str | None
     changed_at: datetime
-    changed_by: Optional[str]
-    change_reason: Optional[str]
+    changed_by: str | None
+    change_reason: str | None
 
     @classmethod
     def from_history_record(cls, record: RunHistoryRecord) -> "RunHistoryResponse":
@@ -86,12 +98,34 @@ class RunHistoryResponse(BaseModel):
         )
 
 
-@router.patch("/{run_id}", response_model=Dict[str, Any])
+class RunUpdateResponse(BaseModel):
+    """Response model for run update operations."""
+
+    status: str = Field(description="Operation status")
+    message: str = Field(description="Human-readable status message")
+    run: dict[str, Any] | None = Field(description="Updated run data")
+    updated_fields: list[str] = Field(description="List of fields that were updated")
+    updated_at: datetime = Field(description="When the update occurred")
+    updated_by: str = Field(description="User who made the update")
+
+
+class RunRestoreResponse(BaseModel):
+    """Response model for run restore operations."""
+
+    status: str = Field(description="Operation status")
+    message: str = Field(description="Human-readable status message")
+    run: dict[str, Any] | None = Field(description="Restored run data")
+    restored_from_version: int = Field(description="Version number that was restored")
+    restored_at: datetime = Field(description="When the restore occurred")
+    restored_by: str = Field(description="User who performed the restore")
+
+
+@router.patch("/{run_id}", response_model=RunUpdateResponse)
 def update_run(
     run_id: str,
     update_request: RunUpdateRequest,
     user: User = Depends(require_editor),
-) -> Dict[str, Any]:
+) -> RunUpdateResponse:
     """
     Update a run with change tracking.
 
@@ -106,13 +140,7 @@ def update_run(
         username: Authenticated username (injected by dependency).
     """
     try:
-        # Verify the run exists
-        existing_run = get_run_by_id(run_id)
-        if not existing_run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Run with ID {run_id} not found",
-            )
+        _get_run_or_404(run_id)
 
         # Build updates dictionary, excluding None values and metadata fields
         updates = update_request.model_dump(
@@ -137,14 +165,14 @@ def update_run(
 
         # Return the updated run
         updated_run = get_run_by_id(run_id)
-        return {
-            "status": "success",
-            "message": f"Run {run_id} updated successfully",
-            "run": updated_run.model_dump() if updated_run else None,
-            "updated_fields": list(updates.keys()),
-            "updated_at": datetime.now().isoformat(),
-            "updated_by": update_request.changed_by,
-        }
+        return RunUpdateResponse(
+            status="success",
+            message=f"Run {run_id} updated successfully",
+            run=updated_run.model_dump() if updated_run else None,
+            updated_fields=list(updates.keys()),
+            updated_at=datetime.now(timezone.utc),
+            updated_by=update_request.changed_by,
+        )
 
     except ValueError as e:
         logger.error(f"Validation error updating run {run_id}: {e}")
@@ -160,12 +188,12 @@ def update_run(
         )
 
 
-@router.get("/{run_id}/history", response_model=List[RunHistoryResponse])
+@router.get("/{run_id}/history", response_model=list[RunHistoryResponse])
 def get_run_edit_history(
     run_id: str,
-    limit: Optional[int] = 50,
+    limit: int | None = 50,
     _user: User = Depends(require_viewer),
-) -> List[RunHistoryResponse]:
+) -> list[RunHistoryResponse]:
     """
     Get the edit history for a specific run.
 
@@ -177,13 +205,7 @@ def get_run_edit_history(
         limit: Optional maximum number of history entries to return (newest first).
     """
     try:
-        # Verify the run exists
-        existing_run = get_run_by_id(run_id)
-        if not existing_run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Run with ID {run_id} not found",
-            )
+        _get_run_or_404(run_id)
 
         history_records = get_run_history(run_id, limit=limit)
 
@@ -226,13 +248,7 @@ def get_run_specific_version(
         version_number: The historical version number to return.
     """
     try:
-        # Verify the run exists
-        existing_run = get_run_by_id(run_id)
-        if not existing_run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Run with ID {run_id} not found",
-            )
+        _get_run_or_404(run_id)
 
         history_record = get_run_version(run_id, version_number)
 
@@ -254,13 +270,13 @@ def get_run_specific_version(
         )
 
 
-@router.post("/{run_id}/restore/{version_number}", response_model=Dict[str, Any])
+@router.post("/{run_id}/restore/{version_number}", response_model=RunRestoreResponse)
 def restore_run_to_version(
     run_id: str,
     version_number: int,
     restored_by: str,
     user: User = Depends(require_editor),
-) -> Dict[str, Any]:
+) -> RunRestoreResponse:
     """
     Restore a run to a previous version.
 
@@ -275,13 +291,7 @@ def restore_run_to_version(
         restored_by: Username or identifier of the requester.
     """
     try:
-        # Verify the run exists
-        existing_run = get_run_by_id(run_id)
-        if not existing_run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Run with ID {run_id} not found",
-            )
+        _get_run_or_404(run_id)
 
         # Get the historical version to restore to
         historical_version = get_run_version(run_id, version_number)
@@ -316,14 +326,14 @@ def restore_run_to_version(
 
         # Return the updated run
         updated_run = get_run_by_id(run_id)
-        return {
-            "status": "success",
-            "message": f"Run {run_id} restored to version {version_number}",
-            "run": updated_run.model_dump() if updated_run else None,
-            "restored_from_version": version_number,
-            "restored_at": datetime.now().isoformat(),
-            "restored_by": restored_by,
-        }
+        return RunRestoreResponse(
+            status="success",
+            message=f"Run {run_id} restored to version {version_number}",
+            run=updated_run.model_dump() if updated_run else None,
+            restored_from_version=version_number,
+            restored_at=datetime.now(timezone.utc),
+            restored_by=restored_by,
+        )
 
     except HTTPException:
         raise  # Re-raise HTTP exceptions as-is

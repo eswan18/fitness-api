@@ -1,6 +1,5 @@
 import logging
 from datetime import date
-from typing import List, Optional
 
 from psycopg import sql
 
@@ -11,7 +10,27 @@ from .connection import get_db_cursor, get_db_connection
 logger = logging.getLogger(__name__)
 
 
-def get_all_runs(include_deleted: bool = False) -> List[Run]:
+def _build_run_detail_filters(
+    include_deleted: bool = False,
+    synced: bool | None = None,
+) -> list[sql.Composable]:
+    """Build common WHERE clause conditions for run detail queries.
+
+    Returns a list of SQL conditions that can be joined with AND.
+    """
+    conditions: list[sql.Composable] = []
+    if not include_deleted:
+        conditions.append(sql.SQL("r.deleted_at IS NULL"))
+    if synced is True:
+        conditions.append(sql.SQL("sr.sync_status = 'synced'"))
+    elif synced is False:
+        conditions.append(
+            sql.SQL("(sr.sync_status IS DISTINCT FROM 'synced' OR sr.run_id IS NULL)")
+        )
+    return conditions
+
+
+def get_all_runs(include_deleted: bool = False) -> list[Run]:
     """Get all runs from the database with shoe information."""
     with get_db_cursor() as cursor:
         if include_deleted:
@@ -33,7 +52,7 @@ def get_all_runs(include_deleted: bool = False) -> List[Run]:
         return [_row_to_run(row) for row in rows]
 
 
-def bulk_create_runs(runs: List[Run], chunk_size: int = 20) -> int:
+def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
     """Insert multiple runs into the database in chunks with automatic history creation. Returns the number of inserted rows."""
     if not runs:
         return 0
@@ -164,27 +183,18 @@ def get_run_details_in_date_range(
     start_date: date,
     end_date: date,
     include_deleted: bool = False,
-    synced: Optional[bool] = None,
-) -> List[RunDetail]:
+    synced: bool | None = None,
+) -> list[RunDetail]:
     """Get detailed runs with shoes and sync info within a date range.
 
     Joins `runs` to `shoes` and `synced_runs`.
     """
     with get_db_cursor() as cursor:
-        base_where = [sql.SQL("DATE(r.datetime_utc) BETWEEN %s AND %s")]
+        conditions = [sql.SQL("DATE(r.datetime_utc) BETWEEN %s AND %s")]
+        conditions.extend(_build_run_detail_filters(include_deleted, synced))
         params: list = [start_date, end_date]
-        if not include_deleted:
-            base_where.append(sql.SQL("r.deleted_at IS NULL"))
-        if synced is True:
-            base_where.append(sql.SQL("sr.sync_status = 'synced'"))
-        elif synced is False:
-            base_where.append(
-                sql.SQL(
-                    "(sr.sync_status IS DISTINCT FROM 'synced' OR sr.run_id IS NULL)"
-                )
-            )
 
-        where_clause = sql.SQL(" AND ").join(base_where)
+        where_clause = sql.SQL(" AND ").join(conditions)
         query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
                    COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
@@ -201,25 +211,15 @@ def get_run_details_in_date_range(
 
 
 def get_all_run_details(
-    include_deleted: bool = False, synced: Optional[bool] = None
-) -> List[RunDetail]:
+    include_deleted: bool = False, synced: bool | None = None
+) -> list[RunDetail]:
     """Get all detailed runs with shoes and sync info."""
     with get_db_cursor() as cursor:
-        base_where: list[sql.Composable] = []
+        conditions = _build_run_detail_filters(include_deleted, synced)
         params: list = []
-        if not include_deleted:
-            base_where.append(sql.SQL("r.deleted_at IS NULL"))
-        if synced is True:
-            base_where.append(sql.SQL("sr.sync_status = 'synced'"))
-        elif synced is False:
-            base_where.append(
-                sql.SQL(
-                    "(sr.sync_status IS DISTINCT FROM 'synced' OR sr.run_id IS NULL)"
-                )
-            )
         where_clause = (
-            sql.SQL("WHERE ") + sql.SQL(" AND ").join(base_where)
-            if base_where
+            sql.SQL("WHERE ") + sql.SQL(" AND ").join(conditions)
+            if conditions
             else sql.SQL("")
         )
         query = sql.SQL("""
@@ -237,7 +237,7 @@ def get_all_run_details(
         return [_row_to_run_detail(row) for row in rows]
 
 
-def get_run_by_id(run_id: str) -> Optional[Run]:
+def get_run_by_id(run_id: str) -> Run | None:
     """Get a single run by its ID."""
     with get_db_cursor() as cursor:
         cursor.execute(
