@@ -4,17 +4,6 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from fitness.app import app
-from fitness.app.dependencies import strava_client
-
-
-@pytest.fixture(scope="function")
-def override_strava_client():
-    """Effectively disable the Strava client for the duration of the test, to avoid it trying to refresh the token."""
-    app.dependency_overrides[strava_client] = lambda: None
-    yield
-    app.dependency_overrides = {}
-
 
 class TestAuthenticationEndpoints:
     """Test OAuth Authentication on endpoints."""
@@ -27,7 +16,7 @@ class TestAuthenticationEndpoints:
         assert "Bearer" in response.headers["WWW-Authenticate"]
 
     def test_update_data_with_valid_credentials(
-        self, auth_client: TestClient, monkeypatch, override_strava_client
+        self, auth_client: TestClient, monkeypatch
     ):
         """POST /strava/update-data should succeed with valid OAuth token (editor)."""
         with monkeypatch.context() as m:

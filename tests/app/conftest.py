@@ -2,10 +2,23 @@ import pytest
 from uuid import UUID
 from datetime import datetime, timezone
 from typing import Generator
+from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 
 from fitness.app.app import app
+from fitness.app.dependencies import strava_client
 from fitness.models.user import User, Role
+
+
+@pytest.fixture(autouse=True)
+def override_strava_client():
+    """Override strava_client dependency to avoid DB hits for credentials.
+
+    This fixture is autouse=True so it applies to all tests in tests/app/.
+    """
+    app.dependency_overrides[strava_client] = lambda: MagicMock()
+    yield
+    app.dependency_overrides.pop(strava_client, None)
 
 
 # Shared test user data
