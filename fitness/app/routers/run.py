@@ -177,15 +177,14 @@ def update_run(
     except ValueError as e:
         logger.error(f"Validation error updating run {run_id}: {e}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is (like 404s)
-        raise
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Unexpected error updating run {run_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while updating run",
-        )
+        ) from e
 
 
 @router.get("/{run_id}/history", response_model=list[RunHistoryResponse])
@@ -204,32 +203,21 @@ def get_run_edit_history(
         run_id: The run identifier to look up.
         limit: Optional maximum number of history entries to return (newest first).
     """
-    try:
-        _get_run_or_404(run_id)
+    _get_run_or_404(run_id)
 
-        history_records = get_run_history(run_id, limit=limit)
+    history_records = get_run_history(run_id, limit=limit)
 
-        if not history_records:
-            # Run exists but has no history - this could happen during migration
-            logger.warning(f"Run {run_id} exists but has no history records")
-            return []
+    if not history_records:
+        # Run exists but has no history - this could happen during migration
+        logger.warning(f"Run {run_id} exists but has no history records")
+        return []
 
-        response = [
-            RunHistoryResponse.from_history_record(record) for record in history_records
-        ]
+    response = [
+        RunHistoryResponse.from_history_record(record) for record in history_records
+    ]
 
-        logger.debug(f"Retrieved {len(response)} history records for run {run_id}")
-        return response
-
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is (like 404s)
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving history for run {run_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving run history",
-        )
+    logger.debug(f"Retrieved {len(response)} history records for run {run_id}")
+    return response
 
 
 @router.get("/{run_id}/history/{version_number}", response_model=RunHistoryResponse)
@@ -247,27 +235,17 @@ def get_run_specific_version(
         run_id: The run identifier to look up.
         version_number: The historical version number to return.
     """
-    try:
-        _get_run_or_404(run_id)
+    _get_run_or_404(run_id)
 
-        history_record = get_run_version(run_id, version_number)
+    history_record = get_run_version(run_id, version_number)
 
-        if not history_record:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Version {version_number} not found for run {run_id}",
-            )
-
-        return RunHistoryResponse.from_history_record(history_record)
-
-    except HTTPException:
-        raise  # Re-raise HTTP exceptions as-is
-    except Exception as e:
-        logger.error(f"Error retrieving version {version_number} for run {run_id}: {e}")
+    if not history_record:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error occurred while retrieving run version",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Version {version_number} not found for run {run_id}",
         )
+
+    return RunHistoryResponse.from_history_record(history_record)
 
 
 @router.post("/{run_id}/restore/{version_number}", response_model=RunRestoreResponse)
@@ -335,11 +313,11 @@ def restore_run_to_version(
             restored_by=restored_by,
         )
 
-    except HTTPException:
-        raise  # Re-raise HTTP exceptions as-is
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Error restoring run {run_id} to version {version_number}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred during restoration",
-        )
+        ) from e
