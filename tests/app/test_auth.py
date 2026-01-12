@@ -35,6 +35,7 @@ class TestAuthenticationEndpoints:
         )
         assert response.status_code == 401
 
+    @pytest.mark.e2e
     def test_read_runs_requires_viewer_auth(self, client: TestClient):
         """GET /runs should require viewer authentication."""
         response = client.get("/runs")
@@ -54,6 +55,7 @@ class TestAuthenticationEndpoints:
         assert response.status_code == 200
         assert response.json() == {"status": "healthy"}
 
+    @pytest.mark.e2e
     def test_metrics_requires_viewer_auth(self, client: TestClient):
         """GET /metrics/* endpoints should require viewer authentication."""
         response = client.get("/metrics/mileage/total")
@@ -123,6 +125,7 @@ class TestProtectedMutationEndpoints:
         response = viewer_client.request(method, path, **kwargs)  # type: ignore[arg-type]
         assert response.status_code == 403
 
+    @pytest.mark.e2e
     @pytest.mark.parametrize(
         "path",
         [
