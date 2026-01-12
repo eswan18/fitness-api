@@ -6,35 +6,9 @@ from psycopg import sql
 
 from fitness.models import Run
 from fitness.models.run_detail import RunDetail
-from fitness.models.shoe import generate_shoe_id
 from .connection import get_db_cursor, get_db_connection
 
 logger = logging.getLogger(__name__)
-
-
-def _ensure_shoe_exists(shoe_name: str | None) -> str | None:
-    """Ensure a shoe exists in the database and return its ID."""
-    if shoe_name is None:
-        return None
-
-    shoe_id = generate_shoe_id(shoe_name)
-
-    with get_db_cursor() as cursor:
-        logger.debug(f"Checking if shoe {shoe_name} (ID: {shoe_id}) exists")
-        # Check if shoe already exists (including soft-deleted ones)
-        cursor.execute("SELECT 1 FROM shoes WHERE id = %s", (shoe_id,))
-        if cursor.fetchone() is None:
-            # Create the shoe if it doesn't exist
-            cursor.execute(
-                """
-                INSERT INTO shoes (id, name, retired_at, notes, retirement_notes, deleted_at)
-                VALUES (%s, %s, NULL, NULL, NULL, NULL)
-            """,
-                (shoe_id, shoe_name),
-            )
-            logger.info(f"Created new shoe: {shoe_name} (ID: {shoe_id})")
-
-    return shoe_id
 
 
 def get_all_runs(include_deleted: bool = False) -> List[Run]:
