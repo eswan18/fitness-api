@@ -18,7 +18,7 @@ This API provides analysis and aggregation of your running data from two sources
 
 ## 2. Environment Variables
 
-Create a `.env` file in the `api/` directory with the following variables:
+Create a `.env` file in the project root directory with the following variables:
 
 ```env
 # Required: OAuth Identity Provider
@@ -41,7 +41,7 @@ GOOGLE_CALENDAR_ID=your_calendar_id
 ```
 
 - **IDENTITY_PROVIDER_URL**:
-  Base URL of the OAuth identity provider. Required for authenticating mutation endpoints (PATCH, POST, DELETE operations). The dashboard handles OAuth login automatically.
+  Base URL of the OAuth identity provider. Required for authenticating mutation endpoints (PATCH, POST, DELETE operations). The separate frontend dashboard handles OAuth login automatically.
 
 - **STRAVA_CLIENT_ID / SECRET / REFRESH_TOKEN**:  
   Get these from your Strava API application settings. See "Strava Setup" section below for initial setup.
@@ -77,10 +77,10 @@ All GET endpoints are publicly accessible:
 - `GET /health` — Health check
 
 ### How It Works
-1. The dashboard handles OAuth login automatically when you access protected features
-2. After login, the dashboard includes a Bearer token in the `Authorization` header
+1. The frontend dashboard (a separate project) handles OAuth login automatically when you access protected features
+2. After login, the frontend includes a Bearer token in the `Authorization` header
 3. The API validates tokens by calling the identity provider's `/oauth/userinfo` endpoint
-4. Tokens expire after 1 hour and are automatically refreshed by the dashboard
+4. Tokens expire after 1 hour and are automatically refreshed by the frontend
 
 ### Manual API Access
 If you need to make authenticated requests directly (e.g., via curl or scripts), you'll need to obtain an OAuth access token from the identity provider first. Contact your administrator for API credentials.
@@ -99,35 +99,38 @@ Strava integration is required for fetching running activities. This section cov
    - Set "Authorization Callback Domain" to `localhost`
    - Note your Client ID and Client Secret
 
-2. **Get OAuth Tokens**:
-   ```sh
-   # Run the provided helper script
-   python scripts/get_strava_tokens.py
-   ```
-   
-   This script will:
-   - Open your browser to Strava's authorization page
-   - Handle the OAuth callback automatically
-   - Generate all required tokens
-   - Save credentials to `strava_credentials.txt`
+2. **Get OAuth Tokens via Manual Authorization**:
+   - Construct the authorization URL:
+     ```
+     https://www.strava.com/oauth/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http://localhost&scope=activity:read_all&approval_prompt=auto
+     ```
+   - Visit the URL in your browser and authorize the app
+   - After authorization, you'll be redirected to `localhost` with a `code` parameter in the URL
+   - Exchange the code for tokens:
+     ```sh
+     curl -X POST https://www.strava.com/oauth/token \
+       -d client_id=YOUR_CLIENT_ID \
+       -d client_secret=YOUR_CLIENT_SECRET \
+       -d code=AUTHORIZATION_CODE \
+       -d grant_type=authorization_code
+     ```
+   - The response will contain your access token, refresh token, and expiration timestamp
 
 3. **Add to Environment File**:
-   Copy the generated values to your `.env` file:
+   Copy the values to your `.env` file:
    ```sh
    STRAVA_CLIENT_ID=your_client_id
    STRAVA_CLIENT_SECRET=your_client_secret
-   STRAVA_ACCESS_TOKEN=your_access_token
    STRAVA_REFRESH_TOKEN=your_refresh_token
-   STRAVA_EXPIRES_AT=timestamp
    ```
 
 ### Token Management
 
 The system automatically handles token refresh during runtime:
-- **Access tokens** expire every 6 hours and are auto-refreshed in memory
-- **Refresh tokens** are long-lived and updated in memory when rotated
-- **No re-authentication** needed during API session
-- **Manual refresh**: Re-run the setup script if tokens become invalid
+- **Access tokens** expire every 6 hours and are auto-refreshed using the refresh token
+- **Refresh tokens** are long-lived and updated when rotated by Strava
+- **No re-authentication** needed during API operation
+- **Manual refresh**: Re-authorize via the steps above if tokens become invalid
 
 ---
 
@@ -222,7 +225,7 @@ curl "http://localhost:8000/sync/runs/failed"
 - Download your data as CSV from:  
   https://www.mapmyfitness.com/workout/export/csv
 - Upload the CSV file via the API endpoint `POST /mmf/upload-csv` (requires authentication)
-- Or use the dashboard upload button to upload your CSV file
+- Or use the frontend dashboard's upload feature to upload your CSV file
 
 ### Strava
 - The API will prompt you to authorize the app on first run if credentials are missing or expired.
@@ -231,7 +234,7 @@ curl "http://localhost:8000/sync/runs/failed"
 
 ## 7. Installing Dependencies
 
-From the `api/` directory:
+From the project root directory:
 
 ```sh
 uv sync
