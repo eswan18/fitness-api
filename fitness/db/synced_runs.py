@@ -1,7 +1,7 @@
 """Database access functions for synced runs (Google Calendar sync tracking)."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from psycopg import sql
@@ -70,7 +70,7 @@ def create_synced_run(
         )
 
         with get_db_cursor() as cursor:
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
             cursor.execute(
                 """
                 INSERT INTO synced_runs
@@ -180,7 +180,7 @@ def update_synced_run(
 
             # Always update the updated_at timestamp
             update_fields.append(sql.SQL("updated_at = %s"))
-            params.append(datetime.now())
+            params.append(datetime.now(timezone.utc))
 
             # Add run_id for WHERE clause
             params.append(run_id)
