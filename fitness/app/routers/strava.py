@@ -1,11 +1,12 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 
 from fitness.app.dependencies import strava_client
 from fitness.app.auth import require_editor
 from fitness.models.user import User
+from fitness.models.responses import DataImportResponse
 from fitness.integrations.strava.client import StravaClient
 from fitness.models import Run
 from fitness.db.runs import get_existing_run_ids, bulk_create_runs
@@ -16,11 +17,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/strava", tags=["strava"])
 
 
-@router.post("/update-data", response_model=dict)
+@router.post("/update-data", response_model=DataImportResponse)
 async def update_strava_data(
     user: User = Depends(require_editor),
     strava_client: StravaClient = Depends(strava_client),
-) -> dict:
+) -> DataImportResponse:
     """Fetch Strava data and insert any new runs not in the database.
 
     Requires authentication via HTTP Basic Auth.
@@ -41,8 +42,8 @@ async def update_strava_data(
     else:
         inserted_count = 0
         logger.info("No new runs to insert")
-    return {
-        "inserted_count": inserted_count,
-        "updated_at": datetime.now().isoformat(),
-        "message": f"Inserted {inserted_count} new runs into the database",
-    }
+    return DataImportResponse(
+        inserted_count=inserted_count,
+        updated_at=datetime.now(timezone.utc),
+        message=f"Inserted {inserted_count} new runs into the database",
+    )

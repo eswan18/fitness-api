@@ -1,7 +1,6 @@
 import logging
 import os
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone as tz
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
@@ -9,6 +8,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 from fitness.app.auth import require_editor
 from fitness.models import Run
 from fitness.models.user import User
+from fitness.models.responses import DataImportResponse
 from fitness.db.runs import get_existing_run_ids, bulk_create_runs
 from fitness.load.mmf import load_mmf_runs_from_file
 
@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mmf", tags=["mmf"])
 
 
-@router.post("/upload-csv", response_model=dict)
+@router.post("/upload-csv", response_model=DataImportResponse)
 async def upload_mmf_csv(
     file: UploadFile = File(...),
-    timezone: Optional[str] = None,
+    timezone: str | None = None,
     user: User = Depends(require_editor),
-) -> dict:
+) -> DataImportResponse:
     """Upload MapMyFitness CSV data and insert any new runs not in the database.
 
     Requires authentication via HTTP Basic Auth.
@@ -64,13 +64,13 @@ async def upload_mmf_csv(
             inserted_count = 0
             logger.info("No new MMF runs to insert")
 
-        return {
-            "inserted_count": inserted_count,
-            "total_runs_found": len(mmf_runs),
-            "existing_runs": len(mmf_runs) - len(new_runs),
-            "updated_at": datetime.now().isoformat(),
-            "message": f"Inserted {inserted_count} new runs into the database",
-        }
+        return DataImportResponse(
+            inserted_count=inserted_count,
+            total_runs_found=len(mmf_runs),
+            existing_runs=len(mmf_runs) - len(new_runs),
+            updated_at=datetime.now(tz.utc),
+            message=f"Inserted {inserted_count} new runs into the database",
+        )
 
     except HTTPException:
         raise
