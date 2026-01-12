@@ -7,7 +7,7 @@
 
 ## Environment Setup
 
-All of your `.env` files should be in `api` directory and contain the following:
+All of your `.env` files should be in the project root directory and contain the following:
 
 ```env
 # Database connection
@@ -29,16 +29,14 @@ postgresql://[username[:password]@][host[:port]][/database]
 ### 1. Install Dependencies
 
 ```bash
-cd api
 uv sync
 ```
 
 ### 2. Run Migrations
 
-Assuming your database is already created, you can run the migrations with the following commands:
+Assuming your database is already created, you can run the migrations with the following command:
 
 ```bash
-cd api
 uv run alembic upgrade head
 ```
 
@@ -302,7 +300,7 @@ The API provides REST endpoints for run editing:
 
 For new installations:
 
-1. **Schema Migration**: Run `alembic upgrade head` to create all required tables including `runs_history`
+1. **Schema Migration**: Run `uv run alembic upgrade head` to create all required tables including `runs_history`
 2. **Automatic History**: All newly imported runs will automatically get their original history entries created during import
 
 ## Creating New Migrations
@@ -310,14 +308,13 @@ For new installations:
 When you need to modify the database schema:
 
 ```bash
-cd api
-alembic revision -m "Description of your change"
+uv run alembic revision -m "Description of your change"
 ```
 
 Edit the generated migration file in `alembic/versions/`, then apply it:
 
 ```bash
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ## Troubleshooting
