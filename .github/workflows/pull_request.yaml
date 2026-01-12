@@ -15,6 +15,9 @@ env:
   STRAVA_TOKEN_URL: https://www.strava.com/oauth/token
   STRAVA_CLIENT_ID: test
   STRAVA_CLIENT_SECRET: test
+  # Google integration (not used by unit tests)
+  GOOGLE_CLIENT_ID: test
+  GOOGLE_CLIENT_SECRET: test
 
 jobs:
   lint-and-test:
