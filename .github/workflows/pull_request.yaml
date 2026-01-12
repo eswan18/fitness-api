@@ -4,6 +4,13 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Required env vars for app initialization (not used by unit tests)
+  DATABASE_URL: postgresql://test:test@localhost:5432/test
+  PUBLIC_API_BASE_URL: http://localhost:8000
+  IDENTITY_PROVIDER_URL: http://localhost:8080
+  JWT_AUDIENCE: http://localhost:8000
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
