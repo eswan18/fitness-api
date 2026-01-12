@@ -4,8 +4,8 @@ from .env_loader import get_current_environment
 
 import os
 import logging
-from datetime import date
-from typing import Literal, TypeVar, Any
+from datetime import date, datetime
+from typing import Literal, TypeVar
 
 from fastapi import FastAPI, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +28,9 @@ from .models import EnvironmentResponse
 from .auth import require_viewer
 from fitness.models.user import User
 from fitness.utils.timezone import convert_runs_to_user_timezone
+
+# Type alias for values that can be used as sort keys
+SortableValue = datetime | float | str
 
 """FastAPI application setup for the fitness API.
 
@@ -182,7 +185,7 @@ def sort_runs_generic(
     """
     reverse = sort_order == "desc"
 
-    def get_sort_key(run: T) -> Any:
+    def get_sort_key(run: T) -> SortableValue:
         if sort_by == "date":
             # Use localized_datetime for LocalizedRun, otherwise datetime_utc
             return getattr(run, "localized_datetime", run.datetime_utc)
@@ -205,10 +208,7 @@ def sort_runs_generic(
             return run.type
         elif sort_by == "shoes":
             # Handle RunDetail (shoes) and base Run (shoe_name)
-            if hasattr(run, "shoes"):
-                return run.shoes
-            else:
-                return getattr(run, "shoe_name", "")
+            return str(getattr(run, "shoes", None) or getattr(run, "shoe_name", "") or "")
         else:
             # Default to date if unknown sort field
             return getattr(run, "localized_datetime", run.datetime_utc)
