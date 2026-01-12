@@ -237,18 +237,34 @@ def get_all_run_details(
         return [_row_to_run_detail(row) for row in rows]
 
 
-def get_run_by_id(run_id: str) -> Run | None:
-    """Get a single run by its ID."""
+def get_run_by_id(run_id: str, include_deleted: bool = False) -> Run | None:
+    """Get a single run by its ID.
+
+    Args:
+        run_id: The ID of the run to retrieve.
+        include_deleted: If True, include soft-deleted runs. Defaults to False.
+    """
     with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
-            FROM runs r
-            LEFT JOIN shoes s ON r.shoe_id = s.id
-            WHERE r.id = %s AND r.deleted_at IS NULL
-        """,
-            (run_id,),
-        )
+        if include_deleted:
+            cursor.execute(
+                """
+                SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
+                FROM runs r
+                LEFT JOIN shoes s ON r.shoe_id = s.id
+                WHERE r.id = %s
+            """,
+                (run_id,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
+                FROM runs r
+                LEFT JOIN shoes s ON r.shoe_id = s.id
+                WHERE r.id = %s AND r.deleted_at IS NULL
+            """,
+                (run_id,),
+            )
         row = cursor.fetchone()
         if not row:
             return None

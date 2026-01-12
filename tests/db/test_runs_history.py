@@ -171,6 +171,7 @@ class TestUpdateRunWithHistory:
             mock_cursor.execute.call_count >= 2
         )  # At least INSERT into history and UPDATE current
 
+    @pytest.mark.e2e
     @patch("fitness.db.runs.get_run_by_id")
     def test_update_run_with_history_run_not_found(self, mock_get_run):
         """Test handling of non-existent run."""

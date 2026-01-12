@@ -55,7 +55,7 @@ def create_test_token(
     audience: str = "test-audience",
     subject: str = "user-123",
     expires_in: int = 3600,
-    extra_claims: dict = None,
+    extra_claims: dict | None = None,
     algorithm: str = "ES256",
 ) -> str:
     """Create a signed JWT token for testing."""
