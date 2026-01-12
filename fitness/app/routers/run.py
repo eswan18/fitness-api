@@ -22,8 +22,20 @@ from fitness.db.runs_history import (
 )
 from fitness.app.auth import require_viewer, require_editor
 from fitness.models.user import User
+from fitness.models import Run
 
 logger = logging.getLogger(__name__)
+
+
+def _get_run_or_404(run_id: str) -> Run:
+    """Get a run by ID or raise 404 if not found."""
+    run = get_run_by_id(run_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run with ID {run_id} not found",
+        )
+    return run
 
 router = APIRouter(prefix="/runs", tags=["run-editing"])
 
@@ -106,13 +118,7 @@ def update_run(
         username: Authenticated username (injected by dependency).
     """
     try:
-        # Verify the run exists
-        existing_run = get_run_by_id(run_id)
-        if not existing_run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Run with ID {run_id} not found",
-            )
+        _get_run_or_404(run_id)
 
         # Build updates dictionary, excluding None values and metadata fields
         updates = update_request.model_dump(
@@ -177,13 +183,7 @@ def get_run_edit_history(
         limit: Optional maximum number of history entries to return (newest first).
     """
     try:
-        # Verify the run exists
-        existing_run = get_run_by_id(run_id)
-        if not existing_run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Run with ID {run_id} not found",
-            )
+        _get_run_or_404(run_id)
 
         history_records = get_run_history(run_id, limit=limit)
 
@@ -226,13 +226,7 @@ def get_run_specific_version(
         version_number: The historical version number to return.
     """
     try:
-        # Verify the run exists
-        existing_run = get_run_by_id(run_id)
-        if not existing_run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Run with ID {run_id} not found",
-            )
+        _get_run_or_404(run_id)
 
         history_record = get_run_version(run_id, version_number)
 
@@ -275,13 +269,7 @@ def restore_run_to_version(
         restored_by: Username or identifier of the requester.
     """
     try:
-        # Verify the run exists
-        existing_run = get_run_by_id(run_id)
-        if not existing_run:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Run with ID {run_id} not found",
-            )
+        _get_run_or_404(run_id)
 
         # Get the historical version to restore to
         historical_version = get_run_version(run_id, version_number)
