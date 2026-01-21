@@ -11,7 +11,7 @@ from fitness.models.shoe import generate_shoe_id
 
 
 @pytest.mark.e2e
-def test_run_details_basic_and_shoe_notes(client):
+def test_run_details_basic_and_shoe_notes(viewer_client):
     """Create a run with a shoe and verify details and shoe retirement notes appear."""
     # Use a far-future date to avoid collisions with other e2e runs
     run = Run(
@@ -39,7 +39,7 @@ def test_run_details_basic_and_shoe_notes(client):
     assert retired is True
 
     # Fetch details without date filter (endpoint defaults include all)
-    res = client.get("/runs/details")
+    res = viewer_client.get("/runs/details")
     assert res.status_code == 200
     details = res.json()
 
@@ -68,7 +68,7 @@ def test_run_details_basic_and_shoe_notes(client):
 
 
 @pytest.mark.e2e
-def test_run_details_with_sync_and_date_filtering_and_sorting(client):
+def test_run_details_with_sync_and_date_filtering_and_sorting(viewer_client):
     """Verify sync fields, date filtering, and sorting behavior."""
     run_a = Run(
         id="details_test_run_2A",
@@ -103,7 +103,7 @@ def test_run_details_with_sync_and_date_filtering_and_sorting(client):
     assert sync.google_event_id == "evt_details_sync_123"
 
     # Filter to a narrow range containing only run_b
-    res = client.get(
+    res = viewer_client.get(
         "/runs/details", params={"start": "2035-02-04", "end": "2035-02-06"}
     )
     assert res.status_code == 200
@@ -124,7 +124,7 @@ def test_run_details_with_sync_and_date_filtering_and_sorting(client):
     assert run_b_item["version"] >= 1
 
     # Now query a broader range that includes both and test sorting by distance asc
-    res = client.get(
+    res = viewer_client.get(
         "/runs/details",
         params={
             "start": "2035-02-01",

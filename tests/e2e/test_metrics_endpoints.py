@@ -7,7 +7,7 @@ from fitness.db.runs import bulk_create_runs
 
 
 @pytest.mark.e2e
-def test_mileage_metrics(client):
+def test_mileage_metrics(viewer_client):
     """Test mileage-related metrics endpoints."""
     # Create test runs with known distances and dates
     runs = [
@@ -41,7 +41,7 @@ def test_mileage_metrics(client):
     assert inserted == 3
 
     # Test total mileage
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/mileage/total", params={"start": "2024-07-01", "end": "2024-07-03"}
     )
     assert res.status_code == 200
@@ -49,7 +49,7 @@ def test_mileage_metrics(client):
     assert total_mileage >= 10.0  # Our test runs total 10 miles
 
     # Test mileage by day
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/mileage/by-day", params={"start": "2024-07-01", "end": "2024-07-03"}
     )
     assert res.status_code == 200
@@ -71,7 +71,7 @@ def test_mileage_metrics(client):
     assert july_2_entry["mileage"] >= 5.0  # Should include our 5-mile run
 
     # Test rolling mileage
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/mileage/rolling-by-day",
         params={
             "start": "2024-07-01",
@@ -86,7 +86,7 @@ def test_mileage_metrics(client):
 
 
 @pytest.mark.e2e
-def test_seconds_metrics(client):
+def test_seconds_metrics(viewer_client):
     """Test time-based metrics endpoints."""
     # Create test runs with known durations
     runs = [
@@ -112,7 +112,7 @@ def test_seconds_metrics(client):
     assert inserted == 2
 
     # Test total seconds
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/seconds/total", params={"start": "2024-08-01", "end": "2024-08-02"}
     )
     assert res.status_code == 200
@@ -121,7 +121,7 @@ def test_seconds_metrics(client):
 
 
 @pytest.mark.e2e
-def test_shoe_mileage_metrics(client):
+def test_shoe_mileage_metrics(viewer_client):
     """Test shoe mileage tracking."""
     # Create runs with different shoes
     runs = [
@@ -160,7 +160,7 @@ def test_shoe_mileage_metrics(client):
     assert inserted == 3
 
     # Test mileage by shoe
-    res = client.get("/metrics/mileage/by-shoe")
+    res = viewer_client.get("/metrics/mileage/by-shoe")
     assert res.status_code == 200
     shoe_mileage = res.json()
 
@@ -182,14 +182,14 @@ def test_shoe_mileage_metrics(client):
     assert test_shoe_b["mileage"] >= 3.0
 
     # Test include_retired parameter
-    res = client.get("/metrics/mileage/by-shoe", params={"include_retired": True})
+    res = viewer_client.get("/metrics/mileage/by-shoe", params={"include_retired": True})
     assert res.status_code == 200
     all_shoes = res.json()
     assert isinstance(all_shoes, list)
 
 
 @pytest.mark.e2e
-def test_training_load_metrics(client):
+def test_training_load_metrics(viewer_client):
     """Test training load and TRIMP metrics."""
     # Create runs with heart rate data
     runs = [
@@ -226,7 +226,7 @@ def test_training_load_metrics(client):
     assert inserted == 3
 
     # Test TRIMP by day
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/trimp/by-day",
         params={
             "start": "2024-10-01",
@@ -257,7 +257,7 @@ def test_training_load_metrics(client):
         assert oct_1_trimp["trimp"] > 0  # Should have positive TRIMP for day with run
 
     # Test training load by day (requires more parameters)
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/training-load/by-day",
         params={
             "start": "2024-10-01",
@@ -284,7 +284,7 @@ def test_training_load_metrics(client):
 
 
 @pytest.mark.e2e
-def test_metrics_with_timezone(client):
+def test_metrics_with_timezone(viewer_client):
     """Test metrics endpoints with timezone parameters."""
     # Create runs around timezone boundaries
     runs = [
@@ -312,7 +312,7 @@ def test_metrics_with_timezone(client):
     assert inserted == 2
 
     # Test mileage with timezone
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/mileage/total",
         params={
             "start": "2024-11-01",
@@ -325,7 +325,7 @@ def test_metrics_with_timezone(client):
     assert tz_mileage >= 0.0  # Should handle timezone conversion
 
     # Test TRIMP with timezone
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/trimp/by-day",
         params={
             "start": "2024-11-01",
@@ -342,20 +342,20 @@ def test_metrics_with_timezone(client):
 
 
 @pytest.mark.e2e
-def test_metrics_error_cases(client):
+def test_metrics_error_cases(viewer_client):
     """Test error handling in metrics endpoints."""
     # Test training load without required parameters
-    res = client.get("/metrics/training-load/by-day")
+    res = viewer_client.get("/metrics/training-load/by-day")
     assert res.status_code == 422  # Should require start, end, max_hr, resting_hr, sex
 
     # Test with invalid date format
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/mileage/total", params={"start": "invalid-date", "end": "2024-01-01"}
     )
     assert res.status_code == 422  # Should reject invalid date
 
     # Test with invalid heart rate values
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/trimp/by-day",
         params={
             "start": "2024-01-01",
@@ -367,7 +367,7 @@ def test_metrics_error_cases(client):
     )
 
     # Test with invalid sex value
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/trimp/by-day",
         params={
             "start": "2024-01-01",
@@ -381,10 +381,10 @@ def test_metrics_error_cases(client):
 
 
 @pytest.mark.e2e
-def test_metrics_empty_data(client):
+def test_metrics_empty_data(viewer_client):
     """Test metrics endpoints with no data in date range."""
     # Test mileage for a date range with no runs
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/mileage/total", params={"start": "1990-01-01", "end": "1990-01-01"}
     )
     assert res.status_code == 200
@@ -392,7 +392,7 @@ def test_metrics_empty_data(client):
     assert empty_mileage == 0.0
 
     # Test mileage by day for empty range
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/mileage/by-day", params={"start": "1990-01-01", "end": "1990-01-01"}
     )
     assert res.status_code == 200
@@ -401,7 +401,7 @@ def test_metrics_empty_data(client):
     # Should return empty list or list with zero mileage
 
     # Test TRIMP for empty range
-    res = client.get(
+    res = viewer_client.get(
         "/metrics/trimp/by-day",
         params={
             "start": "1990-01-01",
