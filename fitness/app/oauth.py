@@ -215,17 +215,9 @@ async def require_editor(user: User = Depends(get_current_user)) -> User:
 def get_trmnl_api_key() -> str:
     """Get TRMNL API key from environment.
 
-    Raises:
-        HTTPException 500 if TRMNL_API_KEY is not configured.
+    This env var is validated at startup, so it's guaranteed to be set.
     """
-    key = os.getenv("TRMNL_API_KEY")
-    if not key:
-        logger.error("TRMNL_API_KEY environment variable is not set")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="API key authentication is not configured",
-        )
-    return key
+    return os.environ["TRMNL_API_KEY"]
 
 
 async def require_viewer_or_api_key(
