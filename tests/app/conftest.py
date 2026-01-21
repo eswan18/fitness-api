@@ -42,11 +42,11 @@ def mock_db_calls(monkeypatch):
     """
     # Mock shoes
     monkeypatch.setattr("fitness.app.routers.shoes.get_shoes", lambda **kwargs: [])
-    # Mock run details
+    # Mock run details - patch at the source module, not the import location
     monkeypatch.setattr(
-        "fitness.app.app.get_run_details_in_date_range", lambda *args, **kwargs: []
+        "fitness.db.runs.get_run_details_in_date_range", lambda *args, **kwargs: []
     )
-    monkeypatch.setattr("fitness.app.app.get_all_run_details", lambda *args, **kwargs: [])
+    monkeypatch.setattr("fitness.db.runs.get_all_run_details", lambda *args, **kwargs: [])
 
 
 # Shared test user data
