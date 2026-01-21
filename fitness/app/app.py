@@ -213,7 +213,7 @@ def sort_runs_generic(
             # Default to date if unknown sort field
             return getattr(run, "localized_datetime", run.datetime_utc)
 
-    return sorted(runs, key=get_sort_key, reverse=reverse)
+    return sorted(runs, key=get_sort_key, reverse=reverse)  # type: ignore[type-var]
 
 
 @app.get("/health")

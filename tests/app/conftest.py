@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 
 from fitness.app.app import app
-from fitness.app.dependencies import strava_client
+from fitness.app.dependencies import strava_client, all_runs
 from fitness.models.user import User, Role
 
 
@@ -19,6 +19,35 @@ def override_strava_client():
     app.dependency_overrides[strava_client] = lambda: MagicMock()
     yield
     app.dependency_overrides.pop(strava_client, None)
+
+
+@pytest.fixture(autouse=True)
+def override_all_runs():
+    """Override all_runs dependency to avoid DB hits.
+
+    This fixture is autouse=True so it applies to all tests in tests/app/.
+    Returns an empty list by default. Tests can use dependency_overrides
+    directly if they need different data.
+    """
+    app.dependency_overrides[all_runs] = lambda: []
+    yield
+    app.dependency_overrides.pop(all_runs, None)
+
+
+@pytest.fixture(autouse=True)
+def mock_db_calls(monkeypatch):
+    """Mock DB calls to avoid DB hits.
+
+    This fixture is autouse=True so it applies to all tests in tests/app/.
+    """
+    # Mock shoes - patch at the import locations where get_shoes is used
+    monkeypatch.setattr("fitness.app.routers.shoes.get_shoes", lambda **kwargs: [])
+    monkeypatch.setattr("fitness.app.routers.metrics.get_shoes", lambda **kwargs: [])
+    # Mock run details - patch at the source module, not the import location
+    monkeypatch.setattr(
+        "fitness.db.runs.get_run_details_in_date_range", lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr("fitness.db.runs.get_all_run_details", lambda *args, **kwargs: [])
 
 
 # Shared test user data

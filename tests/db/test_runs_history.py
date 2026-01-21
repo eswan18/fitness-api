@@ -171,11 +171,16 @@ class TestUpdateRunWithHistory:
             mock_cursor.execute.call_count >= 2
         )  # At least INSERT into history and UPDATE current
 
-    @pytest.mark.e2e
+    @patch("fitness.db.runs_history.get_db_connection")
     @patch("fitness.db.runs.get_run_by_id")
-    def test_update_run_with_history_run_not_found(self, mock_get_run):
+    def test_update_run_with_history_run_not_found(
+        self, mock_get_run, mock_get_connection
+    ):
         """Test handling of non-existent run."""
         mock_get_run.return_value = None
+        mock_conn = MagicMock()
+        mock_get_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.transaction.return_value.__enter__.return_value = None
 
         with pytest.raises(ValueError, match="Run test_run_123 not found"):
             update_run_with_history("test_run_123", {"distance": 5.5}, "user123")
