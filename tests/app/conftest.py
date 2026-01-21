@@ -40,8 +40,9 @@ def mock_db_calls(monkeypatch):
 
     This fixture is autouse=True so it applies to all tests in tests/app/.
     """
-    # Mock shoes
+    # Mock shoes - patch at the import locations where get_shoes is used
     monkeypatch.setattr("fitness.app.routers.shoes.get_shoes", lambda **kwargs: [])
+    monkeypatch.setattr("fitness.app.routers.metrics.get_shoes", lambda **kwargs: [])
     # Mock run details - patch at the source module, not the import location
     monkeypatch.setattr(
         "fitness.db.runs.get_run_details_in_date_range", lambda *args, **kwargs: []
