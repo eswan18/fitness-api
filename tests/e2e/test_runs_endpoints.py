@@ -7,7 +7,7 @@ from fitness.db.runs import bulk_create_runs
 
 
 @pytest.mark.e2e
-def test_runs_endpoint_basic(client):
+def test_runs_endpoint_basic(viewer_client):
     """Test basic /runs endpoint functionality."""
     # Create test runs
     runs = [
@@ -35,7 +35,7 @@ def test_runs_endpoint_basic(client):
     assert inserted == 2
 
     # Test basic endpoint
-    res = client.get("/runs")
+    res = viewer_client.get("/runs")
     assert res.status_code == 200
     runs_data = res.json()
     assert len(runs_data) >= 2
@@ -47,7 +47,7 @@ def test_runs_endpoint_basic(client):
 
 
 @pytest.mark.e2e
-def test_runs_filtering_and_sorting(client):
+def test_runs_filtering_and_sorting(viewer_client):
     """Test runs endpoint filtering and sorting parameters."""
     # Create test runs with varying dates
     runs = [
@@ -84,7 +84,7 @@ def test_runs_filtering_and_sorting(client):
     assert inserted == 3
 
     # Test date filtering
-    res = client.get("/runs", params={"start": "2024-02-03", "end": "2024-02-08"})
+    res = viewer_client.get("/runs", params={"start": "2024-02-03", "end": "2024-02-08"})
     assert res.status_code == 200
     filtered_runs = res.json()
     filtered_ids = [r["id"] for r in filtered_runs]
@@ -93,7 +93,7 @@ def test_runs_filtering_and_sorting(client):
     assert "sort_test_3" not in filtered_ids
 
     # Test sorting by distance (ascending)
-    res = client.get("/runs", params={"sort_by": "distance", "sort_order": "asc"})
+    res = viewer_client.get("/runs", params={"sort_by": "distance", "sort_order": "asc"})
     assert res.status_code == 200
     sorted_runs = res.json()
 
@@ -105,7 +105,7 @@ def test_runs_filtering_and_sorting(client):
         assert distances == sorted(distances)
 
     # Test sorting by heart rate (descending)
-    res = client.get("/runs", params={"sort_by": "heart_rate", "sort_order": "desc"})
+    res = viewer_client.get("/runs", params={"sort_by": "heart_rate", "sort_order": "desc"})
     assert res.status_code == 200
     hr_sorted_runs = res.json()
 
@@ -118,7 +118,7 @@ def test_runs_filtering_and_sorting(client):
 
 
 @pytest.mark.e2e
-def test_run_details_endpoint(client):
+def test_run_details_endpoint(viewer_client):
     """Test /runs-details endpoint returns shoes and sync info fields."""
     # Create a run with shoe information
     run = Run(
@@ -136,7 +136,7 @@ def test_run_details_endpoint(client):
     assert inserted == 1
 
     # Test run details endpoint (alias path to avoid routing ambiguity)
-    res = client.get("/runs-details")
+    res = viewer_client.get("/runs-details")
     assert res.status_code == 200
     runs_data = res.json()
 
@@ -149,7 +149,7 @@ def test_run_details_endpoint(client):
     assert "sync_status" in test_run
 
     # Test date filtering on run details
-    res = client.get(
+    res = viewer_client.get(
         "/runs-details", params={"start": "2024-03-01", "end": "2024-03-01"}
     )
     assert res.status_code == 200
@@ -159,7 +159,7 @@ def test_run_details_endpoint(client):
 
 
 @pytest.mark.e2e
-def test_run_history_workflow(client, auth_client):
+def test_run_history_workflow(viewer_client, editor_client):
     """Test complete run editing and history workflow."""
     # Create a run
     run = Run(
@@ -176,13 +176,13 @@ def test_run_history_workflow(client, auth_client):
     assert inserted == 1
 
     # Get initial run state
-    res = client.get("/runs/history_test_run/history")
+    res = viewer_client.get("/runs/history_test_run/history")
     assert res.status_code == 200
     initial_history = res.json()
     assert len(initial_history) == 1  # Original record
 
     # Make first edit
-    res = auth_client.patch(
+    res = editor_client.patch(
         "/runs/history_test_run",
         json={
             "distance": 5.2,
@@ -193,13 +193,13 @@ def test_run_history_workflow(client, auth_client):
     assert res.status_code == 200
 
     # Check history after first edit
-    res = client.get("/runs/history_test_run/history")
+    res = viewer_client.get("/runs/history_test_run/history")
     assert res.status_code == 200
     history = res.json()
     assert len(history) == 2
 
     # Make second edit
-    res = auth_client.patch(
+    res = editor_client.patch(
         "/runs/history_test_run",
         json={
             "avg_heart_rate": 155.0,
@@ -210,7 +210,7 @@ def test_run_history_workflow(client, auth_client):
     assert res.status_code == 200
 
     # Check final history
-    res = client.get("/runs/history_test_run/history")
+    res = viewer_client.get("/runs/history_test_run/history")
     assert res.status_code == 200
     final_history = res.json()
     assert len(final_history) == 3
@@ -225,7 +225,7 @@ def test_run_history_workflow(client, auth_client):
 
 
 @pytest.mark.e2e
-def test_run_edit_validation(client, auth_client):
+def test_run_edit_validation(viewer_client, editor_client):
     """Test run editing validation and error cases."""
     # Create a run for testing
     run = Run(
@@ -241,28 +241,28 @@ def test_run_edit_validation(client, auth_client):
     assert inserted == 1
 
     # Test editing non-existent run
-    res = auth_client.patch(
+    res = editor_client.patch(
         "/runs/non_existent_run",
         json={"distance": 4.0, "changed_by": "test", "change_reason": "test"},
     )
     assert res.status_code == 404
 
     # Test invalid data (negative distance)
-    res = auth_client.patch(
+    res = editor_client.patch(
         "/runs/validation_test_run",
         json={"distance": -1.0, "changed_by": "test", "change_reason": "test"},
     )
     assert res.status_code == 422  # Validation error
 
     # Test invalid data (negative duration)
-    res = auth_client.patch(
+    res = editor_client.patch(
         "/runs/validation_test_run",
         json={"duration": -100.0, "changed_by": "test", "change_reason": "test"},
     )
     assert res.status_code == 422  # Validation error
 
     # Test missing required fields
-    res = auth_client.patch(
+    res = editor_client.patch(
         "/runs/validation_test_run",
         json={
             "distance": 4.0
@@ -273,7 +273,7 @@ def test_run_edit_validation(client, auth_client):
 
 
 @pytest.mark.e2e
-def test_timezone_handling(client):
+def test_timezone_handling(viewer_client):
     """Test timezone parameter handling in runs endpoints."""
     # Create runs at different times
     runs = [
@@ -299,7 +299,7 @@ def test_timezone_handling(client):
     assert inserted == 2
 
     # Test with timezone parameter (should handle conversion)
-    res = client.get(
+    res = viewer_client.get(
         "/runs",
         params={
             "start": "2024-06-01",
@@ -315,7 +315,7 @@ def test_timezone_handling(client):
     assert "tz_test_1" in tz_run_ids or "tz_test_2" in tz_run_ids
 
     # Test with UTC (no timezone conversion)
-    res = client.get("/runs", params={"start": "2024-06-01", "end": "2024-06-01"})
+    res = viewer_client.get("/runs", params={"start": "2024-06-01", "end": "2024-06-01"})
     assert res.status_code == 200
     utc_runs = res.json()
 

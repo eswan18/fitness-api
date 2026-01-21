@@ -6,7 +6,7 @@ from fitness.models.shoe import generate_shoe_id
 
 
 @pytest.mark.e2e
-def test_minimal_workflow(client, auth_client):
+def test_minimal_workflow(viewer_client, editor_client):
     # Seed: create a run with a shoe name so it auto-creates the shoe and history
     run = Run(
         id="e2e_run_1",
@@ -23,13 +23,13 @@ def test_minimal_workflow(client, auth_client):
     assert inserted == 1
 
     # View runs
-    res = client.get("/runs")
+    res = viewer_client.get("/runs")
     assert res.status_code == 200
     runs = res.json()
     assert any(r["id"] == "e2e_run_1" for r in runs)
 
     # Edit the run
-    res = auth_client.patch(
+    res = editor_client.patch(
         "/runs/e2e_run_1",
         json={
             "distance": 5.5,
@@ -40,25 +40,25 @@ def test_minimal_workflow(client, auth_client):
     assert res.status_code == 200
 
     # History should now include original + update
-    res = client.get("/runs/e2e_run_1/history")
+    res = viewer_client.get("/runs/e2e_run_1/history")
     assert res.status_code == 200
     history = res.json()
     assert len(history) >= 2
 
     # Retire the shoe
     shoe_id = generate_shoe_id("E2E Test Shoe")
-    res = auth_client.patch(
+    res = editor_client.patch(
         f"/shoes/{shoe_id}",
         json={"retired_at": "2024-12-31", "retirement_notes": "done"},
     )
     assert res.status_code == 200
 
     # Verify appears in retired list
-    res = client.get("/shoes", params={"retired": True})
+    res = viewer_client.get("/shoes", params={"retired": True})
     assert res.status_code == 200
     retired = res.json()
     assert any(s["id"] == shoe_id for s in retired)
 
     # Unretire
-    res = auth_client.patch(f"/shoes/{shoe_id}", json={"retired_at": None})
+    res = editor_client.patch(f"/shoes/{shoe_id}", json={"retired_at": None})
     assert res.status_code == 200
