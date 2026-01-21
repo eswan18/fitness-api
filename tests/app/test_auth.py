@@ -4,6 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 
+from tests.app.conftest import TEST_API_KEY
+
 
 class TestAuthenticationEndpoints:
     """Test OAuth Authentication on endpoints."""
@@ -174,3 +176,36 @@ class TestProtectedMutationEndpoints:
         """GET /health should remain public."""
         response = client.get("/health")
         assert response.status_code == 200
+
+
+class TestDualAuthentication:
+    """Test endpoints that accept either OAuth or API key authentication."""
+
+    def test_trmnl_endpoint_requires_auth(self, client: TestClient):
+        """GET /summary/trmnl should require authentication."""
+        response = client.get("/summary/trmnl")
+        assert response.status_code == 401
+        assert "WWW-Authenticate" in response.headers
+
+    @pytest.mark.e2e
+    def test_trmnl_endpoint_with_oauth(self, viewer_client: TestClient):
+        """GET /summary/trmnl should succeed with OAuth authentication."""
+        with patch("fitness.app.dependencies.all_runs") as mock_runs:
+            mock_runs.return_value = []
+            response = viewer_client.get("/summary/trmnl")
+            assert response.status_code == 200
+
+    def test_trmnl_endpoint_with_api_key(self, api_key_client: TestClient):
+        """GET /summary/trmnl should succeed with API key authentication."""
+        with patch("fitness.app.dependencies.all_runs") as mock_runs:
+            mock_runs.return_value = []
+            response = api_key_client.get("/summary/trmnl")
+            assert response.status_code == 200
+
+    def test_trmnl_endpoint_with_invalid_api_key(self, client: TestClient, monkeypatch):
+        """GET /summary/trmnl should fail with invalid API key."""
+        monkeypatch.setenv("TRMNL_API_KEY", TEST_API_KEY)
+        response = client.get(
+            "/summary/trmnl", headers={"X-API-Key": "wrong_key"}
+        )
+        assert response.status_code == 401

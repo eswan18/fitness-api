@@ -154,3 +154,16 @@ def editor_client() -> Generator[TestClient, None, None]:
     finally:
         oauth.validate_jwt_token = original_validate
         oauth.get_or_create_user = original_get_or_create
+
+
+TEST_API_KEY = "test_trmnl_api_key_12345"
+
+
+@pytest.fixture(scope="function")
+def api_key_client(monkeypatch) -> Generator[TestClient, None, None]:
+    """Test client with API key authentication (for TRMNL endpoint)."""
+    monkeypatch.setenv("TRMNL_API_KEY", TEST_API_KEY)
+
+    client = TestClient(app)
+    client.headers = {"X-API-Key": TEST_API_KEY}
+    yield client

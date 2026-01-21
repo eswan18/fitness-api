@@ -8,7 +8,7 @@ from uuid import UUID
 
 import jwt
 from jwt import PyJWKClient
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from fitness.models.user import User
@@ -210,3 +210,55 @@ async def require_editor(user: User = Depends(get_current_user)) -> User:
             detail="Editor access required",
         )
     return user
+
+
+def get_trmnl_api_key() -> str:
+    """Get TRMNL API key from environment.
+
+    This env var is validated at startup, so it's guaranteed to be set.
+    """
+    return os.environ["TRMNL_API_KEY"]
+
+
+async def require_viewer_or_api_key(
+    credentials: HTTPAuthorizationCredentials | None = Depends(oauth_scheme),
+    x_api_key: str | None = Header(None),
+) -> User | None:
+    """FastAPI dependency allowing either OAuth or API key authentication.
+
+    Tries JWT Bearer token first. If not present or invalid, falls back to
+    checking the X-API-Key header against the TRMNL_API_KEY environment variable.
+
+    Returns:
+        User object if authenticated via OAuth, None if authenticated via API key.
+
+    Raises:
+        HTTPException 401 if neither authentication method succeeds.
+    """
+    # Try OAuth first
+    if credentials:
+        claims = validate_jwt_token(credentials.credentials)
+        if claims:
+            sub = claims.get("sub")
+            if sub:
+                try:
+                    idp_user_id = UUID(sub)
+                    email = claims.get("email")
+                    username = claims.get("username")
+                    return get_or_create_user(idp_user_id, email, username)
+                except ValueError:
+                    logger.warning(f"Invalid UUID in sub claim: {sub}")
+
+    # Fall back to API key
+    if x_api_key:
+        expected_key = get_trmnl_api_key()
+        if x_api_key == expected_key:
+            logger.debug("Authenticated via API key")
+            return None
+
+    # Neither method succeeded
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing authentication",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
