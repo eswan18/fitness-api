@@ -37,13 +37,13 @@ class TestAuthenticationEndpoints:
         )
         assert response.status_code == 401
 
-    @pytest.mark.e2e
     def test_read_runs_requires_viewer_auth(self, client: TestClient):
         """GET /runs should require viewer authentication."""
-        response = client.get("/runs")
-        assert response.status_code == 401
+        with patch("fitness.app.dependencies.all_runs") as mock_runs:
+            mock_runs.return_value = []
+            response = client.get("/runs")
+            assert response.status_code == 401
 
-    @pytest.mark.e2e
     def test_read_runs_with_viewer_auth(self, viewer_client: TestClient):
         """GET /runs should succeed with viewer authentication."""
         with patch("fitness.app.dependencies.all_runs") as mock_runs:
@@ -57,13 +57,13 @@ class TestAuthenticationEndpoints:
         assert response.status_code == 200
         assert response.json() == {"status": "healthy"}
 
-    @pytest.mark.e2e
     def test_metrics_requires_viewer_auth(self, client: TestClient):
         """GET /metrics/* endpoints should require viewer authentication."""
-        response = client.get("/metrics/mileage/total")
-        assert response.status_code == 401
+        with patch("fitness.app.dependencies.all_runs") as mock_runs:
+            mock_runs.return_value = []
+            response = client.get("/metrics/mileage/total")
+            assert response.status_code == 401
 
-    @pytest.mark.e2e
     def test_metrics_with_viewer_auth(self, viewer_client: TestClient):
         """GET /metrics/* endpoints should succeed with viewer authentication."""
         with patch("fitness.app.dependencies.all_runs") as mock_runs:
@@ -100,7 +100,6 @@ class TestProtectedMutationEndpoints:
         assert response.status_code == 401
         assert "WWW-Authenticate" in response.headers
 
-    @pytest.mark.e2e
     @pytest.mark.parametrize(
         "method,path",
         [
@@ -127,7 +126,6 @@ class TestProtectedMutationEndpoints:
         response = viewer_client.request(method, path, **kwargs)  # type: ignore[arg-type]
         assert response.status_code == 403
 
-    @pytest.mark.e2e
     @pytest.mark.parametrize(
         "path",
         [
@@ -143,10 +141,13 @@ class TestProtectedMutationEndpoints:
     )
     def test_read_endpoints_require_viewer_auth(self, path, client: TestClient):
         """Read endpoints should require viewer authentication."""
-        response = client.get(path)
-        assert response.status_code == 401
+        with patch("fitness.app.dependencies.all_runs") as mock_runs:
+            mock_runs.return_value = []
+            with patch("fitness.db.shoes.get_shoes") as mock_shoes:
+                mock_shoes.return_value = []
+                response = client.get(path)
+                assert response.status_code == 401
 
-    @pytest.mark.e2e
     @pytest.mark.parametrize(
         "path",
         [
@@ -189,7 +190,6 @@ class TestDualAuthentication:
             assert response.status_code == 401
             assert "WWW-Authenticate" in response.headers
 
-    @pytest.mark.e2e
     def test_trmnl_endpoint_with_oauth(self, viewer_client: TestClient):
         """GET /summary/trmnl should succeed with OAuth authentication."""
         with patch("fitness.app.dependencies.all_runs") as mock_runs:
