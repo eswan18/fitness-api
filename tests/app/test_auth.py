@@ -2,7 +2,6 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
 
 from tests.app.conftest import TEST_API_KEY
 
@@ -39,17 +38,13 @@ class TestAuthenticationEndpoints:
 
     def test_read_runs_requires_viewer_auth(self, client: TestClient):
         """GET /runs should require viewer authentication."""
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            response = client.get("/runs")
-            assert response.status_code == 401
+        response = client.get("/runs")
+        assert response.status_code == 401
 
     def test_read_runs_with_viewer_auth(self, viewer_client: TestClient):
         """GET /runs should succeed with viewer authentication."""
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            response = viewer_client.get("/runs")
-            assert response.status_code == 200
+        response = viewer_client.get("/runs")
+        assert response.status_code == 200
 
     def test_health_endpoint_no_auth(self, client: TestClient):
         """GET /health should remain public."""
@@ -59,17 +54,13 @@ class TestAuthenticationEndpoints:
 
     def test_metrics_requires_viewer_auth(self, client: TestClient):
         """GET /metrics/* endpoints should require viewer authentication."""
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            response = client.get("/metrics/mileage/total")
-            assert response.status_code == 401
+        response = client.get("/metrics/mileage/total")
+        assert response.status_code == 401
 
     def test_metrics_with_viewer_auth(self, viewer_client: TestClient):
         """GET /metrics/* endpoints should succeed with viewer authentication."""
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            response = viewer_client.get("/metrics/mileage/total")
-            assert response.status_code == 200
+        response = viewer_client.get("/metrics/mileage/total")
+        assert response.status_code == 200
 
 
 class TestProtectedMutationEndpoints:
@@ -141,12 +132,8 @@ class TestProtectedMutationEndpoints:
     )
     def test_read_endpoints_require_viewer_auth(self, path, client: TestClient):
         """Read endpoints should require viewer authentication."""
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            with patch("fitness.db.shoes.get_shoes") as mock_shoes:
-                mock_shoes.return_value = []
-                response = client.get(path)
-                assert response.status_code == 401
+        response = client.get(path)
+        assert response.status_code == 401
 
     @pytest.mark.parametrize(
         "path",
@@ -165,13 +152,9 @@ class TestProtectedMutationEndpoints:
         self, path, viewer_client: TestClient
     ):
         """Read endpoints should work with viewer authentication."""
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            with patch("fitness.db.shoes.get_shoes") as mock_shoes:
-                mock_shoes.return_value = []
-                response = viewer_client.get(path)
-                # Should succeed (may be 200 or other valid response code)
-                assert response.status_code == 200
+        response = viewer_client.get(path)
+        # Should succeed (may be 200 or other valid response code)
+        assert response.status_code == 200
 
     def test_health_endpoint_remains_public(self, client: TestClient):
         """GET /health should remain public."""
@@ -184,32 +167,24 @@ class TestDualAuthentication:
 
     def test_trmnl_endpoint_requires_auth(self, client: TestClient):
         """GET /summary/trmnl should require authentication."""
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            response = client.get("/summary/trmnl")
-            assert response.status_code == 401
-            assert "WWW-Authenticate" in response.headers
+        response = client.get("/summary/trmnl")
+        assert response.status_code == 401
+        assert "WWW-Authenticate" in response.headers
 
     def test_trmnl_endpoint_with_oauth(self, viewer_client: TestClient):
         """GET /summary/trmnl should succeed with OAuth authentication."""
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            response = viewer_client.get("/summary/trmnl")
-            assert response.status_code == 200
+        response = viewer_client.get("/summary/trmnl")
+        assert response.status_code == 200
 
     def test_trmnl_endpoint_with_api_key(self, api_key_client: TestClient):
         """GET /summary/trmnl should succeed with API key authentication."""
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            response = api_key_client.get("/summary/trmnl")
-            assert response.status_code == 200
+        response = api_key_client.get("/summary/trmnl")
+        assert response.status_code == 200
 
     def test_trmnl_endpoint_with_invalid_api_key(self, client: TestClient, monkeypatch):
         """GET /summary/trmnl should fail with invalid API key."""
         monkeypatch.setenv("TRMNL_API_KEY", TEST_API_KEY)
-        with patch("fitness.app.dependencies.all_runs") as mock_runs:
-            mock_runs.return_value = []
-            response = client.get(
-                "/summary/trmnl", headers={"X-API-Key": "wrong_key"}
-            )
-            assert response.status_code == 401
+        response = client.get(
+            "/summary/trmnl", headers={"X-API-Key": "wrong_key"}
+        )
+        assert response.status_code == 401
