@@ -33,6 +33,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           PUBLIC_API_BASE_URL: http://localhost:8000
+          PUBLIC_DASHBOARD_BASE_URL: http://localhost:5173
           IDENTITY_PROVIDER_URL: http://localhost:8080
           JWT_AUDIENCE: http://localhost:8000
           TRMNL_API_KEY: test_api_key_for_ci
@@ -42,6 +43,7 @@ jobs:
           STRAVA_CLIENT_SECRET: test_client_secret
           GOOGLE_CLIENT_ID: test_google_client_id
           GOOGLE_CLIENT_SECRET: test_google_client_secret
+          GOOGLE_CALENDAR_ID: test_calendar_id@group.calendar.google.com
 
   e2e-tests:
     runs-on: ubuntu-latest
@@ -65,6 +67,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           PUBLIC_API_BASE_URL: http://localhost:8000
+          PUBLIC_DASHBOARD_BASE_URL: http://localhost:5173
           IDENTITY_PROVIDER_URL: http://localhost:8080
           JWT_AUDIENCE: http://localhost:8000
           TRMNL_API_KEY: test_api_key_for_ci
@@ -74,3 +77,4 @@ jobs:
           STRAVA_CLIENT_SECRET: test_client_secret
           GOOGLE_CLIENT_ID: test_google_client_id
           GOOGLE_CLIENT_SECRET: test_google_client_secret
+          GOOGLE_CALENDAR_ID: test_calendar_id@group.calendar.google.com
