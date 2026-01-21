@@ -211,9 +211,10 @@ class TestDualAuthentication:
         assert response.status_code == 401
 
     def test_trmnl_endpoint_with_no_env_var(self, client: TestClient, monkeypatch):
-        """GET /summary/trmnl should fail if TRMNL_API_KEY is not set."""
+        """GET /summary/trmnl should return 500 if TRMNL_API_KEY is not set."""
         monkeypatch.delenv("TRMNL_API_KEY", raising=False)
         response = client.get(
             "/summary/trmnl", headers={"X-API-Key": "any_key"}
         )
-        assert response.status_code == 401
+        assert response.status_code == 500
+        assert "not configured" in response.json()["detail"]

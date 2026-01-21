@@ -249,7 +249,13 @@ async def require_viewer_or_api_key(
     # Fall back to API key
     if x_api_key:
         expected_key = get_trmnl_api_key()
-        if expected_key and x_api_key == expected_key:
+        if not expected_key:
+            logger.error("TRMNL_API_KEY environment variable is not set")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="API key authentication is not configured",
+            )
+        if x_api_key == expected_key:
             logger.debug("Authenticated via API key")
             return None
 
