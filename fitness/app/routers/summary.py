@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 
 from fitness.app.models import TrmnlSummary, Sex, LoadSeries
 from fitness.app.dependencies import all_runs
-from fitness.app.auth import require_viewer
+from fitness.app.auth import require_viewer_or_api_key
 from fitness.agg import total_mileage, total_seconds
 from fitness.agg.training_load import training_stress_balance
 from fitness.models import Run, User
@@ -23,7 +23,7 @@ def get_trmnl_summary(
     resting_hr: float = 42,
     sex: Sex = "M",
     runs: list[Run] = Depends(all_runs),
-    _user: User = Depends(require_viewer),
+    _user: User | None = Depends(require_viewer_or_api_key),
 ) -> TrmnlSummary:
     """Get the summary of the fitness data."""
     miles_all_time = total_mileage(runs, date.min, date.max)
