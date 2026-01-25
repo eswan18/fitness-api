@@ -48,7 +48,7 @@ async def exchange_code_for_token(code: str) -> StravaToken:
 
 
 async def refresh_access_token(refresh_token: str) -> StravaToken:
-    """Refresh a Strava access token using a refresh token.
+    """Refresh a Strava access token using a refresh token (async version).
 
     Args:
         refresh_token: The refresh token to use for obtaining a new access token
@@ -75,6 +75,55 @@ async def refresh_access_token(refresh_token: str) -> StravaToken:
             detail=f"Failed to refresh Strava token (status {response.status_code}): {response.text}",
         )
     return StravaToken.model_validate_json(response.content)
+
+
+def refresh_access_token_sync(refresh_token: str) -> StravaToken:
+    """Refresh a Strava access token using a refresh token (sync version).
+
+    Args:
+        refresh_token: The refresh token to use for obtaining a new access token
+
+    Returns:
+        StravaToken: A new token containing both access_token and refresh_token
+
+    Raises:
+        ValueError: If the refresh token is expired/revoked (invalid_grant error)
+        HTTPException: If the refresh request fails for other reasons
+    """
+    with httpx.Client(timeout=10) as client:
+        response = client.post(
+            TOKEN_URL,
+            data={
+                "client_id": CLIENT_ID,
+                "client_secret": CLIENT_SECRET,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+        )
+
+    if response.status_code == 200:
+        return StravaToken.model_validate_json(response.content)
+
+    # Check for revoked/expired refresh token
+    error_data = {}
+    try:
+        error_data = response.json()
+    except Exception:
+        pass
+
+    if response.status_code == 400 and error_data.get("error") == "invalid_grant":
+        logger.error(
+            f"Strava refresh token has been expired or revoked. "
+            f"Re-authorization required. status_code={response.status_code}, "
+            f"error_code={error_data.get('error')}, "
+            f"error_description={error_data.get('error_description', 'N/A')}"
+        )
+        raise ValueError("Refresh token expired or revoked. Re-authorization required.")
+
+    raise HTTPException(
+        status_code=502,
+        detail=f"Failed to refresh Strava token (status {response.status_code}): {response.text}",
+    )
 
 
 def build_oauth_authorize_url(redirect_uri: str, state: str | None = None) -> str:
