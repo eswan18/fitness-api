@@ -1,5 +1,6 @@
 from .auth import (
     refresh_access_token,
+    refresh_access_token_sync,
     exchange_code_for_token,
     build_oauth_authorize_url,
     CLIENT_ID,
@@ -10,6 +11,7 @@ from .models import StravaActivity, StravaGear, StravaActivityWithGear, StravaAt
 
 __all__ = [
     "refresh_access_token",
+    "refresh_access_token_sync",
     "exchange_code_for_token",
     "build_oauth_authorize_url",
     "StravaClient",
