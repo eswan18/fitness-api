@@ -34,6 +34,7 @@ pytestmark = [
 def strava_client():
     """Create a StravaClient with real credentials."""
     creds = get_credentials("strava")
+    assert creds is not None, "Strava credentials not found"
     return StravaClient(creds=creds)
 
 
