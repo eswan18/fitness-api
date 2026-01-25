@@ -4,14 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, TypeAdapter, AwareDatetime
 
-SHOE_RENAME_MAP = {
-    "Adizero SL": "Adidas Adizero SL",
-    "M1080K10": "New Balance M1080K10",
-    "M1080R10": "New Balance M1080R10",
-    "Ghost 15": "Brooks Ghost 15",
-    "Ghost 16": "Brooks Ghost 16",
-    "Pegasus 38": "Nike Air Zoom Pegasus 38",
-}
+from fitness.config.shoes import normalize_shoe_name
 
 
 class StravaAthlete(BaseModel):
@@ -171,10 +164,7 @@ class StravaActivityWithGear(StravaActivity):
 
     def shoes(self) -> str | None:
         """Get the shoes used for this activity."""
-        nickname = self.gear.nickname
-        if nickname in SHOE_RENAME_MAP:
-            return SHOE_RENAME_MAP[nickname]
-        return self.gear.nickname
+        return normalize_shoe_name(self.gear.nickname)
 
     def distance_miles(self) -> float:
         """Return the distance to miles."""
