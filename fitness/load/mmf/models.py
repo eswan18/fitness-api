@@ -5,16 +5,7 @@ import re
 
 from pydantic import BaseModel, Field, BeforeValidator
 
-# There are some cases where the shoe names are inconsistent in the data.
-# This remaps them to a consistent name.
-SHOE_RENAME_MAP = {
-    "M1080K10": "New Balance M1080K10",
-    "M1080R10": "New Balance M1080R10",
-    "New Balance 1080K10": "New Balance M1080K10",
-    "Karhu Fusion 2021  2": "Karhu Fusion 2021 - 2",
-    "Karhu Fusion 2021 2": "Karhu Fusion 2021 - 2",
-    "Adidas Boston 13": "Boston 13",
-}
+from fitness.config.shoes import normalize_shoe_name
 
 MmfActivityType = Literal[
     "Bike Ride",
@@ -109,9 +100,5 @@ class MmfActivity(BaseModel):
         match = re.search(r"Shoes:\s*(.+)", self.notes)
         if match:
             raw_shoe_name = match.group(1).strip()
-            if raw_shoe_name in SHOE_RENAME_MAP:
-                # If the shoe name is in the rename mapping, use the mapped name
-                return SHOE_RENAME_MAP[raw_shoe_name]
-            else:
-                return raw_shoe_name
+            return normalize_shoe_name(raw_shoe_name)
         return None
