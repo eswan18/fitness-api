@@ -30,8 +30,9 @@ def prevent_db_access_in_unit_tests(request, monkeypatch):
 
     This catches issues early when someone forgets to mock a DB call in a unit test.
     """
-    # Skip this protection for e2e tests - they need real DB access
-    if "e2e" in [marker.name for marker in request.node.iter_markers()]:
+    # Skip this protection for e2e and integration tests - they need real DB access
+    markers = [marker.name for marker in request.node.iter_markers()]
+    if "e2e" in markers or "integration" in markers:
         yield
         return
 

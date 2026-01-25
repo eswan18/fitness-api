@@ -38,5 +38,6 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 markers = [
     "e2e: end-to-end API + DB workflow tests",
+    "integration: tests requiring real external API credentials (Strava, Google)",
 ]
 addopts = "--cov=fitness --cov-report html"
