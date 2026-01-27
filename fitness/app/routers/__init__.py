@@ -6,6 +6,7 @@ from .oauth import router as oauth_router
 from .strava import router as strava_router
 from .mmf import router as mmf_router
 from .summary import router as summary_router
+from .hevy import router as hevy_router
 
 __all__ = [
     "metrics_router",
@@ -16,4 +17,5 @@ __all__ = [
     "strava_router",
     "mmf_router",
     "summary_router",
+    "hevy_router",
 ]
