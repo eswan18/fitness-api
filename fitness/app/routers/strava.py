@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import RedirectResponse
 
 from fitness.app.dependencies import strava_client
 from fitness.app.auth import require_editor
@@ -17,8 +18,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/strava", tags=["strava"])
 
 
-@router.post("/update-data", response_model=DataImportResponse)
-async def update_strava_data(
+@router.post("/sync", response_model=DataImportResponse)
+async def sync_strava_data(
     user: User = Depends(require_editor),
     strava_client: StravaClient = Depends(strava_client),
 ) -> DataImportResponse:
@@ -47,3 +48,21 @@ async def update_strava_data(
         updated_at=datetime.now(timezone.utc),
         message=f"Inserted {inserted_count} new runs into the database",
     )
+
+
+@router.post(
+    "/update-data",
+    response_class=RedirectResponse,
+    status_code=307,
+    deprecated=True,
+    include_in_schema=True,
+)
+async def update_strava_data_deprecated() -> RedirectResponse:
+    """Deprecated: Use /strava/sync instead.
+
+    This endpoint redirects to /strava/sync and will be removed in a future version.
+    """
+    logger.warning(
+        "Deprecated endpoint /strava/update-data called. Use /strava/sync instead."
+    )
+    return RedirectResponse(url="/strava/sync", status_code=307)

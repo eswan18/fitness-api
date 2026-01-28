@@ -62,7 +62,7 @@ The API uses OAuth 2.0 for authentication via an external identity provider. Aut
 
 ### Protected Endpoints
 The following endpoints require OAuth Bearer tokens:
-- `POST /strava/update-data` — Refresh Strava data
+- `POST /strava/sync` — Refresh Strava data
 - `POST /mmf/upload-csv` — Upload MapMyFitness CSV
 - `PATCH /runs/{run_id}` — Update a run
 - `PATCH /shoes/{shoe_id}` — Update shoe information
@@ -282,7 +282,7 @@ This will install all dependencies as specified in the `uv.lock` file, ensuring 
 - `GET /runs/details` — Detailed runs including shoes, shoe retirement notes, run version, and Google Calendar sync info. Optional query: `synced=true|false` to filter by Google Calendar sync status. Alias: `/runs-details`.
 - `PATCH /runs/{run_id}` — Edit a run (with history tracking).
 - `POST /mmf/upload-csv` — Upload MapMyFitness CSV data (requires authentication).
-- `POST /strava/update-data` — Fetch and update Strava data (requires authentication).
+- `POST /strava/sync` — Fetch and update Strava data (requires authentication).
 - `GET /metrics/...` — Aggregated metrics (see docs for full list).
 - `POST /sync/runs/{run_id}` — Sync a run to Google Calendar; `DELETE` to remove.
 
