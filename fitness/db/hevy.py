@@ -111,12 +111,15 @@ def get_existing_hevy_workout_ids() -> set[str]:
         return {row[0] for row in cursor.fetchall()}
 
 
-def bulk_upsert_hevy_workouts(workouts: list[HevyWorkout]) -> int:
-    """Bulk upsert multiple Hevy workouts. Returns count of affected rows."""
+def bulk_create_hevy_workouts(workouts: list[HevyWorkout]) -> int:
+    """Bulk insert new Hevy workouts. Returns count of inserted rows.
+
+    Skips workouts that already exist (by ID) to preserve local edits.
+    """
     if not workouts:
         return 0
 
-    logger.info(f"Bulk upserting {len(workouts)} Hevy workouts")
+    logger.info(f"Bulk inserting {len(workouts)} Hevy workouts")
 
     with get_db_connection() as conn:
         with conn.transaction():
@@ -132,17 +135,7 @@ def bulk_upsert_hevy_workouts(workouts: list[HevyWorkout]) -> int:
                             id, title, description, start_time, end_time, exercises,
                             total_volume_kg, total_sets, hevy_created_at, hevy_updated_at
                         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (id) DO UPDATE SET
-                            title = EXCLUDED.title,
-                            description = EXCLUDED.description,
-                            start_time = EXCLUDED.start_time,
-                            end_time = EXCLUDED.end_time,
-                            exercises = EXCLUDED.exercises,
-                            total_volume_kg = EXCLUDED.total_volume_kg,
-                            total_sets = EXCLUDED.total_sets,
-                            hevy_created_at = EXCLUDED.hevy_created_at,
-                            hevy_updated_at = EXCLUDED.hevy_updated_at,
-                            updated_at = CURRENT_TIMESTAMP
+                        ON CONFLICT (id) DO NOTHING
                         """,
                         (
                             workout.id,
@@ -157,9 +150,9 @@ def bulk_upsert_hevy_workouts(workouts: list[HevyWorkout]) -> int:
                             workout.updated_at,
                         ),
                     )
-                    count += 1
+                    count += cursor.rowcount  # Only count actually inserted rows
 
-    logger.info(f"Successfully upserted {count} Hevy workouts")
+    logger.info(f"Successfully inserted {count} new Hevy workouts")
     return count
 
 

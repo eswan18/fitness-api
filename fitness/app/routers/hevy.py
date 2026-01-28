@@ -16,7 +16,8 @@ from fitness.db.hevy import (
     get_hevy_workouts_in_date_range,
     get_hevy_workout_by_id,
     get_hevy_workout_count,
-    bulk_upsert_hevy_workouts,
+    get_existing_hevy_workout_ids,
+    bulk_create_hevy_workouts,
     get_all_exercise_templates,
     get_existing_exercise_template_ids,
     bulk_upsert_exercise_templates,
@@ -173,33 +174,39 @@ async def sync_hevy_data(
 ) -> HevySyncResponse:
     """Sync workouts and exercise templates from Hevy API.
 
-    Requires authentication. Fetches all workouts from Hevy, then fetches
-    only exercise templates for exercises we haven't seen before.
+    Requires authentication. Fetches workouts from Hevy and inserts only
+    new ones (preserving local edits). Fetches exercise templates only for
+    exercises we haven't seen before.
     """
     logger.info("Starting Hevy sync")
 
-    # 1. Fetch workouts first
-    workouts = client.get_all_workouts()
-    logger.info(f"Fetched {len(workouts)} workouts from Hevy API")
+    # 1. Fetch all workouts from Hevy API
+    all_workouts = client.get_all_workouts()
+    logger.info(f"Fetched {len(all_workouts)} workouts from Hevy API")
 
-    # 2. Extract unique template IDs from all exercises in workouts
-    template_ids_in_workouts: set[str] = set()
-    for workout in workouts:
-        for exercise in workout.exercises:
-            template_ids_in_workouts.add(exercise.exercise_template_id)
+    # 2. Filter to only new workouts (not already in DB)
+    existing_workout_ids = get_existing_hevy_workout_ids()
+    new_workouts = [w for w in all_workouts if w.id not in existing_workout_ids]
     logger.info(
-        f"Found {len(template_ids_in_workouts)} unique exercise template IDs in workouts"
+        f"Found {len(new_workouts)} new workouts "
+        f"({len(existing_workout_ids)} already in database)"
     )
 
-    # 3. Find which templates we don't have cached yet
+    # 3. Extract unique template IDs from new workouts only
+    template_ids_in_new_workouts: set[str] = set()
+    for workout in new_workouts:
+        for exercise in workout.exercises:
+            template_ids_in_new_workouts.add(exercise.exercise_template_id)
+
+    # 4. Find which templates we don't have cached yet
     existing_template_ids = get_existing_exercise_template_ids()
-    missing_template_ids = template_ids_in_workouts - existing_template_ids
+    missing_template_ids = template_ids_in_new_workouts - existing_template_ids
     logger.info(
         f"Need to fetch {len(missing_template_ids)} new exercise templates "
         f"({len(existing_template_ids)} already cached)"
     )
 
-    # 4. Fetch only missing templates
+    # 5. Fetch only missing templates
     new_templates = []
     for template_id in missing_template_ids:
         template = client.get_exercise_template_by_id(template_id)
@@ -208,13 +215,13 @@ async def sync_hevy_data(
         else:
             logger.warning(f"Could not fetch exercise template {template_id}")
 
-    # 5. Upsert new templates
+    # 6. Insert new templates
     templates_synced = bulk_upsert_exercise_templates(new_templates)
     logger.info(f"Synced {templates_synced} new exercise templates")
 
-    # 6. Upsert workouts
-    workouts_synced = bulk_upsert_hevy_workouts(workouts)
-    logger.info(f"Synced {workouts_synced} workouts")
+    # 7. Insert new workouts only (preserves local edits to existing workouts)
+    workouts_synced = bulk_create_hevy_workouts(new_workouts)
+    logger.info(f"Inserted {workouts_synced} new workouts")
 
     return HevySyncResponse(
         workouts_synced=workouts_synced,
