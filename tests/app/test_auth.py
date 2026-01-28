@@ -21,8 +21,15 @@ class TestAuthenticationEndpoints:
     ):
         """POST /strava/sync should succeed with valid OAuth token (editor)."""
         with monkeypatch.context() as m:
-            m.setattr("fitness.app.routers.strava.load_strava_runs", lambda client: [])
+            m.setattr(
+                "fitness.app.routers.strava.load_strava_runs", lambda client, after=None: []
+            )
             m.setattr("fitness.app.routers.strava.get_existing_run_ids", lambda: [])
+            m.setattr("fitness.app.routers.strava.get_last_sync_time", lambda provider: None)
+            m.setattr(
+                "fitness.app.routers.strava.update_last_sync_time",
+                lambda provider, synced_at: None,
+            )
             response = auth_client.post("/strava/sync")
 
         assert response.status_code == 200

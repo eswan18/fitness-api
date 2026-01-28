@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime
+from typing import Optional
 
 from fitness.integrations.strava.client import StravaClient
 from fitness.integrations.strava.models import StravaActivityWithGear
@@ -6,14 +8,27 @@ from fitness.integrations.strava.models import StravaActivityWithGear
 logger = logging.getLogger(__name__)
 
 
-def load_strava_runs(client: StravaClient) -> list[StravaActivityWithGear]:
-    """Fetch runs from Strava along with the gear used in them."""
-    logger.info("Starting Strava data load")
+def load_strava_runs(
+    client: StravaClient, after: Optional[datetime] = None
+) -> list[StravaActivityWithGear]:
+    """Fetch runs from Strava along with the gear used in them.
+
+    Args:
+        client: The Strava API client.
+        after: Only fetch activities after this datetime (for incremental sync).
+
+    Returns:
+        List of Strava activities with gear information.
+    """
+    if after:
+        logger.info(f"Starting Strava data load (incremental, after {after.isoformat()})")
+    else:
+        logger.info("Starting Strava data load (full sync)")
 
     try:
         # Get activities and the gear used in them.
         logger.info("Fetching activities from Strava API")
-        activities = client.get_activities()
+        activities = client.get_activities(after=after)
         logger.info(f"Retrieved {len(activities)} total activities from Strava")
 
         # Limit down to only runs.
