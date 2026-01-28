@@ -15,6 +15,7 @@ from fitness.db.lifts import (
     get_lifts_in_date_range,
     get_lift_by_id,
     get_lift_count,
+    get_all_exercise_templates,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,9 +51,26 @@ class LiftStatsResponse(BaseModel):
     total_sessions: int
     total_volume_kg: float
     total_sets: int
+    duration_all_time_seconds: int
     sessions_in_period: int
     volume_in_period_kg: float
     sets_in_period: int
+    duration_in_period_seconds: int
+    avg_duration_seconds: int
+
+
+class SetsByMuscleItem(BaseModel):
+    """Sets count for a single muscle group."""
+
+    muscle: str
+    sets: int
+
+
+class FrequentExerciseItem(BaseModel):
+    """An exercise with its occurrence count."""
+
+    name: str
+    count: int
 
 
 # --- Endpoints ---
@@ -116,6 +134,7 @@ async def get_lifts_stats(
     total_sessions = len(all_lifts)
     total_volume = sum(lift.total_volume() for lift in all_lifts)
     total_sets = sum(lift.total_sets() for lift in all_lifts)
+    duration_all_time = sum(lift.duration_seconds() for lift in all_lifts)
 
     # Period-specific stats
     if start_date or end_date:
@@ -123,14 +142,87 @@ async def get_lifts_stats(
     else:
         period_lifts = all_lifts
 
+    duration_in_period = sum(lift.duration_seconds() for lift in period_lifts)
+    avg_duration = duration_in_period // len(period_lifts) if period_lifts else 0
+
     return LiftStatsResponse(
         total_sessions=total_sessions,
         total_volume_kg=total_volume,
         total_sets=total_sets,
+        duration_all_time_seconds=duration_all_time,
         sessions_in_period=len(period_lifts),
         volume_in_period_kg=sum(lift.total_volume() for lift in period_lifts),
         sets_in_period=sum(lift.total_sets() for lift in period_lifts),
+        duration_in_period_seconds=duration_in_period,
+        avg_duration_seconds=avg_duration,
     )
+
+
+@router.get("/sets-by-muscle", response_model=list[SetsByMuscleItem])
+async def get_sets_by_muscle(
+    start_date: Optional[date] = Query(None, description="Filter on or after this date"),
+    end_date: Optional[date] = Query(None, description="Filter before this date"),
+    _user: User = Depends(require_viewer),
+) -> list[SetsByMuscleItem]:
+    """Get sets grouped by primary muscle group.
+
+    Returns non-warmup sets counted by muscle group for the given period.
+    """
+    # Get lifts in period
+    if start_date or end_date:
+        lifts = get_lifts_in_date_range(start_date, end_date)
+    else:
+        lifts = get_all_lifts()
+
+    # Build template lookup for muscle groups
+    templates = get_all_exercise_templates()
+    template_muscle_map = {t.id: t.primary_muscle_group for t in templates}
+
+    # Count sets by muscle group
+    muscle_sets: dict[str, int] = {}
+    for lift in lifts:
+        for exercise in lift.exercises:
+            muscle = template_muscle_map.get(exercise.exercise_template_id)
+            if muscle:
+                # Count non-warmup sets
+                non_warmup = sum(1 for s in exercise.sets if s.set_type != "warmup")
+                muscle_sets[muscle] = muscle_sets.get(muscle, 0) + non_warmup
+
+    # Sort by sets descending
+    sorted_muscles = sorted(muscle_sets.items(), key=lambda x: x[1], reverse=True)
+
+    return [SetsByMuscleItem(muscle=m, sets=s) for m, s in sorted_muscles]
+
+
+@router.get("/frequent-exercises", response_model=list[FrequentExerciseItem])
+async def get_frequent_exercises(
+    start_date: Optional[date] = Query(None, description="Filter on or after this date"),
+    end_date: Optional[date] = Query(None, description="Filter before this date"),
+    limit: int = Query(5, description="Number of exercises to return", ge=1, le=20),
+    _user: User = Depends(require_viewer),
+) -> list[FrequentExerciseItem]:
+    """Get most frequently performed exercises in the period.
+
+    Returns exercises sorted by occurrence count.
+    """
+    # Get lifts in period
+    if start_date or end_date:
+        lifts = get_lifts_in_date_range(start_date, end_date)
+    else:
+        lifts = get_all_lifts()
+
+    # Count exercise occurrences
+    exercise_counts: dict[str, int] = {}
+    for lift in lifts:
+        for exercise in lift.exercises:
+            name = exercise.title
+            exercise_counts[name] = exercise_counts.get(name, 0) + 1
+
+    # Sort by count descending and limit
+    sorted_exercises = sorted(exercise_counts.items(), key=lambda x: x[1], reverse=True)
+    top_exercises = sorted_exercises[:limit]
+
+    return [FrequentExerciseItem(name=name, count=count) for name, count in top_exercises]
 
 
 @router.get("/{lift_id}")
