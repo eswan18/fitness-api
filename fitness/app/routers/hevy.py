@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from fitness.app.auth import require_editor
+from fitness.app.auth import require_editor, require_viewer
 from fitness.models.user import User
 from fitness.integrations.hevy import HevyClient, HevyWorkout, HevyExerciseTemplate
 from fitness.db.hevy import (
@@ -18,6 +18,7 @@ from fitness.db.hevy import (
     get_hevy_workout_count,
     bulk_upsert_hevy_workouts,
     get_all_exercise_templates,
+    get_existing_exercise_template_ids,
     bulk_upsert_exercise_templates,
 )
 
@@ -88,6 +89,7 @@ class HevyStatsResponse(BaseModel):
 async def get_workouts(
     start_date: Optional[date] = Query(None, description="Filter workouts after this date"),
     end_date: Optional[date] = Query(None, description="Filter workouts before this date"),
+    _user: User = Depends(require_viewer),
 ) -> HevyWorkoutsResponse:
     """Get Hevy workouts from the database.
 
@@ -118,7 +120,10 @@ async def get_workouts(
 
 
 @router.get("/workouts/{workout_id}")
-async def get_workout(workout_id: str) -> HevyWorkout:
+async def get_workout(
+    workout_id: str,
+    _user: User = Depends(require_viewer),
+) -> HevyWorkout:
     """Get a single Hevy workout by ID with full exercise details."""
     workout = get_hevy_workout_by_id(workout_id)
     if workout is None:
@@ -130,6 +135,7 @@ async def get_workout(workout_id: str) -> HevyWorkout:
 async def get_stats(
     start_date: Optional[date] = Query(None, description="Filter stats after this date"),
     end_date: Optional[date] = Query(None, description="Filter stats before this date"),
+    _user: User = Depends(require_viewer),
 ) -> HevyStatsResponse:
     """Get aggregated statistics for Hevy workouts."""
     all_workouts = get_all_hevy_workouts()
@@ -153,7 +159,9 @@ async def get_stats(
 
 
 @router.get("/exercise-templates", response_model=list[HevyExerciseTemplate])
-async def get_exercise_templates_endpoint() -> list[HevyExerciseTemplate]:
+async def get_exercise_templates_endpoint(
+    _user: User = Depends(require_viewer),
+) -> list[HevyExerciseTemplate]:
     """Get all cached exercise templates (for muscle group mapping)."""
     return get_all_exercise_templates()
 
@@ -165,31 +173,61 @@ async def sync_hevy_data(
 ) -> HevySyncResponse:
     """Sync workouts and exercise templates from Hevy API.
 
-    Requires authentication. Fetches all workouts and templates from Hevy
-    and upserts them into the database.
+    Requires authentication. Fetches all workouts from Hevy, then fetches
+    only exercise templates for exercises we haven't seen before.
     """
     logger.info("Starting Hevy sync")
 
-    # Sync exercise templates first (needed for muscle group mapping)
-    templates = client.get_all_exercise_templates()
-    templates_synced = bulk_upsert_exercise_templates(templates)
-    logger.info(f"Synced {templates_synced} exercise templates")
-
-    # Sync workouts
+    # 1. Fetch workouts first
     workouts = client.get_all_workouts()
+    logger.info(f"Fetched {len(workouts)} workouts from Hevy API")
+
+    # 2. Extract unique template IDs from all exercises in workouts
+    template_ids_in_workouts: set[str] = set()
+    for workout in workouts:
+        for exercise in workout.exercises:
+            template_ids_in_workouts.add(exercise.exercise_template_id)
+    logger.info(
+        f"Found {len(template_ids_in_workouts)} unique exercise template IDs in workouts"
+    )
+
+    # 3. Find which templates we don't have cached yet
+    existing_template_ids = get_existing_exercise_template_ids()
+    missing_template_ids = template_ids_in_workouts - existing_template_ids
+    logger.info(
+        f"Need to fetch {len(missing_template_ids)} new exercise templates "
+        f"({len(existing_template_ids)} already cached)"
+    )
+
+    # 4. Fetch only missing templates
+    new_templates = []
+    for template_id in missing_template_ids:
+        template = client.get_exercise_template_by_id(template_id)
+        if template:
+            new_templates.append(template)
+        else:
+            logger.warning(f"Could not fetch exercise template {template_id}")
+
+    # 5. Upsert new templates
+    templates_synced = bulk_upsert_exercise_templates(new_templates)
+    logger.info(f"Synced {templates_synced} new exercise templates")
+
+    # 6. Upsert workouts
     workouts_synced = bulk_upsert_hevy_workouts(workouts)
     logger.info(f"Synced {workouts_synced} workouts")
 
     return HevySyncResponse(
         workouts_synced=workouts_synced,
         templates_synced=templates_synced,
-        message=f"Successfully synced {workouts_synced} workouts and {templates_synced} exercise templates",
+        message=f"Successfully synced {workouts_synced} workouts and {templates_synced} new exercise templates",
         synced_at=datetime.now(timezone.utc),
     )
 
 
 @router.get("/workout-count")
-async def get_workout_count() -> dict[str, int]:
+async def get_workout_count(
+    _user: User = Depends(require_viewer),
+) -> dict[str, int]:
     """Get the total count of Hevy workouts in the database."""
     count = get_hevy_workout_count()
     return {"count": count}

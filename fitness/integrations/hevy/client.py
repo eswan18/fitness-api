@@ -233,3 +233,36 @@ class HevyClient:
 
         logger.info(f"Completed fetching {len(all_templates)} exercise templates")
         return all_templates
+
+    def get_exercise_template_by_id(
+        self, template_id: str
+    ) -> HevyExerciseTemplate | None:
+        """Fetch a single exercise template by ID.
+
+        Args:
+            template_id: The Hevy exercise template ID
+
+        Returns:
+            HevyExerciseTemplate if found, None otherwise
+        """
+        url = f"{EXERCISE_TEMPLATES_URL}/{template_id}"
+        logger.debug(f"Fetching exercise template: {template_id}")
+
+        response = self._make_request("GET", url)
+
+        if response is None:
+            logger.error(f"Failed to fetch exercise template {template_id}")
+            return None
+
+        if response.status_code == 404:
+            logger.warning(f"Exercise template {template_id} not found")
+            return None
+
+        if response.status_code != 200:
+            logger.error(
+                f"Hevy API error fetching template {template_id}: "
+                f"{response.status_code} {response.text}"
+            )
+            return None
+
+        return HevyExerciseTemplate.model_validate(response.json())

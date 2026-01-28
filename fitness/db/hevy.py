@@ -111,47 +111,6 @@ def get_existing_hevy_workout_ids() -> set[str]:
         return {row[0] for row in cursor.fetchall()}
 
 
-def upsert_hevy_workout(workout: HevyWorkout) -> str:
-    """Insert or update a Hevy workout."""
-    exercises_json = json.dumps([_exercise_to_dict(e) for e in workout.exercises])
-
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO hevy_workouts (
-                id, title, description, start_time, end_time, exercises,
-                total_volume_kg, total_sets, hevy_created_at, hevy_updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (id) DO UPDATE SET
-                title = EXCLUDED.title,
-                description = EXCLUDED.description,
-                start_time = EXCLUDED.start_time,
-                end_time = EXCLUDED.end_time,
-                exercises = EXCLUDED.exercises,
-                total_volume_kg = EXCLUDED.total_volume_kg,
-                total_sets = EXCLUDED.total_sets,
-                hevy_created_at = EXCLUDED.hevy_created_at,
-                hevy_updated_at = EXCLUDED.hevy_updated_at,
-                updated_at = CURRENT_TIMESTAMP
-            RETURNING id
-            """,
-            (
-                workout.id,
-                workout.title,
-                workout.description,
-                workout.start_time,
-                workout.end_time,
-                exercises_json,
-                workout.total_volume(),
-                workout.total_sets(),
-                workout.created_at,
-                workout.updated_at,
-            ),
-        )
-        result = cursor.fetchone()
-        return result[0] if result else workout.id
-
-
 def bulk_upsert_hevy_workouts(workouts: list[HevyWorkout]) -> int:
     """Bulk upsert multiple Hevy workouts. Returns count of affected rows."""
     if not workouts:
@@ -205,6 +164,13 @@ def bulk_upsert_hevy_workouts(workouts: list[HevyWorkout]) -> int:
 
 
 # --- Hevy Exercise Templates ---
+
+
+def get_existing_exercise_template_ids() -> set[str]:
+    """Get the set of all cached exercise template IDs."""
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT id FROM hevy_exercise_templates")
+        return {row[0] for row in cursor.fetchall()}
 
 
 def get_all_exercise_templates() -> list[HevyExerciseTemplate]:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 from typing import Literal
 
-from pydantic import BaseModel, TypeAdapter, AwareDatetime
+from pydantic import BaseModel, AwareDatetime
 
 
 # Muscle groups as defined by Hevy API
@@ -121,8 +121,3 @@ class HevyExerciseTemplatesResponse(BaseModel):
     page: int
     page_count: int
     exercise_templates: list[HevyExerciseTemplate]
-
-
-# Type adapters for parsing API responses
-workout_list_adapter = TypeAdapter(list[HevyWorkout])
-exercise_template_list_adapter = TypeAdapter(list[HevyExerciseTemplate])
