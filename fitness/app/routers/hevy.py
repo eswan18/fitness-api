@@ -11,13 +11,13 @@ from pydantic import BaseModel
 from fitness.app.auth import require_editor, require_viewer
 from fitness.models.user import User
 from fitness.integrations.hevy import HevyClient, HevyWorkout, HevyExerciseTemplate
-from fitness.db.hevy import (
-    get_all_hevy_workouts,
-    get_hevy_workouts_in_date_range,
-    get_hevy_workout_by_id,
-    get_hevy_workout_count,
-    get_existing_hevy_workout_ids,
-    bulk_create_hevy_workouts,
+from fitness.db.lifts import (
+    get_all_lifts,
+    get_lifts_in_date_range,
+    get_lift_by_id,
+    get_lift_count,
+    get_existing_lift_ids,
+    bulk_create_lifts,
     get_all_exercise_templates,
     get_existing_exercise_template_ids,
     bulk_upsert_exercise_templates,
@@ -26,6 +26,9 @@ from fitness.db.hevy import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/hevy", tags=["hevy"])
+
+# Hevy-specific ID prefix for generic tables
+HEVY_ID_PREFIX = "hevy_"
 
 
 # --- Dependency ---
@@ -97,9 +100,9 @@ async def get_workouts(
     Optionally filter by date range. Returns workouts in descending order by start time.
     """
     if start_date and end_date:
-        workouts = get_hevy_workouts_in_date_range(start_date, end_date)
+        workouts = get_lifts_in_date_range(start_date, end_date)
     else:
-        workouts = get_all_hevy_workouts()
+        workouts = get_all_lifts()
 
     summaries = [
         HevyWorkoutSummary(
@@ -126,7 +129,7 @@ async def get_workout(
     _user: User = Depends(require_viewer),
 ) -> HevyWorkout:
     """Get a single Hevy workout by ID with full exercise details."""
-    workout = get_hevy_workout_by_id(workout_id)
+    workout = get_lift_by_id(workout_id)
     if workout is None:
         raise HTTPException(status_code=404, detail=f"Workout {workout_id} not found")
     return workout
@@ -139,14 +142,14 @@ async def get_stats(
     _user: User = Depends(require_viewer),
 ) -> HevyStatsResponse:
     """Get aggregated statistics for Hevy workouts."""
-    all_workouts = get_all_hevy_workouts()
+    all_workouts = get_all_lifts()
     total_workouts = len(all_workouts)
     total_volume = sum(w.total_volume() for w in all_workouts)
     total_sets = sum(w.total_sets() for w in all_workouts)
 
     # Period-specific stats
     if start_date and end_date:
-        period_workouts = get_hevy_workouts_in_date_range(start_date, end_date)
+        period_workouts = get_lifts_in_date_range(start_date, end_date)
     else:
         period_workouts = all_workouts
 
@@ -185,11 +188,14 @@ async def sync_hevy_data(
     logger.info(f"Fetched {len(all_workouts)} workouts from Hevy API")
 
     # 2. Filter to only new workouts (not already in DB)
-    existing_workout_ids = get_existing_hevy_workout_ids()
-    new_workouts = [w for w in all_workouts if w.id not in existing_workout_ids]
+    # Note: DB stores prefixed IDs (hevy_xxx), API returns unprefixed (xxx)
+    existing_lift_ids = get_existing_lift_ids()
+    new_workouts = [
+        w for w in all_workouts if f"{HEVY_ID_PREFIX}{w.id}" not in existing_lift_ids
+    ]
     logger.info(
         f"Found {len(new_workouts)} new workouts "
-        f"({len(existing_workout_ids)} already in database)"
+        f"({len(existing_lift_ids)} already in database)"
     )
 
     # 3. Extract unique template IDs from new workouts only
@@ -199,8 +205,13 @@ async def sync_hevy_data(
             template_ids_in_new_workouts.add(exercise.exercise_template_id)
 
     # 4. Find which templates we don't have cached yet
+    # Note: DB stores prefixed IDs, so prefix when comparing
     existing_template_ids = get_existing_exercise_template_ids()
-    missing_template_ids = template_ids_in_new_workouts - existing_template_ids
+    missing_template_ids = {
+        tid
+        for tid in template_ids_in_new_workouts
+        if f"{HEVY_ID_PREFIX}{tid}" not in existing_template_ids
+    }
     logger.info(
         f"Need to fetch {len(missing_template_ids)} new exercise templates "
         f"({len(existing_template_ids)} already cached)"
@@ -215,12 +226,16 @@ async def sync_hevy_data(
         else:
             logger.warning(f"Could not fetch exercise template {template_id}")
 
-    # 6. Insert new templates
-    templates_synced = bulk_upsert_exercise_templates(new_templates)
+    # 6. Insert new templates (db layer handles ID prefixing)
+    templates_synced = bulk_upsert_exercise_templates(
+        new_templates, source="Hevy", id_prefix=HEVY_ID_PREFIX
+    )
     logger.info(f"Synced {templates_synced} new exercise templates")
 
-    # 7. Insert new workouts only (preserves local edits to existing workouts)
-    workouts_synced = bulk_create_hevy_workouts(new_workouts)
+    # 7. Insert new workouts only (db layer handles ID prefixing)
+    workouts_synced = bulk_create_lifts(
+        new_workouts, source="Hevy", id_prefix=HEVY_ID_PREFIX
+    )
     logger.info(f"Inserted {workouts_synced} new workouts")
 
     return HevySyncResponse(
@@ -232,9 +247,9 @@ async def sync_hevy_data(
 
 
 @router.get("/workout-count")
-async def get_workout_count(
+async def get_workout_count_endpoint(
     _user: User = Depends(require_viewer),
 ) -> dict[str, int]:
     """Get the total count of Hevy workouts in the database."""
-    count = get_hevy_workout_count()
+    count = get_lift_count()
     return {"count": count}

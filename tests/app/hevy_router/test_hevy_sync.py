@@ -22,40 +22,40 @@ def mock_hevy_client() -> Generator[MagicMock, None, None]:
 class TestSyncHevyData:
     """Test POST /hevy/sync endpoint."""
 
-    @patch("fitness.app.routers.hevy.bulk_create_hevy_workouts")
+    @patch("fitness.app.routers.hevy.bulk_create_lifts")
     @patch("fitness.app.routers.hevy.bulk_upsert_exercise_templates")
     @patch("fitness.app.routers.hevy.get_existing_exercise_template_ids")
-    @patch("fitness.app.routers.hevy.get_existing_hevy_workout_ids")
+    @patch("fitness.app.routers.hevy.get_existing_lift_ids")
     def test_sync_identifies_new_workouts(
         self,
-        mock_get_existing_workout_ids: MagicMock,
+        mock_get_existing_lift_ids: MagicMock,
         mock_get_existing_template_ids: MagicMock,
         mock_bulk_upsert_templates: MagicMock,
-        mock_bulk_create_workouts: MagicMock,
+        mock_bulk_create_lifts: MagicMock,
         mock_hevy_client: MagicMock,
         auth_client: TestClient,
     ):
         """Test that sync correctly identifies and inserts only new workouts."""
         workout_factory = HevyWorkoutFactory()
 
-        # Create 3 workouts from Hevy API
-        workout_1 = workout_factory.make({"id": "hevy_100", "title": "Push Day"})
-        workout_2 = workout_factory.make({"id": "hevy_200", "title": "Pull Day"})
-        workout_3 = workout_factory.make({"id": "hevy_300", "title": "Leg Day"})
+        # Create 3 workouts from Hevy API (unprefixed IDs)
+        workout_1 = workout_factory.make({"id": "100", "title": "Push Day"})
+        workout_2 = workout_factory.make({"id": "200", "title": "Pull Day"})
+        workout_3 = workout_factory.make({"id": "300", "title": "Leg Day"})
 
         # Configure the mock client
         mock_hevy_client.get_all_workouts.return_value = [workout_1, workout_2, workout_3]
         mock_hevy_client.get_exercise_template_by_id.return_value = None
 
-        # Mock existing workout IDs (hevy_200 already exists)
-        mock_get_existing_workout_ids.return_value = {"hevy_200"}
+        # Mock existing lift IDs in DB (prefixed) - "200" already exists
+        mock_get_existing_lift_ids.return_value = {"hevy_200"}
 
-        # Mock existing template IDs (all templates already cached)
-        mock_get_existing_template_ids.return_value = {"bp_001", "ip_001"}
+        # Mock existing template IDs (prefixed, all templates already cached)
+        mock_get_existing_template_ids.return_value = {"hevy_bp_001", "hevy_ip_001"}
 
         # Mock bulk operations
         mock_bulk_upsert_templates.return_value = 0
-        mock_bulk_create_workouts.return_value = 2
+        mock_bulk_create_lifts.return_value = 2
 
         response = auth_client.post("/hevy/sync")
 
@@ -69,44 +69,49 @@ class TestSyncHevyData:
         mock_hevy_client.get_all_workouts.assert_called_once()
 
         # Verify existing IDs were checked
-        mock_get_existing_workout_ids.assert_called_once()
+        mock_get_existing_lift_ids.assert_called_once()
 
-        # Verify bulk_create_workouts was called with only new workouts
-        mock_bulk_create_workouts.assert_called_once()
-        new_workouts = mock_bulk_create_workouts.call_args[0][0]
+        # Verify bulk_create_lifts was called with only new workouts
+        mock_bulk_create_lifts.assert_called_once()
+        call_args = mock_bulk_create_lifts.call_args
+        new_workouts = call_args[0][0]
         assert len(new_workouts) == 2
         new_workout_ids = {w.id for w in new_workouts}
-        assert "hevy_100" in new_workout_ids
-        assert "hevy_300" in new_workout_ids
-        assert "hevy_200" not in new_workout_ids  # Already exists
+        assert "100" in new_workout_ids
+        assert "300" in new_workout_ids
+        assert "200" not in new_workout_ids  # Already exists
+        # Verify source and id_prefix kwargs
+        assert call_args[1]["source"] == "Hevy"
+        assert call_args[1]["id_prefix"] == "hevy_"
 
-    @patch("fitness.app.routers.hevy.bulk_create_hevy_workouts")
+    @patch("fitness.app.routers.hevy.bulk_create_lifts")
     @patch("fitness.app.routers.hevy.bulk_upsert_exercise_templates")
     @patch("fitness.app.routers.hevy.get_existing_exercise_template_ids")
-    @patch("fitness.app.routers.hevy.get_existing_hevy_workout_ids")
+    @patch("fitness.app.routers.hevy.get_existing_lift_ids")
     def test_sync_no_new_workouts(
         self,
-        mock_get_existing_workout_ids: MagicMock,
+        mock_get_existing_lift_ids: MagicMock,
         mock_get_existing_template_ids: MagicMock,
         mock_bulk_upsert_templates: MagicMock,
-        mock_bulk_create_workouts: MagicMock,
+        mock_bulk_create_lifts: MagicMock,
         mock_hevy_client: MagicMock,
         auth_client: TestClient,
     ):
         """Test that sync handles the case when all workouts already exist."""
         workout_factory = HevyWorkoutFactory()
 
-        workout_1 = workout_factory.make({"id": "hevy_100"})
-        workout_2 = workout_factory.make({"id": "hevy_200"})
+        # API returns workouts with unprefixed IDs
+        workout_1 = workout_factory.make({"id": "100"})
+        workout_2 = workout_factory.make({"id": "200"})
 
         mock_hevy_client.get_all_workouts.return_value = [workout_1, workout_2]
 
-        # All workouts already exist
-        mock_get_existing_workout_ids.return_value = {"hevy_100", "hevy_200"}
-        mock_get_existing_template_ids.return_value = {"bp_001", "ip_001"}
+        # All workouts already exist in DB (prefixed IDs)
+        mock_get_existing_lift_ids.return_value = {"hevy_100", "hevy_200"}
+        mock_get_existing_template_ids.return_value = {"hevy_bp_001", "hevy_ip_001"}
 
         mock_bulk_upsert_templates.return_value = 0
-        mock_bulk_create_workouts.return_value = 0
+        mock_bulk_create_lifts.return_value = 0
 
         response = auth_client.post("/hevy/sync")
 
@@ -116,19 +121,19 @@ class TestSyncHevyData:
         assert data["templates_synced"] == 0
 
         # bulk_create should be called with empty list
-        mock_bulk_create_workouts.assert_called_once()
-        assert mock_bulk_create_workouts.call_args[0][0] == []
+        mock_bulk_create_lifts.assert_called_once()
+        assert mock_bulk_create_lifts.call_args[0][0] == []
 
-    @patch("fitness.app.routers.hevy.bulk_create_hevy_workouts")
+    @patch("fitness.app.routers.hevy.bulk_create_lifts")
     @patch("fitness.app.routers.hevy.bulk_upsert_exercise_templates")
     @patch("fitness.app.routers.hevy.get_existing_exercise_template_ids")
-    @patch("fitness.app.routers.hevy.get_existing_hevy_workout_ids")
+    @patch("fitness.app.routers.hevy.get_existing_lift_ids")
     def test_sync_fetches_missing_templates(
         self,
-        mock_get_existing_workout_ids: MagicMock,
+        mock_get_existing_lift_ids: MagicMock,
         mock_get_existing_template_ids: MagicMock,
         mock_bulk_upsert_templates: MagicMock,
-        mock_bulk_create_workouts: MagicMock,
+        mock_bulk_create_lifts: MagicMock,
         mock_hevy_client: MagicMock,
         auth_client: TestClient,
     ):
@@ -136,8 +141,8 @@ class TestSyncHevyData:
         workout_factory = HevyWorkoutFactory()
         template_factory = HevyExerciseTemplateFactory()
 
-        # Create workout with exercises that have template IDs
-        workout = workout_factory.make({"id": "hevy_100"})
+        # Create workout with exercises that have template IDs (unprefixed from API)
+        workout = workout_factory.make({"id": "100"})
 
         # Create templates that will be returned by the client
         new_template = template_factory.make(
@@ -148,13 +153,13 @@ class TestSyncHevyData:
         mock_hevy_client.get_exercise_template_by_id.return_value = new_template
 
         # No existing workouts
-        mock_get_existing_workout_ids.return_value = set()
+        mock_get_existing_lift_ids.return_value = set()
 
-        # ip_001 is cached, but bp_001 is not
-        mock_get_existing_template_ids.return_value = {"ip_001"}
+        # ip_001 is cached (prefixed), but bp_001 is not
+        mock_get_existing_template_ids.return_value = {"hevy_ip_001"}
 
         mock_bulk_upsert_templates.return_value = 1
-        mock_bulk_create_workouts.return_value = 1
+        mock_bulk_create_lifts.return_value = 1
 
         response = auth_client.post("/hevy/sync")
 
@@ -163,7 +168,7 @@ class TestSyncHevyData:
         assert data["templates_synced"] == 1
         assert data["workouts_synced"] == 1
 
-        # Verify template was fetched for bp_001 only (not ip_001)
+        # Verify template was fetched for bp_001 only (unprefixed API ID)
         mock_hevy_client.get_exercise_template_by_id.assert_called_once_with("bp_001")
 
     def test_sync_requires_auth(self, client: TestClient):
@@ -175,17 +180,18 @@ class TestSyncHevyData:
 class TestGetWorkouts:
     """Test GET /hevy/workouts endpoint."""
 
-    @patch("fitness.app.routers.hevy.get_all_hevy_workouts")
+    @patch("fitness.app.routers.hevy.get_all_lifts")
     def test_get_workouts_returns_list(
         self,
-        mock_get_workouts: MagicMock,
+        mock_get_lifts: MagicMock,
         viewer_client: TestClient,
     ):
         """Test that get workouts returns workout summaries."""
         workout_factory = HevyWorkoutFactory()
+        # DB returns prefixed IDs
         workout = workout_factory.make({"id": "hevy_100", "title": "Push Day"})
 
-        mock_get_workouts.return_value = [workout]
+        mock_get_lifts.return_value = [workout]
 
         response = viewer_client.get("/hevy/workouts")
 
@@ -205,7 +211,7 @@ class TestGetWorkouts:
 class TestGetWorkoutCount:
     """Test GET /hevy/workout-count endpoint."""
 
-    @patch("fitness.app.routers.hevy.get_hevy_workout_count")
+    @patch("fitness.app.routers.hevy.get_lift_count")
     def test_get_workout_count(
         self,
         mock_get_count: MagicMock,
@@ -237,7 +243,8 @@ class TestGetExerciseTemplates:
     ):
         """Test that exercise templates are returned."""
         template_factory = HevyExerciseTemplateFactory()
-        template = template_factory.make({"id": "bp_001", "title": "Bench Press"})
+        # DB returns prefixed IDs
+        template = template_factory.make({"id": "hevy_bp_001", "title": "Bench Press"})
 
         mock_get_templates.return_value = [template]
 
@@ -246,7 +253,7 @@ class TestGetExerciseTemplates:
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
-        assert data[0]["id"] == "bp_001"
+        assert data[0]["id"] == "hevy_bp_001"
         assert data[0]["title"] == "Bench Press"
 
     def test_get_exercise_templates_requires_auth(self, client: TestClient):
