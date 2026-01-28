@@ -403,11 +403,69 @@ class TestGetSetsByMuscle:
 
         assert response.status_code == 200
         mock_get_lifts.assert_called_once()
+        # Verify correct date arguments were passed
+        from datetime import date
+        call_args = mock_get_lifts.call_args
+        assert call_args[0][0] == date(2024, 1, 1)
+        assert call_args[0][1] is None
 
     def test_get_sets_by_muscle_requires_auth(self, client: TestClient):
         """Test that sets by muscle endpoint requires authentication."""
         response = client.get("/lifts/sets-by-muscle")
         assert response.status_code == 401
+
+    @patch("fitness.app.routers.lifts.get_all_exercise_templates")
+    @patch("fitness.app.routers.lifts.get_all_lifts")
+    def test_get_sets_by_muscle_empty(
+        self,
+        mock_get_lifts: MagicMock,
+        mock_get_templates: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Test that sets by muscle returns empty list when no lifts."""
+        mock_get_lifts.return_value = []
+        mock_get_templates.return_value = []
+
+        response = viewer_client.get("/lifts/sets-by-muscle")
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    @patch("fitness.app.routers.lifts.get_all_exercise_templates")
+    @patch("fitness.app.routers.lifts.get_all_lifts")
+    def test_get_sets_by_muscle_unmatched_template(
+        self,
+        mock_get_lifts: MagicMock,
+        mock_get_templates: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Test that exercises with unmatched template_id are skipped."""
+        from tests._factories.lift import ExerciseTemplateFactory, ExerciseFactory
+
+        exercise_factory = ExerciseFactory()
+        template_factory = ExerciseTemplateFactory()
+        workout_factory = LiftFactory()
+
+        # Create exercise with a template ID that won't match any template
+        exercise = exercise_factory.make({
+            "title": "Unknown Exercise",
+            "exercise_template_id": "hevy_unknown_001",
+        })
+        workout = workout_factory.make({"id": "hevy_100"}, exercises=[exercise])
+        mock_get_lifts.return_value = [workout]
+
+        # Templates list doesn't include the exercise's template_id
+        template = template_factory.make({
+            "id": "hevy_other_001",
+            "primary_muscle_group": "chest",
+        })
+        mock_get_templates.return_value = [template]
+
+        response = viewer_client.get("/lifts/sets-by-muscle")
+
+        assert response.status_code == 200
+        # Exercise should be skipped, resulting in empty list
+        assert response.json() == []
 
 
 class TestGetFrequentExercises:
@@ -497,8 +555,27 @@ class TestGetFrequentExercises:
 
         assert response.status_code == 200
         mock_get_lifts.assert_called_once()
+        # Verify correct date arguments were passed
+        from datetime import date
+        call_args = mock_get_lifts.call_args
+        assert call_args[0][0] == date(2024, 1, 1)
+        assert call_args[0][1] is None
 
     def test_get_frequent_exercises_requires_auth(self, client: TestClient):
         """Test that frequent exercises endpoint requires authentication."""
         response = client.get("/lifts/frequent-exercises")
         assert response.status_code == 401
+
+    @patch("fitness.app.routers.lifts.get_all_lifts")
+    def test_get_frequent_exercises_empty(
+        self,
+        mock_get_lifts: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Test that frequent exercises returns empty list when no lifts."""
+        mock_get_lifts.return_value = []
+
+        response = viewer_client.get("/lifts/frequent-exercises")
+
+        assert response.status_code == 200
+        assert response.json() == []

@@ -143,7 +143,7 @@ async def get_lifts_stats(
         period_lifts = all_lifts
 
     duration_in_period = sum(lift.duration_seconds() for lift in period_lifts)
-    avg_duration = duration_in_period // len(period_lifts) if period_lifts else 0
+    avg_duration = round(duration_in_period / len(period_lifts)) if period_lifts else 0
 
     return LiftStatsResponse(
         total_sessions=total_sessions,
