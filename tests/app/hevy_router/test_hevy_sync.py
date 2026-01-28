@@ -71,18 +71,15 @@ class TestSyncHevyData:
         # Verify existing IDs were checked
         mock_get_existing_lift_ids.assert_called_once()
 
-        # Verify bulk_create_lifts was called with only new workouts
+        # Verify bulk_create_lifts was called with only new Lift objects (prefixed IDs)
         mock_bulk_create_lifts.assert_called_once()
         call_args = mock_bulk_create_lifts.call_args
-        new_workouts = call_args[0][0]
-        assert len(new_workouts) == 2
-        new_workout_ids = {w.id for w in new_workouts}
-        assert "100" in new_workout_ids
-        assert "300" in new_workout_ids
-        assert "200" not in new_workout_ids  # Already exists
-        # Verify source and id_prefix kwargs
-        assert call_args[1]["source"] == "Hevy"
-        assert call_args[1]["id_prefix"] == "hevy_"
+        new_lifts = call_args[0][0]
+        assert len(new_lifts) == 2
+        new_lift_ids = {lift.id for lift in new_lifts}
+        assert "hevy_100" in new_lift_ids
+        assert "hevy_300" in new_lift_ids
+        assert "hevy_200" not in new_lift_ids  # Already exists
 
     @patch("fitness.app.routers.hevy.bulk_create_lifts")
     @patch("fitness.app.routers.hevy.bulk_upsert_exercise_templates")

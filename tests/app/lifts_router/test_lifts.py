@@ -133,6 +133,86 @@ class TestGetLift:
         assert response.status_code == 401
 
 
+class TestGetLiftsDateFiltering:
+    """Test GET /lifts endpoint with date filtering."""
+
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
+    def test_get_lifts_with_start_date_only(
+        self,
+        mock_get_lifts: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Test filtering lifts with only start_date."""
+        lift_factory = LiftFactory()
+        lift = lift_factory.make({"id": "hevy_100"})
+        mock_get_lifts.return_value = [lift]
+
+        response = viewer_client.get("/lifts?start_date=2024-01-01")
+
+        assert response.status_code == 200
+        mock_get_lifts.assert_called_once()
+        # Verify start_date was passed, end_date is None
+        call_args = mock_get_lifts.call_args
+        from datetime import date
+        assert call_args[0][0] == date(2024, 1, 1)
+        assert call_args[0][1] is None
+
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
+    def test_get_lifts_with_end_date_only(
+        self,
+        mock_get_lifts: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Test filtering lifts with only end_date."""
+        lift_factory = LiftFactory()
+        lift = lift_factory.make({"id": "hevy_100"})
+        mock_get_lifts.return_value = [lift]
+
+        response = viewer_client.get("/lifts?end_date=2024-12-31")
+
+        assert response.status_code == 200
+        mock_get_lifts.assert_called_once()
+        # Verify end_date was passed, start_date is None
+        call_args = mock_get_lifts.call_args
+        from datetime import date
+        assert call_args[0][0] is None
+        assert call_args[0][1] == date(2024, 12, 31)
+
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
+    def test_get_lifts_with_both_dates(
+        self,
+        mock_get_lifts: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Test filtering lifts with both start_date and end_date."""
+        lift_factory = LiftFactory()
+        lift = lift_factory.make({"id": "hevy_100"})
+        mock_get_lifts.return_value = [lift]
+
+        response = viewer_client.get("/lifts?start_date=2024-01-01&end_date=2024-12-31")
+
+        assert response.status_code == 200
+        mock_get_lifts.assert_called_once()
+        call_args = mock_get_lifts.call_args
+        from datetime import date
+        assert call_args[0][0] == date(2024, 1, 1)
+        assert call_args[0][1] == date(2024, 12, 31)
+
+    @patch("fitness.app.routers.lifts.get_all_lifts")
+    def test_get_lifts_without_dates_uses_get_all(
+        self,
+        mock_get_all: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Test that no date params uses get_all_lifts."""
+        mock_get_all.return_value = []
+
+        response = viewer_client.get("/lifts")
+
+        assert response.status_code == 200
+        mock_get_all.assert_called_once()
+
+
 class TestGetLiftsStats:
     """Test GET /lifts/stats endpoint."""
 

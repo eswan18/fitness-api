@@ -6,13 +6,7 @@ from datetime import date
 from typing import Optional
 
 from .connection import get_db_cursor, get_db_connection
-from fitness.models.lift import Lift, Exercise, Set
-from fitness.integrations.hevy.models import (
-    HevyWorkout,
-    HevyExerciseTemplate,
-    HevyExercise,
-    HevySet,
-)
+from fitness.models.lift import Lift, Exercise, Set, ExerciseTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -126,34 +120,26 @@ def get_existing_lift_ids() -> set[str]:
         return {row[0] for row in cursor.fetchall()}
 
 
-def bulk_create_lifts(
-    workouts: list[HevyWorkout],
-    source: str = "Hevy",
-    id_prefix: str = "hevy_",
-) -> int:
+def bulk_create_lifts(lifts: list[Lift]) -> int:
     """Bulk insert new lifts. Returns count of inserted rows.
 
-    Skips workouts that already exist (by ID) to preserve local edits.
+    Skips lifts that already exist (by ID) to preserve local edits.
 
     Args:
-        workouts: List of workouts to insert
-        source: Source provider name (e.g., "Hevy")
-        id_prefix: Prefix for IDs (e.g., "hevy_")
+        lifts: List of Lift objects to insert (already converted from provider format)
     """
-    if not workouts:
+    if not lifts:
         return 0
 
-    logger.info(f"Bulk inserting {len(workouts)} lifts from {source}")
+    logger.info(f"Bulk inserting {len(lifts)} lifts")
 
     with get_db_connection() as conn:
         with conn.transaction():
             with conn.cursor() as cursor:
                 count = 0
-                for workout in workouts:
-                    # Prefix IDs
-                    lift_id = f"{id_prefix}{workout.id}"
+                for lift in lifts:
                     exercises_json = json.dumps(
-                        [_exercise_to_dict(e, id_prefix) for e in workout.exercises]
+                        [_generic_exercise_to_dict(e) for e in lift.exercises]
                     )
                     cursor.execute(
                         """
@@ -164,15 +150,15 @@ def bulk_create_lifts(
                         ON CONFLICT (id) DO NOTHING
                         """,
                         (
-                            lift_id,
-                            workout.title,
-                            source,
-                            workout.description,
-                            workout.start_time,
-                            workout.end_time,
+                            lift.id,
+                            lift.title,
+                            lift.source,
+                            lift.description,
+                            lift.start_time,
+                            lift.end_time,
                             exercises_json,
-                            workout.total_volume(),
-                            workout.total_sets(),
+                            lift.total_volume(),
+                            lift.total_sets(),
                         ),
                     )
                     count += cursor.rowcount  # Only count actually inserted rows
@@ -191,11 +177,12 @@ def get_existing_exercise_template_ids() -> set[str]:
         return {row[0] for row in cursor.fetchall()}
 
 
-def get_all_exercise_templates() -> list[HevyExerciseTemplate]:
+def get_all_exercise_templates() -> list[ExerciseTemplate]:
     """Get all cached exercise templates."""
     with get_db_cursor() as cursor:
         cursor.execute("""
-            SELECT id, title, type, primary_muscle_group, secondary_muscle_groups, is_custom
+            SELECT id, title, type, primary_muscle_group, secondary_muscle_groups,
+                   source, is_custom
             FROM exercise_templates
             ORDER BY title
         """)
@@ -203,12 +190,13 @@ def get_all_exercise_templates() -> list[HevyExerciseTemplate]:
         return [_row_to_exercise_template(row) for row in rows]
 
 
-def get_exercise_template_by_id(template_id: str) -> Optional[HevyExerciseTemplate]:
+def get_exercise_template_by_id(template_id: str) -> Optional[ExerciseTemplate]:
     """Get a single exercise template by ID."""
     with get_db_cursor() as cursor:
         cursor.execute(
             """
-            SELECT id, title, type, primary_muscle_group, secondary_muscle_groups, is_custom
+            SELECT id, title, type, primary_muscle_group, secondary_muscle_groups,
+                   source, is_custom
             FROM exercise_templates
             WHERE id = %s
             """,
@@ -220,19 +208,13 @@ def get_exercise_template_by_id(template_id: str) -> Optional[HevyExerciseTempla
         return _row_to_exercise_template(row)
 
 
-def bulk_upsert_exercise_templates(
-    templates: list[HevyExerciseTemplate],
-    source: str = "Hevy",
-    id_prefix: str = "hevy_",
-) -> int:
+def bulk_upsert_exercise_templates(templates: list[ExerciseTemplate]) -> int:
     """Bulk upsert exercise templates. Returns count of rows affected.
 
     Uses ON CONFLICT DO UPDATE, so rowcount reflects actual database operations.
 
     Args:
-        templates: List of templates to upsert
-        source: Source provider name (e.g., "Hevy")
-        id_prefix: Prefix for IDs (e.g., "hevy_")
+        templates: List of ExerciseTemplate objects to upsert (already converted from provider format)
 
     Returns:
         Number of rows actually inserted or updated in the database.
@@ -240,14 +222,13 @@ def bulk_upsert_exercise_templates(
     if not templates:
         return 0
 
-    logger.info(f"Bulk upserting {len(templates)} exercise templates from {source}")
+    logger.info(f"Bulk upserting {len(templates)} exercise templates")
 
     with get_db_connection() as conn:
         with conn.transaction():
             with conn.cursor() as cursor:
                 count = 0
                 for template in templates:
-                    template_id = f"{id_prefix}{template.id}"
                     cursor.execute(
                         """
                         INSERT INTO exercise_templates (
@@ -263,9 +244,9 @@ def bulk_upsert_exercise_templates(
                             updated_at = CURRENT_TIMESTAMP
                         """,
                         (
-                            template_id,
+                            template.id,
                             template.title,
-                            source,
+                            template.source,
                             template.type,
                             template.primary_muscle_group,
                             template.secondary_muscle_groups,
@@ -312,33 +293,34 @@ def _row_to_lift(row: tuple) -> Lift:
     )
 
 
-def _row_to_exercise_template(row: tuple) -> HevyExerciseTemplate:
-    """Convert a database row to a HevyExerciseTemplate model."""
-    id_, title, type_, primary_muscle, secondary_muscles, is_custom = row
-    return HevyExerciseTemplate(
+def _row_to_exercise_template(row: tuple) -> ExerciseTemplate:
+    """Convert a database row to a generic ExerciseTemplate model."""
+    id_, title, type_, primary_muscle, secondary_muscles, source, is_custom = row
+    return ExerciseTemplate(
         id=id_,
         title=title,
         type=type_ or "",
         primary_muscle_group=primary_muscle,
         secondary_muscle_groups=secondary_muscles or [],
+        source=source,
         is_custom=is_custom or False,
     )
 
 
-def _exercise_to_dict(exercise: HevyExercise, id_prefix: str = "hevy_") -> dict:
-    """Convert a HevyExercise to a dictionary for JSON serialization."""
+def _generic_exercise_to_dict(exercise: Exercise) -> dict:
+    """Convert a generic Exercise to a dictionary for JSON serialization."""
     return {
         "index": exercise.index,
         "title": exercise.title,
         "notes": exercise.notes,
-        "exercise_template_id": f"{id_prefix}{exercise.exercise_template_id}",
+        "exercise_template_id": exercise.exercise_template_id,
         "superset_id": exercise.superset_id,
-        "sets": [_set_to_dict(s) for s in exercise.sets],
+        "sets": [_generic_set_to_dict(s) for s in exercise.sets],
     }
 
 
-def _set_to_dict(set_: HevySet) -> dict:
-    """Convert a HevySet to a dictionary for JSON serialization."""
+def _generic_set_to_dict(set_: Set) -> dict:
+    """Convert a generic Set to a dictionary for JSON serialization."""
     return {
         "index": set_.index,
         "set_type": set_.set_type,

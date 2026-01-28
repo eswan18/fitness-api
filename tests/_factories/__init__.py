@@ -7,7 +7,7 @@ from .hevy import (
     HevySetFactory,
     HevyExerciseTemplateFactory,
 )
-from .lift import LiftFactory, ExerciseFactory, SetFactory
+from .lift import LiftFactory, ExerciseFactory, SetFactory, ExerciseTemplateFactory
 
 __all__ = [
     "RunFactory",
@@ -20,4 +20,5 @@ __all__ = [
     "LiftFactory",
     "ExerciseFactory",
     "SetFactory",
+    "ExerciseTemplateFactory",
 ]

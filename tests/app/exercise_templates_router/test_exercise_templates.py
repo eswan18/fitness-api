@@ -3,7 +3,7 @@
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
-from tests._factories.hevy import HevyExerciseTemplateFactory
+from tests._factories.lift import ExerciseTemplateFactory
 
 
 class TestGetExerciseTemplates:
@@ -16,7 +16,7 @@ class TestGetExerciseTemplates:
         viewer_client: TestClient,
     ):
         """Test that exercise templates are returned."""
-        template_factory = HevyExerciseTemplateFactory()
+        template_factory = ExerciseTemplateFactory()
         # DB returns prefixed IDs
         template = template_factory.make({"id": "hevy_bp_001", "title": "Bench Press"})
 

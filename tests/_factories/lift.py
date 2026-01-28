@@ -3,7 +3,7 @@
 from typing import Any, Mapping
 from datetime import datetime
 
-from fitness.models.lift import Lift, Exercise, Set
+from fitness.models.lift import Lift, Exercise, Set, ExerciseTemplate
 
 
 class SetFactory:
@@ -89,3 +89,26 @@ class LiftFactory:
         if exercises is not None:
             lift = lift.model_copy(update={"exercises": exercises})
         return lift
+
+
+class ExerciseTemplateFactory:
+    """Factory for creating ExerciseTemplate test instances."""
+
+    def __init__(self):
+        self.default = ExerciseTemplate(
+            id="hevy_template_001",
+            title="Bench Press (Barbell)",
+            type="weight_reps",
+            primary_muscle_group="chest",
+            secondary_muscle_groups=["triceps", "shoulders"],
+            source="Hevy",
+            is_custom=False,
+        )
+        self._counter = 0
+
+    def make(self, update: Mapping[str, Any] | None = None) -> ExerciseTemplate:
+        self._counter += 1
+        default_update = {"id": f"hevy_template_{self._counter:03d}"}
+        if update:
+            default_update.update(update)
+        return self.default.model_copy(deep=True, update=default_update)

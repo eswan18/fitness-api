@@ -9,7 +9,7 @@ from .sync import (
     SyncStatus,
 )
 from .user import User, Role
-from .lift import Lift, Exercise, Set, LiftSource
+from .lift import Lift, Exercise, Set, LiftSource, ExerciseTemplate, MuscleGroup
 from typing import Literal
 
 Sex = Literal["M", "F"]
@@ -36,4 +36,6 @@ __all__ = [
     "Exercise",
     "Set",
     "LiftSource",
+    "ExerciseTemplate",
+    "MuscleGroup",
 ]

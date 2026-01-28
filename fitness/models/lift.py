@@ -7,7 +7,12 @@ from datetime import datetime, timezone
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from fitness.integrations.hevy.models import HevyWorkout, HevyExercise, HevySet
+    from fitness.integrations.hevy.models import (
+        HevyWorkout,
+        HevyExercise,
+        HevySet,
+        HevyExerciseTemplate,
+    )
 
 
 # Lift source providers
@@ -15,6 +20,30 @@ LiftSource = Literal["Hevy"]
 
 # Set types (shared across providers)
 SetType = Literal["warmup", "normal", "failure", "dropset"]
+
+# Muscle groups (shared across providers)
+MuscleGroup = Literal[
+    "abdominals",
+    "shoulders",
+    "biceps",
+    "triceps",
+    "forearms",
+    "quadriceps",
+    "hamstrings",
+    "calves",
+    "glutes",
+    "abductors",
+    "adductors",
+    "lats",
+    "upper_back",
+    "traps",
+    "lower_back",
+    "chest",
+    "cardio",
+    "neck",
+    "full_body",
+    "other",
+]
 
 
 class Set(BaseModel):
@@ -143,4 +172,34 @@ class Lift(BaseModel):
             end_time=hevy_workout.end_time.replace(tzinfo=None),
             source="Hevy",
             exercises=[Exercise.from_hevy(e, id_prefix) for e in hevy_workout.exercises],
+        )
+
+
+class ExerciseTemplate(BaseModel):
+    """An exercise template (provider-agnostic).
+
+    Defines the exercise type and muscle groups targeted.
+    """
+
+    id: str  # Prefixed ID: hevy_xxx, strong_xxx, etc.
+    title: str
+    type: str  # e.g., "weight_reps", "duration", etc.
+    primary_muscle_group: MuscleGroup | None = None
+    secondary_muscle_groups: list[MuscleGroup] = []
+    source: LiftSource
+    is_custom: bool = False
+
+    @classmethod
+    def from_hevy(
+        cls, hevy_template: HevyExerciseTemplate, id_prefix: str = "hevy_"
+    ) -> Self:
+        """Create an ExerciseTemplate from a Hevy exercise template."""
+        return cls(
+            id=f"{id_prefix}{hevy_template.id}",
+            title=hevy_template.title,
+            type=hevy_template.type,
+            primary_muscle_group=hevy_template.primary_muscle_group,
+            secondary_muscle_groups=hevy_template.secondary_muscle_groups,
+            source="Hevy",
+            is_custom=hevy_template.is_custom,
         )

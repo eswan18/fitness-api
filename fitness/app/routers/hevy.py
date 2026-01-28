@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from fitness.app.auth import require_editor
 from fitness.models.user import User
+from fitness.models.lift import Lift, ExerciseTemplate
 from fitness.integrations.hevy import HevyClient
 from fitness.db.lifts import (
     get_existing_lift_ids,
@@ -105,25 +106,24 @@ async def sync_hevy_data(
         f"({len(existing_template_ids)} already cached)"
     )
 
-    # 5. Fetch only missing templates
-    new_templates = []
+    # 5. Fetch only missing templates and convert to generic ExerciseTemplate
+    new_templates: list[ExerciseTemplate] = []
     for template_id in missing_template_ids:
-        template = client.get_exercise_template_by_id(template_id)
-        if template:
-            new_templates.append(template)
+        hevy_template = client.get_exercise_template_by_id(template_id)
+        if hevy_template:
+            new_templates.append(
+                ExerciseTemplate.from_hevy(hevy_template, id_prefix=HEVY_ID_PREFIX)
+            )
         else:
             logger.warning(f"Could not fetch exercise template {template_id}")
 
-    # 6. Insert new templates (db layer handles ID prefixing)
-    templates_synced = bulk_upsert_exercise_templates(
-        new_templates, source="Hevy", id_prefix=HEVY_ID_PREFIX
-    )
+    # 6. Insert new templates
+    templates_synced = bulk_upsert_exercise_templates(new_templates)
     logger.info(f"Synced {templates_synced} new exercise templates")
 
-    # 7. Insert new workouts only (db layer handles ID prefixing)
-    workouts_synced = bulk_create_lifts(
-        new_workouts, source="Hevy", id_prefix=HEVY_ID_PREFIX
-    )
+    # 7. Convert workouts to generic Lift objects and insert
+    new_lifts = [Lift.from_hevy(w, id_prefix=HEVY_ID_PREFIX) for w in new_workouts]
+    workouts_synced = bulk_create_lifts(new_lifts)
     logger.info(f"Inserted {workouts_synced} new workouts")
 
     return HevySyncResponse(
