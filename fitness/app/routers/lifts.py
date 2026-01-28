@@ -52,6 +52,7 @@ class LiftStatsResponse(BaseModel):
     total_sets: int
     sessions_in_period: int
     volume_in_period_kg: float
+    sets_in_period: int
 
 
 # --- Endpoints ---
@@ -128,6 +129,7 @@ async def get_lifts_stats(
         total_sets=total_sets,
         sessions_in_period=len(period_lifts),
         volume_in_period_kg=sum(lift.total_volume() for lift in period_lifts),
+        sets_in_period=sum(lift.total_sets() for lift in period_lifts),
     )
 
 

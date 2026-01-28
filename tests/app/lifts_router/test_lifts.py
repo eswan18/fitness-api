@@ -236,6 +236,61 @@ class TestGetLiftsStats:
         assert data["total_sessions"] == 2
         assert "total_volume_kg" in data
         assert "total_sets" in data
+        assert "sets_in_period" in data
+        # When no date filter, sets_in_period equals total_sets
+        assert data["sets_in_period"] == data["total_sets"]
+
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
+    @patch("fitness.app.routers.lifts.get_all_lifts")
+    def test_get_lifts_stats_with_date_filter(
+        self,
+        mock_get_all: MagicMock,
+        mock_get_range: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Test that sets_in_period is calculated from filtered lifts."""
+        workout_factory = LiftFactory()
+        # All-time: 2 workouts
+        workout1 = workout_factory.make({"id": "hevy_100"})
+        workout2 = workout_factory.make({"id": "hevy_200"})
+        mock_get_all.return_value = [workout1, workout2]
+
+        # Period: only 1 workout
+        mock_get_range.return_value = [workout1]
+
+        response = viewer_client.get("/lifts/stats?start_date=2024-01-01")
+
+        assert response.status_code == 200
+        data = response.json()
+        # Total stats are from all lifts
+        assert data["total_sessions"] == 2
+        # Period stats are from filtered lifts
+        assert data["sessions_in_period"] == 1
+        # sets_in_period should be from the filtered workout only
+        assert data["sets_in_period"] == workout1.total_sets()
+
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
+    @patch("fitness.app.routers.lifts.get_all_lifts")
+    def test_get_lifts_stats_empty_period(
+        self,
+        mock_get_all: MagicMock,
+        mock_get_range: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Test stats when date filter returns no lifts."""
+        workout_factory = LiftFactory()
+        workout = workout_factory.make({"id": "hevy_100"})
+        mock_get_all.return_value = [workout]
+        mock_get_range.return_value = []
+
+        response = viewer_client.get("/lifts/stats?start_date=2025-01-01")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_sessions"] == 1
+        assert data["sessions_in_period"] == 0
+        assert data["sets_in_period"] == 0
+        assert data["volume_in_period_kg"] == 0
 
     def test_get_lifts_stats_requires_auth(self, client: TestClient):
         """Test that lift stats endpoint requires authentication."""
