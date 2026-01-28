@@ -1,24 +1,22 @@
-"""Hevy API router for weightlifting workout data."""
+"""Hevy API router for syncing weightlifting workout data from Hevy.
+
+This router only handles sync operations with the Hevy API.
+For data access, use the generic /lifts and /exercise-templates endpoints.
+"""
 
 import os
 import logging
-from datetime import datetime, timezone, date
-from typing import Optional
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from fitness.app.auth import require_editor, require_viewer
+from fitness.app.auth import require_editor
 from fitness.models.user import User
-from fitness.integrations.hevy import HevyClient, HevyWorkout, HevyExerciseTemplate
+from fitness.integrations.hevy import HevyClient
 from fitness.db.lifts import (
-    get_all_lifts,
-    get_lifts_in_date_range,
-    get_lift_by_id,
-    get_lift_count,
     get_existing_lift_ids,
     bulk_create_lifts,
-    get_all_exercise_templates,
     get_existing_exercise_template_ids,
     bulk_upsert_exercise_templates,
 )
@@ -57,117 +55,7 @@ class HevySyncResponse(BaseModel):
     synced_at: datetime
 
 
-class HevyWorkoutSummary(BaseModel):
-    """Summary of a workout for list responses."""
-
-    id: str
-    title: str
-    start_time: datetime
-    end_time: datetime
-    total_volume_kg: float
-    total_sets: int
-    exercise_count: int
-
-
-class HevyWorkoutsResponse(BaseModel):
-    """Response containing list of workouts."""
-
-    workouts: list[HevyWorkoutSummary]
-    total_count: int
-
-
-class HevyStatsResponse(BaseModel):
-    """Aggregated stats for Hevy workouts."""
-
-    total_workouts: int
-    total_volume_kg: float
-    total_sets: int
-    workouts_in_period: int
-    volume_in_period_kg: float
-
-
 # --- Endpoints ---
-
-
-@router.get("/workouts", response_model=HevyWorkoutsResponse)
-async def get_workouts(
-    start_date: Optional[date] = Query(None, description="Filter workouts after this date"),
-    end_date: Optional[date] = Query(None, description="Filter workouts before this date"),
-    _user: User = Depends(require_viewer),
-) -> HevyWorkoutsResponse:
-    """Get Hevy workouts from the database.
-
-    Optionally filter by date range. Returns workouts in descending order by start time.
-    """
-    if start_date and end_date:
-        workouts = get_lifts_in_date_range(start_date, end_date)
-    else:
-        workouts = get_all_lifts()
-
-    summaries = [
-        HevyWorkoutSummary(
-            id=w.id,
-            title=w.title,
-            start_time=w.start_time,
-            end_time=w.end_time,
-            total_volume_kg=w.total_volume(),
-            total_sets=w.total_sets(),
-            exercise_count=len(w.exercises),
-        )
-        for w in workouts
-    ]
-
-    return HevyWorkoutsResponse(
-        workouts=summaries,
-        total_count=len(summaries),
-    )
-
-
-@router.get("/workouts/{workout_id}")
-async def get_workout(
-    workout_id: str,
-    _user: User = Depends(require_viewer),
-) -> HevyWorkout:
-    """Get a single Hevy workout by ID with full exercise details."""
-    workout = get_lift_by_id(workout_id)
-    if workout is None:
-        raise HTTPException(status_code=404, detail=f"Workout {workout_id} not found")
-    return workout
-
-
-@router.get("/stats", response_model=HevyStatsResponse)
-async def get_stats(
-    start_date: Optional[date] = Query(None, description="Filter stats after this date"),
-    end_date: Optional[date] = Query(None, description="Filter stats before this date"),
-    _user: User = Depends(require_viewer),
-) -> HevyStatsResponse:
-    """Get aggregated statistics for Hevy workouts."""
-    all_workouts = get_all_lifts()
-    total_workouts = len(all_workouts)
-    total_volume = sum(w.total_volume() for w in all_workouts)
-    total_sets = sum(w.total_sets() for w in all_workouts)
-
-    # Period-specific stats
-    if start_date and end_date:
-        period_workouts = get_lifts_in_date_range(start_date, end_date)
-    else:
-        period_workouts = all_workouts
-
-    return HevyStatsResponse(
-        total_workouts=total_workouts,
-        total_volume_kg=total_volume,
-        total_sets=total_sets,
-        workouts_in_period=len(period_workouts),
-        volume_in_period_kg=sum(w.total_volume() for w in period_workouts),
-    )
-
-
-@router.get("/exercise-templates", response_model=list[HevyExerciseTemplate])
-async def get_exercise_templates_endpoint(
-    _user: User = Depends(require_viewer),
-) -> list[HevyExerciseTemplate]:
-    """Get all cached exercise templates (for muscle group mapping)."""
-    return get_all_exercise_templates()
 
 
 @router.post("/sync", response_model=HevySyncResponse)
@@ -177,9 +65,9 @@ async def sync_hevy_data(
 ) -> HevySyncResponse:
     """Sync workouts and exercise templates from Hevy API.
 
-    Requires authentication. Fetches workouts from Hevy and inserts only
-    new ones (preserving local edits). Fetches exercise templates only for
-    exercises we haven't seen before.
+    Requires authentication with editor role. Fetches workouts from Hevy and
+    inserts only new ones (preserving local edits). Fetches exercise templates
+    only for exercises we haven't seen before.
     """
     logger.info("Starting Hevy sync")
 
@@ -244,12 +132,3 @@ async def sync_hevy_data(
         message=f"Successfully synced {workouts_synced} workouts and {templates_synced} new exercise templates",
         synced_at=datetime.now(timezone.utc),
     )
-
-
-@router.get("/workout-count")
-async def get_workout_count_endpoint(
-    _user: User = Depends(require_viewer),
-) -> dict[str, int]:
-    """Get the total count of Hevy workouts in the database."""
-    count = get_lift_count()
-    return {"count": count}

@@ -6,6 +6,7 @@ from datetime import date
 from typing import Optional
 
 from .connection import get_db_cursor, get_db_connection
+from fitness.models.lift import Lift, Exercise, Set
 from fitness.integrations.hevy.models import (
     HevyWorkout,
     HevyExerciseTemplate,
@@ -19,20 +20,20 @@ logger = logging.getLogger(__name__)
 # --- Lifts ---
 
 
-def get_all_lifts(include_deleted: bool = False) -> list[HevyWorkout]:
+def get_all_lifts(include_deleted: bool = False) -> list[Lift]:
     """Get all lifts from the database."""
     with get_db_cursor() as cursor:
         if include_deleted:
             cursor.execute("""
                 SELECT id, title, description, start_time, end_time, exercises,
-                       total_volume_kg, total_sets
+                       source, deleted_at
                 FROM lifts
                 ORDER BY start_time DESC
             """)
         else:
             cursor.execute("""
                 SELECT id, title, description, start_time, end_time, exercises,
-                       total_volume_kg, total_sets
+                       source, deleted_at
                 FROM lifts
                 WHERE deleted_at IS NULL
                 ORDER BY start_time DESC
@@ -42,46 +43,60 @@ def get_all_lifts(include_deleted: bool = False) -> list[HevyWorkout]:
 
 
 def get_lifts_in_date_range(
-    start_date: date,
-    end_date: date,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     include_deleted: bool = False,
-) -> list[HevyWorkout]:
-    """Get lifts within a date range."""
+) -> list[Lift]:
+    """Get lifts within a date range.
+
+    Args:
+        start_date: If provided, only return lifts on or after this date.
+        end_date: If provided, only return lifts before this date.
+        include_deleted: If True, include soft-deleted lifts.
+
+    Returns:
+        List of lifts matching the criteria, ordered by start_time descending.
+    """
+    from psycopg import sql
+
     with get_db_cursor() as cursor:
-        if include_deleted:
-            cursor.execute(
-                """
-                SELECT id, title, description, start_time, end_time, exercises,
-                       total_volume_kg, total_sets
-                FROM lifts
-                WHERE start_time >= %s AND start_time < %s
-                ORDER BY start_time DESC
-                """,
-                (start_date, end_date),
-            )
-        else:
-            cursor.execute(
-                """
-                SELECT id, title, description, start_time, end_time, exercises,
-                       total_volume_kg, total_sets
-                FROM lifts
-                WHERE start_time >= %s AND start_time < %s
-                  AND deleted_at IS NULL
-                ORDER BY start_time DESC
-                """,
-                (start_date, end_date),
-            )
+        # Build query dynamically based on which dates are provided
+        conditions: list[sql.Composable] = []
+        params: list = []
+
+        if not include_deleted:
+            conditions.append(sql.SQL("deleted_at IS NULL"))
+
+        if start_date is not None:
+            conditions.append(sql.SQL("start_time >= %s"))
+            params.append(start_date)
+
+        if end_date is not None:
+            conditions.append(sql.SQL("start_time < %s"))
+            params.append(end_date)
+
+        where_clause = sql.SQL(" AND ").join(conditions) if conditions else sql.SQL("TRUE")
+
+        query = sql.SQL("""
+            SELECT id, title, description, start_time, end_time, exercises,
+                   source, deleted_at
+            FROM lifts
+            WHERE {where_clause}
+            ORDER BY start_time DESC
+        """).format(where_clause=where_clause)
+
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         return [_row_to_lift(row) for row in rows]
 
 
-def get_lift_by_id(lift_id: str) -> Optional[HevyWorkout]:
+def get_lift_by_id(lift_id: str) -> Optional[Lift]:
     """Get a single lift by ID."""
     with get_db_cursor() as cursor:
         cursor.execute(
             """
             SELECT id, title, description, start_time, end_time, exercises,
-                   total_volume_kg, total_sets
+                   source, deleted_at
             FROM lifts
             WHERE id = %s AND deleted_at IS NULL
             """,
@@ -210,12 +225,17 @@ def bulk_upsert_exercise_templates(
     source: str = "Hevy",
     id_prefix: str = "hevy_",
 ) -> int:
-    """Bulk upsert exercise templates. Returns count of affected rows.
+    """Bulk upsert exercise templates. Returns count of rows affected.
+
+    Uses ON CONFLICT DO UPDATE, so rowcount reflects actual database operations.
 
     Args:
         templates: List of templates to upsert
         source: Source provider name (e.g., "Hevy")
         id_prefix: Prefix for IDs (e.g., "hevy_")
+
+    Returns:
+        Number of rows actually inserted or updated in the database.
     """
     if not templates:
         return 0
@@ -252,7 +272,7 @@ def bulk_upsert_exercise_templates(
                             template.is_custom,
                         ),
                     )
-                    count += 1
+                    count += cursor.rowcount
 
     logger.info(f"Successfully upserted {count} exercise templates")
     return count
@@ -261,8 +281,8 @@ def bulk_upsert_exercise_templates(
 # --- Helper functions ---
 
 
-def _row_to_lift(row: tuple) -> HevyWorkout:
-    """Convert a database row to a HevyWorkout model."""
+def _row_to_lift(row: tuple) -> Lift:
+    """Convert a database row to a generic Lift model."""
     (
         id_,
         title,
@@ -270,8 +290,8 @@ def _row_to_lift(row: tuple) -> HevyWorkout:
         start_time,
         end_time,
         exercises_json,
-        total_volume_kg,
-        total_sets,
+        source,
+        deleted_at,
     ) = row
 
     # Parse exercises from JSON
@@ -280,16 +300,15 @@ def _row_to_lift(row: tuple) -> HevyWorkout:
     )
     exercises = [_dict_to_exercise(e) for e in exercises_data]
 
-    return HevyWorkout(
+    return Lift(
         id=id_,
         title=title,
         description=description,
         start_time=start_time,
         end_time=end_time,
+        source=source,
         exercises=exercises,
-        # Use start_time as fallback since we don't store API timestamps
-        created_at=start_time,
-        updated_at=start_time,
+        deleted_at=deleted_at,
     )
 
 
@@ -331,21 +350,21 @@ def _set_to_dict(set_: HevySet) -> dict:
     }
 
 
-def _dict_to_exercise(data: dict) -> HevyExercise:
-    """Convert a dictionary to a HevyExercise model."""
-    return HevyExercise(
+def _dict_to_exercise(data: dict) -> Exercise:
+    """Convert a dictionary to a generic Exercise model."""
+    return Exercise(
         index=data.get("index", 0),
         title=data.get("title", ""),
         notes=data.get("notes"),
-        exercise_template_id=data.get("exercise_template_id", ""),
+        exercise_template_id=data.get("exercise_template_id"),
         superset_id=data.get("superset_id"),
         sets=[_dict_to_set(s) for s in data.get("sets", [])],
     )
 
 
-def _dict_to_set(data: dict) -> HevySet:
-    """Convert a dictionary to a HevySet model."""
-    return HevySet(
+def _dict_to_set(data: dict) -> Set:
+    """Convert a dictionary to a generic Set model."""
+    return Set(
         index=data.get("index", 0),
         set_type=data.get("set_type"),
         weight_kg=data.get("weight_kg"),

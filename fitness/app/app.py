@@ -24,6 +24,8 @@ from .routers import (
     mmf_router,
     summary_router,
     hevy_router,
+    lifts_router,
+    exercise_templates_router,
 )
 from .models import EnvironmentResponse
 from .auth import require_viewer
@@ -64,6 +66,8 @@ app.include_router(strava_router)
 app.include_router(mmf_router)
 app.include_router(summary_router)
 app.include_router(hevy_router)
+app.include_router(lifts_router)
+app.include_router(exercise_templates_router)
 app.add_middleware(
     CORSMiddleware,  # type: ignore[arg-type]
     allow_origins=[
