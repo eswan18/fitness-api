@@ -1,4 +1,4 @@
-"""Test the /strava/update-data endpoint."""
+"""Test the /strava/sync endpoint."""
 
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
@@ -7,20 +7,20 @@ from fitness.models.run import Run
 from tests._factories.strava_activity_with_gear import StravaActivityWithGearFactory
 
 
-class TestUpdateStravaData:
-    """Test POST /strava/update-data endpoint."""
+class TestSyncStravaData:
+    """Test POST /strava/sync endpoint."""
 
     @patch("fitness.app.routers.strava.bulk_create_runs")
     @patch("fitness.app.routers.strava.get_existing_run_ids")
     @patch("fitness.app.routers.strava.load_strava_runs")
-    def test_update_data_identifies_new_runs(
+    def test_sync_identifies_new_runs(
         self,
         mock_load_strava_runs: MagicMock,
         mock_get_existing_run_ids: MagicMock,
         mock_bulk_create_runs: MagicMock,
         auth_client: TestClient,
     ):
-        """Test that update-data correctly identifies and inserts only new runs."""
+        """Test that sync correctly identifies and inserts only new runs."""
         # Create 3 Strava activities
         factory = StravaActivityWithGearFactory()
         strava_run_1 = factory.make({"id": 100, "name": "Morning Run"})
@@ -36,7 +36,7 @@ class TestUpdateStravaData:
         # Mock bulk_create_runs to return the count of inserted runs
         mock_bulk_create_runs.return_value = 2
 
-        response = auth_client.post("/strava/update-data")
+        response = auth_client.post("/strava/sync")
 
         assert response.status_code == 200
         data = response.json()
@@ -70,14 +70,14 @@ class TestUpdateStravaData:
     @patch("fitness.app.routers.strava.bulk_create_runs")
     @patch("fitness.app.routers.strava.get_existing_run_ids")
     @patch("fitness.app.routers.strava.load_strava_runs")
-    def test_update_data_no_new_runs(
+    def test_sync_no_new_runs(
         self,
         mock_load_strava_runs: MagicMock,
         mock_get_existing_run_ids: MagicMock,
         mock_bulk_create_runs: MagicMock,
         auth_client: TestClient,
     ):
-        """Test that update-data handles the case when all runs already exist."""
+        """Test that sync handles the case when all runs already exist."""
         factory = StravaActivityWithGearFactory()
         strava_run_1 = factory.make({"id": 100, "name": "Morning Run"})
         strava_run_2 = factory.make({"id": 200, "name": "Evening Run"})
@@ -88,7 +88,7 @@ class TestUpdateStravaData:
         # Mock get_existing_run_ids to return both runs as existing
         mock_get_existing_run_ids.return_value = {"strava_100", "strava_200"}
 
-        response = auth_client.post("/strava/update-data")
+        response = auth_client.post("/strava/sync")
 
         assert response.status_code == 200
         data = response.json()

@@ -9,30 +9,30 @@ from tests.app.conftest import TEST_API_KEY
 class TestAuthenticationEndpoints:
     """Test OAuth Authentication on endpoints."""
 
-    def test_update_data_requires_auth(self, client: TestClient):
-        """POST /update-data should require authentication."""
-        response = client.post("/strava/update-data")
+    def test_sync_requires_auth(self, client: TestClient):
+        """POST /strava/sync should require authentication."""
+        response = client.post("/strava/sync")
         assert response.status_code == 401
         assert "WWW-Authenticate" in response.headers
         assert "Bearer" in response.headers["WWW-Authenticate"]
 
-    def test_update_data_with_valid_credentials(
+    def test_sync_with_valid_credentials(
         self, auth_client: TestClient, monkeypatch
     ):
-        """POST /strava/update-data should succeed with valid OAuth token (editor)."""
+        """POST /strava/sync should succeed with valid OAuth token (editor)."""
         with monkeypatch.context() as m:
             m.setattr("fitness.app.routers.strava.load_strava_runs", lambda client: [])
             m.setattr("fitness.app.routers.strava.get_existing_run_ids", lambda: [])
-            response = auth_client.post("/strava/update-data")
+            response = auth_client.post("/strava/sync")
 
         assert response.status_code == 200
         data = response.json()
         assert data["inserted_count"] == 0
 
-    def test_update_data_with_invalid_token(self, client: TestClient):
-        """POST /strava/update-data should fail with invalid token."""
+    def test_sync_with_invalid_token(self, client: TestClient):
+        """POST /strava/sync should fail with invalid token."""
         response = client.post(
-            "/strava/update-data", headers={"Authorization": "Bearer invalid_token"}
+            "/strava/sync", headers={"Authorization": "Bearer invalid_token"}
         )
         assert response.status_code == 401
 
@@ -69,7 +69,7 @@ class TestProtectedMutationEndpoints:
     @pytest.mark.parametrize(
         "method,path",
         [
-            ("POST", "/strava/update-data"),
+            ("POST", "/strava/sync"),
             ("PATCH", "/runs/test_run_123"),
             ("POST", "/runs/test_run_123/restore/1"),
             ("PATCH", "/shoes/test_shoe_id"),
@@ -94,7 +94,7 @@ class TestProtectedMutationEndpoints:
     @pytest.mark.parametrize(
         "method,path",
         [
-            ("POST", "/strava/update-data"),
+            ("POST", "/strava/sync"),
             ("PATCH", "/runs/test_run_123"),
             ("POST", "/runs/test_run_123/restore/1"),
             ("PATCH", "/shoes/test_shoe_id"),
