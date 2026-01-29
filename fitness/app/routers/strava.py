@@ -25,7 +25,7 @@ async def sync_strava_data(
 ) -> DataImportResponse:
     """Fetch Strava data and insert any new runs not in the database.
 
-    Requires authentication via HTTP Basic Auth.
+    Requires OAuth 2.0 Bearer token authentication.
 
     Returns a summary including counts of external runs, existing DB runs, new
     runs found and inserted, and IDs of newly inserted runs.

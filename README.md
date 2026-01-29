@@ -163,7 +163,7 @@ Google Calendar sync allows you to automatically create calendar events for your
 
 ### OAuth Token Lifecycle
 
-**🔄 Automatic Token Management**: The application handles token refresh automatically! At least I think so.
+**🔄 Automatic Token Management**: The application handles token refresh automatically.
 
 - **Access Token**: Expires after ~1 hour, automatically refreshed using refresh token
 - **Refresh Token**: Long-lived (typically 6 months to indefinite), stored in the database
@@ -250,14 +250,14 @@ This will install all dependencies as specified in the `uv.lock` file, ensuring 
   ```sh
   ENV=dev make dev
   # or
-  ENV=dev uv run -m uvicorn fitness.app.app:app --reload
+  ENV=dev uv run -m uvicorn fitness.app:app --reload
   ```
 
 - **Production server:**
   ```sh
   ENV=prod make serve
   # or
-  ENV=prod uv run -m uvicorn fitness.app.app:app
+  ENV=prod uv run -m uvicorn fitness.app:app
   ```
 
 - The API will be available at `http://localhost:8000`.

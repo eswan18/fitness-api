@@ -71,11 +71,10 @@ def sync_run_to_calendar(
 ) -> SyncResponse:
     """Sync a run to Google Calendar using the Google Calendar API.
 
-    Requires authentication via HTTP Basic Auth.
+    Requires OAuth 2.0 Bearer token authentication.
 
     Args:
         run_id: The ID of the run to sync.
-        username: Authenticated username (injected by dependency).
 
     Returns:
         SyncResponse indicating the result of the sync operation.
@@ -190,11 +189,10 @@ def unsync_run_from_calendar(
 ) -> SyncResponse:
     """Remove a run's sync from Google Calendar using the Google Calendar API.
 
-    Requires authentication via HTTP Basic Auth.
+    Requires OAuth 2.0 Bearer token authentication.
 
     Args:
         run_id: The ID of the run to unsync.
-        username: Authenticated username (injected by dependency).
 
     Returns:
         SyncResponse indicating the result of the unsync operation.

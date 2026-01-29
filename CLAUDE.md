@@ -4,9 +4,10 @@ This file provides context for Claude Code when working on this project.
 
 ## Project Overview
 
-Fitness API is a Python backend for analyzing and aggregating running data from multiple sources:
+Fitness API is a Python backend for analyzing and aggregating fitness data from multiple sources:
 - **Strava**: Outdoor runs via OAuth API integration
 - **MapMyFitness**: Historical/treadmill runs via CSV upload
+- **Hevy**: Weightlifting data via Hevy API integration
 
 The frontend dashboard is a separate project and not included in this repository.
 
@@ -53,8 +54,9 @@ fitness/
 ├── db/            # Database layer (raw SQL queries)
 ├── models/        # Pydantic models
 ├── agg/           # Aggregation logic (metrics calculations)
+├── config/        # Configuration management
 ├── load/          # Data loading (Strava, MMF)
-├── integrations/  # External service clients (Strava, Google)
+├── integrations/  # External service clients (Strava, Google, Hevy)
 └── utils/         # Utilities
 
 tests/

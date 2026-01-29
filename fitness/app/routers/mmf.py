@@ -25,13 +25,12 @@ async def upload_mmf_csv(
 ) -> DataImportResponse:
     """Upload MapMyFitness CSV data and insert any new runs not in the database.
 
-    Requires authentication via HTTP Basic Auth.
+    Requires OAuth 2.0 Bearer token authentication.
 
     Args:
         file: CSV file upload via multipart/form-data (required).
         timezone: Optional IANA timezone name (e.g., "America/Chicago").
                   If not provided, uses MMF_TIMEZONE env var or defaults to "America/Chicago".
-        username: Authenticated username (injected by dependency).
 
     Returns:
         Summary including counts of external runs, existing DB runs, new runs found
