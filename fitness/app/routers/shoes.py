@@ -39,14 +39,13 @@ def update_shoe(
 ) -> dict:
     """Update shoe properties.
 
-    Requires authentication via HTTP Basic Auth.
+    Requires OAuth 2.0 Bearer token authentication.
 
     Use `retired_at=null` to unretire, or provide a date to retire.
 
     Args:
         shoe_id: Deterministic shoe identifier derived from name.
         request: Partial update payload for retirement/unretirement.
-        username: Authenticated username (injected by dependency).
     """
     # First check if shoe exists
     shoe = get_shoe_by_id(shoe_id)

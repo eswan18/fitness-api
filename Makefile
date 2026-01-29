@@ -25,7 +25,7 @@ ty:
 
 dev:
 	# Start a development server
-	uv run -m uvicorn fitness.app:app
+	uv run -m uvicorn fitness.app:app --reload
 
 serve:
 	# Start a production server

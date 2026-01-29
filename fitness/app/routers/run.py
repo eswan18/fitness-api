@@ -129,7 +129,7 @@ def update_run(
     """
     Update a run with change tracking.
 
-    Requires authentication via HTTP Basic Auth.
+    Requires OAuth 2.0 Bearer token authentication.
 
     This endpoint allows updating specific fields of a run while preserving
     the full edit history. The original state is saved before making changes.
@@ -137,7 +137,6 @@ def update_run(
     Args:
         run_id: The ID of the run to update.
         update_request: The fields to update and audit metadata.
-        username: Authenticated username (injected by dependency).
     """
     try:
         _get_run_or_404(run_id)
@@ -258,7 +257,7 @@ def restore_run_to_version(
     """
     Restore a run to a previous version.
 
-    Requires authentication via HTTP Basic Auth.
+    Requires OAuth 2.0 Bearer token authentication.
 
     This creates a new version that copies the data from the specified historical version.
     The original version being restored to is preserved in the history.

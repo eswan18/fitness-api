@@ -166,88 +166,50 @@ The application uses raw SQL queries via psycopg3. Key modules:
 ```python
 from fitness.db.runs import *
 
-# Get all runs
+# Get all runs (non-deleted by default)
 runs = get_all_runs()
+runs_including_deleted = get_all_runs(include_deleted=True)
 
 # Get specific run by ID
 run = get_run_by_id("strava_1234567890")
-
-# Get runs in date range
-runs = get_runs_in_date_range(start_date, end_date)
-
-# Create a new run
-run_id = create_run(run_object)
-
-# Insert or update (recommended for imports)
-run_id = upsert_run(run_object)
+run_including_deleted = get_run_by_id("strava_1234567890", include_deleted=True)
 
 # Bulk operations
 count = bulk_create_runs(list_of_runs)  # Insert only new runs
 
+# Check which run IDs already exist
+existing_ids = get_existing_run_ids()
+
 # Get enriched run details (shoes + sync)
 details = get_run_details_in_date_range(start_date, end_date)
-
-# Check if run exists
-exists = run_exists(run_object)
+all_details = get_all_run_details()
 
 # Shoes operations
 from fitness.db.shoes import *
 
-# Get all shoes (non-deleted by default)
-shoes = get_all_shoes()
-shoes_including_deleted = get_all_shoes(include_deleted=True)
+# Get shoes with optional filters
+shoes = get_shoes()                      # All non-deleted shoes
+active_shoes = get_shoes(retired=False)  # Not retired and not deleted
+retired_shoes = get_shoes(retired=True)  # Retired and not deleted
 
-# Get specific shoe by name or ID
-shoe = get_shoe_by_name("Nike Air Zoom Pegasus 38")
+# Get specific shoe by ID
 shoe = get_shoe_by_id("nike_air_zoom_pegasus_38")
 
-# Get shoes by status
-active_shoes = get_active_shoes()  # Not retired and not deleted
-retired_shoes = get_retired_shoes()  # Has retirement_date and not deleted
+# Retirement management (by shoe ID, not name)
+retire_shoe_by_id("nike_air_zoom_pegasus_38", retired_at, "Worn out after 500 miles")
+unretire_shoe_by_id("nike_air_zoom_pegasus_38")
 
-# Create or update shoes
-shoe_id = create_shoe(shoe_object)
-shoe_id = upsert_shoe(shoe_object)  # Handles updates gracefully
-
-# Retirement management (based on retirement_date, not boolean)
-retire_shoe("Nike Air Zoom Pegasus 38", retirement_date, "Worn out after 500 miles")
-unretire_shoe("Nike Air Zoom Pegasus 38")
-
-# Soft deletion
-soft_delete_shoe("Nike Air Zoom Pegasus 38")
-restore_shoe("Nike Air Zoom Pegasus 38")
-
-# Hard deletion (permanent)
-delete_shoe("Nike Air Zoom Pegasus 38")
-
-# Check if shoe exists
-exists = shoe_exists("Nike Air Zoom Pegasus 38")
-
-# Runs operations
-from fitness.db.runs import *
-
-# All operations support include_deleted parameter (defaults to False)
-runs = get_all_runs()  # Only non-deleted runs
-runs_including_deleted = get_all_runs(include_deleted=True)
-
-# Soft deletion for runs
-soft_delete_run("run_id")
-restore_run("run_id")
-soft_delete_runs_by_source("Strava")
-
-# Note: When creating/upserting runs, shoes are automatically created
-# if they don't exist based on the shoe name from the run data
+# Bulk operations
+name_to_id = get_existing_shoes_by_names({"Nike Air Zoom Pegasus 38", "Brooks Ghost 15"})
+name_to_id = bulk_create_shoes_by_names({"Nike Air Zoom Pegasus 38"})
 ```
 
 ### Refreshing Data
 
 The API includes functionality to fetch only new data from external sources:
 
-```python
-# This will re-fetch from Strava and MMF, then insert only new runs
-# Uses deterministic IDs to identify new runs not already in the database
-result = update_new_runs_only()
-```
+The API endpoints `POST /strava/sync` and `POST /mmf/upload-csv` handle fetching
+and inserting only new runs using deterministic IDs to avoid duplicates.
 
 ### Run Editing and History
 
