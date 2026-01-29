@@ -1,5 +1,6 @@
 """Test the /hevy/sync endpoint."""
 
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 from typing import Generator
 import pytest
@@ -22,6 +23,8 @@ def mock_hevy_client() -> Generator[MagicMock, None, None]:
 class TestSyncHevyData:
     """Test POST /hevy/sync endpoint."""
 
+    @patch("fitness.app.routers.hevy.update_last_sync_time")
+    @patch("fitness.app.routers.hevy.get_last_sync_time")
     @patch("fitness.app.routers.hevy.bulk_create_lifts")
     @patch("fitness.app.routers.hevy.bulk_upsert_exercise_templates")
     @patch("fitness.app.routers.hevy.get_existing_exercise_template_ids")
@@ -32,6 +35,8 @@ class TestSyncHevyData:
         mock_get_existing_template_ids: MagicMock,
         mock_bulk_upsert_templates: MagicMock,
         mock_bulk_create_lifts: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
         mock_hevy_client: MagicMock,
         auth_client: TestClient,
     ):
@@ -57,6 +62,9 @@ class TestSyncHevyData:
         mock_bulk_upsert_templates.return_value = 0
         mock_bulk_create_lifts.return_value = 2
 
+        # Mock sync metadata - no previous sync
+        mock_get_last_sync_time.return_value = None
+
         response = auth_client.post("/hevy/sync")
 
         assert response.status_code == 200
@@ -81,6 +89,11 @@ class TestSyncHevyData:
         assert "hevy_300" in new_lift_ids
         assert "hevy_200" not in new_lift_ids  # Already exists
 
+        # Verify sync time was updated
+        mock_update_last_sync_time.assert_called_once()
+
+    @patch("fitness.app.routers.hevy.update_last_sync_time")
+    @patch("fitness.app.routers.hevy.get_last_sync_time")
     @patch("fitness.app.routers.hevy.bulk_create_lifts")
     @patch("fitness.app.routers.hevy.bulk_upsert_exercise_templates")
     @patch("fitness.app.routers.hevy.get_existing_exercise_template_ids")
@@ -91,6 +104,8 @@ class TestSyncHevyData:
         mock_get_existing_template_ids: MagicMock,
         mock_bulk_upsert_templates: MagicMock,
         mock_bulk_create_lifts: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
         mock_hevy_client: MagicMock,
         auth_client: TestClient,
     ):
@@ -110,6 +125,9 @@ class TestSyncHevyData:
         mock_bulk_upsert_templates.return_value = 0
         mock_bulk_create_lifts.return_value = 0
 
+        # Mock sync metadata - no previous sync
+        mock_get_last_sync_time.return_value = None
+
         response = auth_client.post("/hevy/sync")
 
         assert response.status_code == 200
@@ -121,6 +139,11 @@ class TestSyncHevyData:
         mock_bulk_create_lifts.assert_called_once()
         assert mock_bulk_create_lifts.call_args[0][0] == []
 
+        # Verify sync time was still updated
+        mock_update_last_sync_time.assert_called_once()
+
+    @patch("fitness.app.routers.hevy.update_last_sync_time")
+    @patch("fitness.app.routers.hevy.get_last_sync_time")
     @patch("fitness.app.routers.hevy.bulk_create_lifts")
     @patch("fitness.app.routers.hevy.bulk_upsert_exercise_templates")
     @patch("fitness.app.routers.hevy.get_existing_exercise_template_ids")
@@ -131,6 +154,8 @@ class TestSyncHevyData:
         mock_get_existing_template_ids: MagicMock,
         mock_bulk_upsert_templates: MagicMock,
         mock_bulk_create_lifts: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
         mock_hevy_client: MagicMock,
         auth_client: TestClient,
     ):
@@ -158,6 +183,9 @@ class TestSyncHevyData:
         mock_bulk_upsert_templates.return_value = 1
         mock_bulk_create_lifts.return_value = 1
 
+        # Mock sync metadata - no previous sync
+        mock_get_last_sync_time.return_value = None
+
         response = auth_client.post("/hevy/sync")
 
         assert response.status_code == 200
@@ -167,6 +195,79 @@ class TestSyncHevyData:
 
         # Verify template was fetched for bp_001 only (unprefixed API ID)
         mock_hevy_client.get_exercise_template_by_id.assert_called_once_with("bp_001")
+
+    @patch("fitness.app.routers.hevy.update_last_sync_time")
+    @patch("fitness.app.routers.hevy.get_last_sync_time")
+    @patch("fitness.app.routers.hevy.bulk_create_lifts")
+    @patch("fitness.app.routers.hevy.bulk_upsert_exercise_templates")
+    @patch("fitness.app.routers.hevy.get_existing_exercise_template_ids")
+    @patch("fitness.app.routers.hevy.get_existing_lift_ids")
+    def test_incremental_sync_uses_last_sync_time(
+        self,
+        mock_get_existing_lift_ids: MagicMock,
+        mock_get_existing_template_ids: MagicMock,
+        mock_bulk_upsert_templates: MagicMock,
+        mock_bulk_create_lifts: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
+        mock_hevy_client: MagicMock,
+        auth_client: TestClient,
+    ):
+        """Test that incremental sync passes the last sync time to get_all_workouts."""
+        last_sync = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        mock_get_last_sync_time.return_value = last_sync
+        mock_hevy_client.get_all_workouts.return_value = []
+        mock_get_existing_lift_ids.return_value = set()
+        mock_get_existing_template_ids.return_value = set()
+        mock_bulk_upsert_templates.return_value = 0
+        mock_bulk_create_lifts.return_value = 0
+
+        response = auth_client.post("/hevy/sync")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "incremental" in data["message"]
+
+        # Verify get_all_workouts was called with since parameter
+        mock_hevy_client.get_all_workouts.assert_called_once_with(since=last_sync)
+
+    @patch("fitness.app.routers.hevy.update_last_sync_time")
+    @patch("fitness.app.routers.hevy.get_last_sync_time")
+    @patch("fitness.app.routers.hevy.bulk_create_lifts")
+    @patch("fitness.app.routers.hevy.bulk_upsert_exercise_templates")
+    @patch("fitness.app.routers.hevy.get_existing_exercise_template_ids")
+    @patch("fitness.app.routers.hevy.get_existing_lift_ids")
+    def test_full_sync_ignores_last_sync_time(
+        self,
+        mock_get_existing_lift_ids: MagicMock,
+        mock_get_existing_template_ids: MagicMock,
+        mock_bulk_upsert_templates: MagicMock,
+        mock_bulk_create_lifts: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
+        mock_hevy_client: MagicMock,
+        auth_client: TestClient,
+    ):
+        """Test that full_sync=true ignores the last sync time."""
+        last_sync = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        mock_get_last_sync_time.return_value = last_sync
+        mock_hevy_client.get_all_workouts.return_value = []
+        mock_get_existing_lift_ids.return_value = set()
+        mock_get_existing_template_ids.return_value = set()
+        mock_bulk_upsert_templates.return_value = 0
+        mock_bulk_create_lifts.return_value = 0
+
+        response = auth_client.post("/hevy/sync?full_sync=true")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "full" in data["message"]
+
+        # Verify get_all_workouts was called with since=None (full sync)
+        mock_hevy_client.get_all_workouts.assert_called_once_with(since=None)
+
+        # get_last_sync_time should NOT be called when full_sync=true
+        mock_get_last_sync_time.assert_not_called()
 
     def test_sync_requires_auth(self, client: TestClient):
         """Test that sync endpoint requires authentication."""
