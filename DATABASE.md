@@ -96,6 +96,14 @@ The tables have foreign key relationships:
 - `error_message`: Optional error context
 - `created_at`, `updated_at`: Timestamps
 
+### `sync_metadata` Table (Incremental Sync Tracking)
+- `provider`: Primary key (string) - provider name (e.g., 'strava', 'hevy')
+- `last_synced_at`: Timestamp of the last successful sync (timezone-aware)
+- `created_at`: Record creation timestamp
+- `updated_at`: Record update timestamp
+
+**Purpose**: Tracks the last successful sync time per external data provider, enabling incremental syncs that only fetch new data since the previous sync. Both `/strava/sync` and `/hevy/sync` endpoints read and update this table automatically. Pass `?full_sync=true` to bypass incremental sync and re-fetch all data.
+
 ### `oauth_credentials` Table (OAuth Token Storage)
 - `id`: Primary key (auto-incrementing integer)
 - `provider`: OAuth provider name (e.g., 'google', 'strava') - unique

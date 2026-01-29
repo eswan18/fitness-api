@@ -1,5 +1,6 @@
 """Test the /strava/sync endpoint."""
 
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
@@ -10,6 +11,8 @@ from tests._factories.strava_activity_with_gear import StravaActivityWithGearFac
 class TestSyncStravaData:
     """Test POST /strava/sync endpoint."""
 
+    @patch("fitness.app.routers.strava.update_last_sync_time")
+    @patch("fitness.app.routers.strava.get_last_sync_time")
     @patch("fitness.app.routers.strava.bulk_create_runs")
     @patch("fitness.app.routers.strava.get_existing_run_ids")
     @patch("fitness.app.routers.strava.load_strava_runs")
@@ -18,6 +21,8 @@ class TestSyncStravaData:
         mock_load_strava_runs: MagicMock,
         mock_get_existing_run_ids: MagicMock,
         mock_bulk_create_runs: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
         auth_client: TestClient,
     ):
         """Test that sync correctly identifies and inserts only new runs."""
@@ -36,18 +41,19 @@ class TestSyncStravaData:
         # Mock bulk_create_runs to return the count of inserted runs
         mock_bulk_create_runs.return_value = 2
 
+        # Mock sync metadata - no previous sync
+        mock_get_last_sync_time.return_value = None
+
         response = auth_client.post("/strava/sync")
 
         assert response.status_code == 200
         data = response.json()
         assert data["inserted_count"] == 2
-        assert "Inserted 2 new runs into the database" in data["message"]
+        assert "2 new runs" in data["message"]
         assert "updated_at" in data
 
-        # Verify load_strava_runs was called with the strava_client
+        # Verify load_strava_runs was called with the strava_client and after=None
         mock_load_strava_runs.assert_called_once()
-        # The client should be passed as an argument
-        assert len(mock_load_strava_runs.call_args[0]) == 1
 
         # Verify get_existing_run_ids was called
         mock_get_existing_run_ids.assert_called_once()
@@ -67,6 +73,11 @@ class TestSyncStravaData:
         assert "strava_300" in new_run_ids
         assert "strava_200" not in new_run_ids  # This one already exists
 
+        # Verify sync time was updated
+        mock_update_last_sync_time.assert_called_once()
+
+    @patch("fitness.app.routers.strava.update_last_sync_time")
+    @patch("fitness.app.routers.strava.get_last_sync_time")
     @patch("fitness.app.routers.strava.bulk_create_runs")
     @patch("fitness.app.routers.strava.get_existing_run_ids")
     @patch("fitness.app.routers.strava.load_strava_runs")
@@ -75,6 +86,8 @@ class TestSyncStravaData:
         mock_load_strava_runs: MagicMock,
         mock_get_existing_run_ids: MagicMock,
         mock_bulk_create_runs: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
         auth_client: TestClient,
     ):
         """Test that sync handles the case when all runs already exist."""
@@ -88,12 +101,15 @@ class TestSyncStravaData:
         # Mock get_existing_run_ids to return both runs as existing
         mock_get_existing_run_ids.return_value = {"strava_100", "strava_200"}
 
+        # Mock sync metadata - no previous sync
+        mock_get_last_sync_time.return_value = None
+
         response = auth_client.post("/strava/sync")
 
         assert response.status_code == 200
         data = response.json()
         assert data["inserted_count"] == 0
-        assert "Inserted 0 new runs into the database" in data["message"]
+        assert "0 new runs" in data["message"]
 
         # Verify load_strava_runs was called
         mock_load_strava_runs.assert_called_once()
@@ -103,3 +119,71 @@ class TestSyncStravaData:
 
         # Verify bulk_create_runs was NOT called since there are no new runs
         mock_bulk_create_runs.assert_not_called()
+
+        # Verify sync time was still updated
+        mock_update_last_sync_time.assert_called_once()
+
+    @patch("fitness.app.routers.strava.update_last_sync_time")
+    @patch("fitness.app.routers.strava.get_last_sync_time")
+    @patch("fitness.app.routers.strava.bulk_create_runs")
+    @patch("fitness.app.routers.strava.get_existing_run_ids")
+    @patch("fitness.app.routers.strava.load_strava_runs")
+    def test_incremental_sync_uses_last_sync_time(
+        self,
+        mock_load_strava_runs: MagicMock,
+        mock_get_existing_run_ids: MagicMock,
+        mock_bulk_create_runs: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
+        auth_client: TestClient,
+    ):
+        """Test that incremental sync passes the last sync time to load_strava_runs."""
+        last_sync = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        mock_get_last_sync_time.return_value = last_sync
+        mock_load_strava_runs.return_value = []
+        mock_get_existing_run_ids.return_value = set()
+
+        response = auth_client.post("/strava/sync")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "incremental" in data["message"]
+
+        # Verify load_strava_runs was called with after parameter
+        mock_load_strava_runs.assert_called_once()
+        call_kwargs = mock_load_strava_runs.call_args[1]
+        assert call_kwargs["after"] == last_sync
+
+    @patch("fitness.app.routers.strava.update_last_sync_time")
+    @patch("fitness.app.routers.strava.get_last_sync_time")
+    @patch("fitness.app.routers.strava.bulk_create_runs")
+    @patch("fitness.app.routers.strava.get_existing_run_ids")
+    @patch("fitness.app.routers.strava.load_strava_runs")
+    def test_full_sync_ignores_last_sync_time(
+        self,
+        mock_load_strava_runs: MagicMock,
+        mock_get_existing_run_ids: MagicMock,
+        mock_bulk_create_runs: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
+        auth_client: TestClient,
+    ):
+        """Test that full_sync=true ignores the last sync time."""
+        last_sync = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        mock_get_last_sync_time.return_value = last_sync
+        mock_load_strava_runs.return_value = []
+        mock_get_existing_run_ids.return_value = set()
+
+        response = auth_client.post("/strava/sync?full_sync=true")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "full" in data["message"]
+
+        # Verify load_strava_runs was called with after=None (full sync)
+        mock_load_strava_runs.assert_called_once()
+        call_kwargs = mock_load_strava_runs.call_args[1]
+        assert call_kwargs["after"] is None
+
+        # get_last_sync_time should NOT be called when full_sync=true
+        mock_get_last_sync_time.assert_not_called()

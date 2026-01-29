@@ -139,24 +139,43 @@ class StravaClient:
 
             return response
 
-    def get_activities(self) -> list[StravaActivity]:
-        """Get the activities from the Strava API."""
-        raw_activities = self._get_activities_raw()
+    def get_activities(
+        self, after: Optional[datetime] = None
+    ) -> list[StravaActivity]:
+        """Get the activities from the Strava API.
+
+        Args:
+            after: Only return activities after this datetime (for incremental sync).
+        """
+        raw_activities = self._get_activities_raw(after=after)
         activities = activity_list_adapter.validate_python(raw_activities)
         return activities
 
-    def _get_activities_raw(self) -> list[dict]:
+    def _get_activities_raw(self, after: Optional[datetime] = None) -> list[dict]:
         """Get the activity data from the Strava API.
 
         Handles pagination until no more pages are returned.
+
+        Args:
+            after: Only return activities after this datetime (epoch timestamp).
         """
         page = 1
         per_page = 200
         activities: list[dict] = []
-        logger.info(f"Fetching activities from Strava API (page size: {per_page})")
+
+        if after:
+            logger.info(
+                f"Fetching activities from Strava API after {after.isoformat()} "
+                f"(page size: {per_page})"
+            )
+        else:
+            logger.info(f"Fetching all activities from Strava API (page size: {per_page})")
 
         while True:
-            params = {"per_page": per_page, "page": page}
+            params: dict[str, int] = {"per_page": per_page, "page": page}
+            if after:
+                # Strava expects epoch timestamp (seconds since 1970-01-01)
+                params["after"] = int(after.timestamp())
             logger.debug(f"Requesting Strava activities page {page}: {params}")
 
             response = self._make_request(
