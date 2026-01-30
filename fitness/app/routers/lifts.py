@@ -12,12 +12,13 @@ from fitness.models.user import User
 from fitness.models.lift import Lift
 from fitness.db.lifts import (
     get_all_lifts,
+    get_all_lifts_with_sync,
     get_lifts_in_date_range,
+    get_lifts_in_date_range_with_sync,
     get_lift_by_id,
     get_lift_count,
     get_all_exercise_templates,
 )
-from fitness.db.synced_lifts import get_all_synced_lifts
 from fitness.models.sync import SyncStatus
 
 logger = logging.getLogger(__name__)
@@ -95,33 +96,27 @@ async def get_lifts(
     Returns lifts in descending order by start time.
     """
     if start_date or end_date:
-        lifts = get_lifts_in_date_range(start_date, end_date)
+        lifts_with_sync = get_lifts_in_date_range_with_sync(start_date, end_date)
     else:
-        lifts = get_all_lifts()
+        lifts_with_sync = get_all_lifts_with_sync()
 
-    # Build sync lookup from synced_lifts table
-    synced_lifts = get_all_synced_lifts()
-    sync_by_lift_id = {sl.lift_id: sl for sl in synced_lifts}
-
-    summaries = []
-    for lift in lifts:
-        sl = sync_by_lift_id.get(lift.id)
-        summaries.append(
-            LiftSummary(
-                id=lift.id,
-                title=lift.title,
-                start_time=lift.start_time,
-                end_time=lift.end_time,
-                total_volume_kg=lift.total_volume(),
-                total_sets=lift.total_sets(),
-                exercise_count=len(lift.exercises),
-                is_synced=sl is not None and sl.sync_status == "synced",
-                sync_status=sl.sync_status if sl else None,
-                synced_at=sl.synced_at if sl else None,
-                google_event_id=(sl.google_event_id or None) if sl else None,
-                error_message=sl.error_message if sl else None,
-            )
+    summaries = [
+        LiftSummary(
+            id=lws.lift.id,
+            title=lws.lift.title,
+            start_time=lws.lift.start_time,
+            end_time=lws.lift.end_time,
+            total_volume_kg=lws.lift.total_volume(),
+            total_sets=lws.lift.total_sets(),
+            exercise_count=len(lws.lift.exercises),
+            is_synced=lws.is_synced,
+            sync_status=lws.sync_status,
+            synced_at=lws.synced_at,
+            google_event_id=lws.google_event_id,
+            error_message=lws.error_message,
         )
+        for lws in lifts_with_sync
+    ]
 
     return LiftsResponse(
         lifts=summaries,
