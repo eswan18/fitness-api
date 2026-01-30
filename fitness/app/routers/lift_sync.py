@@ -51,7 +51,7 @@ def get_lift_sync_status(
         is_synced=synced_lift.sync_status == "synced",
         sync_status=synced_lift.sync_status,
         synced_at=synced_lift.synced_at,
-        google_event_id=synced_lift.google_event_id,
+        google_event_id=synced_lift.google_event_id or None,
         lift_version=synced_lift.lift_version,
         error_message=synced_lift.error_message,
     )

@@ -118,7 +118,7 @@ async def get_lifts(
                 is_synced=sl is not None and sl.sync_status == "synced",
                 sync_status=sl.sync_status if sl else None,
                 synced_at=sl.synced_at if sl else None,
-                google_event_id=sl.google_event_id if sl else None,
+                google_event_id=(sl.google_event_id or None) if sl else None,
                 error_message=sl.error_message if sl else None,
             )
         )
