@@ -2,11 +2,13 @@
 
 import json
 import logging
-from datetime import date
+from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Optional
 
 from .connection import get_db_cursor, get_db_connection
 from fitness.models.lift import Lift, Exercise, Set, ExerciseTemplate
+from fitness.models.sync import SyncStatus
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,79 @@ def get_lifts_in_date_range(
         cursor.execute(query, params)
         rows = cursor.fetchall()
         return [_row_to_lift(row) for row in rows]
+
+
+@dataclass
+class LiftWithSync:
+    """A lift with its sync metadata from synced_lifts."""
+
+    lift: Lift
+    is_synced: bool
+    sync_status: Optional[SyncStatus]
+    synced_at: Optional[datetime]
+    google_event_id: Optional[str]
+    error_message: Optional[str]
+
+
+_LIFT_WITH_SYNC_QUERY = """
+    SELECT l.id, l.title, l.description, l.start_time, l.end_time, l.exercises,
+           l.source, l.deleted_at,
+           sl.sync_status, sl.synced_at, sl.google_event_id, sl.error_message
+    FROM lifts l
+    LEFT JOIN synced_lifts sl ON sl.lift_id = l.id
+"""
+
+
+def get_all_lifts_with_sync(include_deleted: bool = False) -> list[LiftWithSync]:
+    """Get all lifts with sync metadata from synced_lifts."""
+    from psycopg import sql
+
+    with get_db_cursor() as cursor:
+        conditions: list[sql.Composable] = []
+        if not include_deleted:
+            conditions.append(sql.SQL("l.deleted_at IS NULL"))
+
+        where_clause = (
+            sql.SQL("WHERE ") + sql.SQL(" AND ").join(conditions)
+            if conditions
+            else sql.SQL("")
+        )
+        query = sql.SQL(_LIFT_WITH_SYNC_QUERY + """
+            {where_clause}
+            ORDER BY l.start_time DESC
+        """).format(where_clause=where_clause)
+        cursor.execute(query)
+        return [_row_to_lift_with_sync(row) for row in cursor.fetchall()]
+
+
+def get_lifts_in_date_range_with_sync(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    include_deleted: bool = False,
+) -> list[LiftWithSync]:
+    """Get lifts with sync metadata within a date range."""
+    from psycopg import sql
+
+    with get_db_cursor() as cursor:
+        conditions: list[sql.Composable] = []
+        params: list = []
+
+        if not include_deleted:
+            conditions.append(sql.SQL("l.deleted_at IS NULL"))
+        if start_date is not None:
+            conditions.append(sql.SQL("l.start_time >= %s"))
+            params.append(start_date)
+        if end_date is not None:
+            conditions.append(sql.SQL("l.start_time < %s"))
+            params.append(end_date)
+
+        where_clause = sql.SQL(" AND ").join(conditions) if conditions else sql.SQL("TRUE")
+        query = sql.SQL(_LIFT_WITH_SYNC_QUERY + """
+            WHERE {where_clause}
+            ORDER BY l.start_time DESC
+        """).format(where_clause=where_clause)
+        cursor.execute(query, params)
+        return [_row_to_lift_with_sync(row) for row in cursor.fetchall()]
 
 
 def get_lift_by_id(lift_id: str) -> Optional[Lift]:
@@ -290,6 +365,39 @@ def _row_to_lift(row: tuple) -> Lift:
         source=source,
         exercises=exercises,
         deleted_at=deleted_at,
+    )
+
+
+def _row_to_lift_with_sync(row: tuple) -> LiftWithSync:
+    """Convert a database row (with sync columns) to a LiftWithSync."""
+    (
+        id_, title, description, start_time, end_time,
+        exercises_json, source, deleted_at,
+        sync_status, synced_at, google_event_id, error_message,
+    ) = row
+
+    exercises_data = (
+        exercises_json if isinstance(exercises_json, list) else json.loads(exercises_json or "[]")
+    )
+    exercises = [_dict_to_exercise(e) for e in exercises_data]
+
+    lift = Lift(
+        id=id_,
+        title=title,
+        description=description,
+        start_time=start_time,
+        end_time=end_time,
+        source=source,
+        exercises=exercises,
+        deleted_at=deleted_at,
+    )
+    return LiftWithSync(
+        lift=lift,
+        is_synced=(sync_status == "synced"),
+        sync_status=sync_status,
+        synced_at=synced_at,
+        google_event_id=google_event_id or None,
+        error_message=error_message,
     )
 
 

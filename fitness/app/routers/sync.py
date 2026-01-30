@@ -217,7 +217,7 @@ def unsync_run_from_calendar(
                     success=True,
                     message=f"Removed sync record for run {run_id}",
                     google_event_id=None,
-                    sync_status="failed",
+                    sync_status="unsynced",
                     synced_at=None,
                 )
             else:
@@ -240,7 +240,7 @@ def unsync_run_from_calendar(
                 success=True,
                 message=f"Successfully removed sync for run {run_id}",
                 google_event_id=synced_run.google_event_id,
-                sync_status="failed",
+                sync_status="unsynced",
                 synced_at=None,
             )
         else:

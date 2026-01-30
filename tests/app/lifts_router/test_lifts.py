@@ -3,13 +3,26 @@
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
+from fitness.db.lifts import LiftWithSync
 from tests._factories.lift import LiftFactory
+
+
+def _unsynced(lift) -> LiftWithSync:
+    """Wrap a Lift in a LiftWithSync with no sync data."""
+    return LiftWithSync(
+        lift=lift,
+        is_synced=False,
+        sync_status=None,
+        synced_at=None,
+        google_event_id=None,
+        error_message=None,
+    )
 
 
 class TestGetLifts:
     """Test GET /lifts endpoint."""
 
-    @patch("fitness.app.routers.lifts.get_all_lifts")
+    @patch("fitness.app.routers.lifts.get_all_lifts_with_sync")
     def test_get_lifts_returns_list(
         self,
         mock_get_lifts: MagicMock,
@@ -20,7 +33,7 @@ class TestGetLifts:
         # DB returns prefixed IDs
         workout = workout_factory.make({"id": "hevy_100", "title": "Push Day"})
 
-        mock_get_lifts.return_value = [workout]
+        mock_get_lifts.return_value = [_unsynced(workout)]
 
         response = viewer_client.get("/lifts")
 
@@ -31,7 +44,7 @@ class TestGetLifts:
         assert data["lifts"][0]["id"] == "hevy_100"
         assert data["lifts"][0]["title"] == "Push Day"
 
-    @patch("fitness.app.routers.lifts.get_all_lifts")
+    @patch("fitness.app.routers.lifts.get_all_lifts_with_sync")
     def test_get_lifts_empty(
         self,
         mock_get_lifts: MagicMock,
@@ -136,7 +149,7 @@ class TestGetLift:
 class TestGetLiftsDateFiltering:
     """Test GET /lifts endpoint with date filtering."""
 
-    @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range_with_sync")
     def test_get_lifts_with_start_date_only(
         self,
         mock_get_lifts: MagicMock,
@@ -145,7 +158,7 @@ class TestGetLiftsDateFiltering:
         """Test filtering lifts with only start_date."""
         lift_factory = LiftFactory()
         lift = lift_factory.make({"id": "hevy_100"})
-        mock_get_lifts.return_value = [lift]
+        mock_get_lifts.return_value = [_unsynced(lift)]
 
         response = viewer_client.get("/lifts?start_date=2024-01-01")
 
@@ -157,7 +170,7 @@ class TestGetLiftsDateFiltering:
         assert call_args[0][0] == date(2024, 1, 1)
         assert call_args[0][1] is None
 
-    @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range_with_sync")
     def test_get_lifts_with_end_date_only(
         self,
         mock_get_lifts: MagicMock,
@@ -166,7 +179,7 @@ class TestGetLiftsDateFiltering:
         """Test filtering lifts with only end_date."""
         lift_factory = LiftFactory()
         lift = lift_factory.make({"id": "hevy_100"})
-        mock_get_lifts.return_value = [lift]
+        mock_get_lifts.return_value = [_unsynced(lift)]
 
         response = viewer_client.get("/lifts?end_date=2024-12-31")
 
@@ -178,7 +191,7 @@ class TestGetLiftsDateFiltering:
         assert call_args[0][0] is None
         assert call_args[0][1] == date(2024, 12, 31)
 
-    @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range_with_sync")
     def test_get_lifts_with_both_dates(
         self,
         mock_get_lifts: MagicMock,
@@ -187,7 +200,7 @@ class TestGetLiftsDateFiltering:
         """Test filtering lifts with both start_date and end_date."""
         lift_factory = LiftFactory()
         lift = lift_factory.make({"id": "hevy_100"})
-        mock_get_lifts.return_value = [lift]
+        mock_get_lifts.return_value = [_unsynced(lift)]
 
         response = viewer_client.get("/lifts?start_date=2024-01-01&end_date=2024-12-31")
 
@@ -198,13 +211,13 @@ class TestGetLiftsDateFiltering:
         assert call_args[0][0] == date(2024, 1, 1)
         assert call_args[0][1] == date(2024, 12, 31)
 
-    @patch("fitness.app.routers.lifts.get_all_lifts")
+    @patch("fitness.app.routers.lifts.get_all_lifts_with_sync")
     def test_get_lifts_without_dates_uses_get_all(
         self,
         mock_get_all: MagicMock,
         viewer_client: TestClient,
     ):
-        """Test that no date params uses get_all_lifts."""
+        """Test that no date params uses get_all_lifts_with_sync."""
         mock_get_all.return_value = []
 
         response = viewer_client.get("/lifts")

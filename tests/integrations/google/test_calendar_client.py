@@ -7,6 +7,7 @@ import httpx
 
 from fitness.integrations.google.calendar_client import GoogleCalendarClient
 from fitness.models.run import Run
+from fitness.models.lift import Lift
 from fitness.db.oauth_credentials import OAuthCredentials
 
 
@@ -606,3 +607,136 @@ class TestGoogleCalendarClientGetEvent:
             event = client.get_event("nonexistent_event")
 
             assert event is None
+
+
+def _make_test_lift(
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+) -> Lift:
+    """Create a test Lift object with sensible defaults."""
+    return Lift(
+        id="hevy_workout_123",
+        title="Push Day",
+        description="Chest and triceps",
+        start_time=start_time or datetime(2025, 8, 9, 14, 0, 0, tzinfo=timezone.utc),
+        end_time=end_time or datetime(2025, 8, 9, 15, 30, 0, tzinfo=timezone.utc),
+        source="Hevy",
+        exercises=[],
+    )
+
+
+class TestGoogleCalendarClientCreateLiftEvent:
+    """Test lift event creation functionality."""
+
+    @patch("httpx.Client")
+    def test_create_lift_event_success(self, mock_client):
+        """Test successful lift event creation."""
+        mock_creds = create_mock_google_credentials()
+        with patch(
+            "fitness.integrations.google.calendar_client.get_credentials",
+            return_value=mock_creds,
+        ):
+            lift = _make_test_lift()
+
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "id": "google_event_456",
+                "summary": "Lift: Push Day",
+            }
+
+            mock_client_instance = Mock()
+            mock_client.return_value.__enter__.return_value = mock_client_instance
+            mock_client_instance.request.return_value = mock_response
+
+            with patch("os.getenv", return_value=None):
+                client = GoogleCalendarClient()
+                event_id = client.create_lift_event(lift)
+
+            assert event_id == "google_event_456"
+
+            call_args = mock_client_instance.request.call_args
+            assert call_args[0][0] == "POST"
+            assert (
+                call_args[0][1]
+                == "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+            )
+
+            event_data = call_args[1]["json"]
+            assert event_data["summary"] == "Lift: Push Day"
+            assert "Workout synced from fitness app" in event_data["description"]
+            assert "Lift ID: hevy_workout_123" in event_data["description"]
+            assert "dateTime" in event_data["start"]
+            assert "dateTime" in event_data["end"]
+
+    @patch("httpx.Client")
+    def test_create_lift_event_uses_start_and_end_times(self, mock_client):
+        """Test that lift event uses the lift's start_time and end_time."""
+        mock_creds = create_mock_google_credentials()
+        with patch(
+            "fitness.integrations.google.calendar_client.get_credentials",
+            return_value=mock_creds,
+        ):
+            lift = _make_test_lift(
+                start_time=datetime(2025, 8, 9, 14, 0, 0, tzinfo=timezone.utc),
+                end_time=datetime(2025, 8, 9, 15, 0, 0, tzinfo=timezone.utc),
+            )
+
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"id": "google_event_456"}
+
+            mock_client_instance = Mock()
+            mock_client.return_value.__enter__.return_value = mock_client_instance
+            mock_client_instance.request.return_value = mock_response
+
+            client = GoogleCalendarClient()
+            client.create_lift_event(lift)
+
+            event_data = mock_client_instance.request.call_args[1]["json"]
+            start_dt = event_data["start"]["dateTime"]
+            end_dt = event_data["end"]["dateTime"]
+            assert "14:00:00" in start_dt
+            assert "15:00:00" in end_dt
+
+    @patch("httpx.Client")
+    def test_create_lift_event_failure(self, mock_client):
+        """Test failed lift event creation."""
+        mock_creds = create_mock_google_credentials()
+        with patch(
+            "fitness.integrations.google.calendar_client.get_credentials",
+            return_value=mock_creds,
+        ):
+            lift = _make_test_lift()
+
+            mock_response = Mock()
+            mock_response.status_code = 400
+            mock_response.text = "Invalid event data"
+
+            mock_client_instance = Mock()
+            mock_client.return_value.__enter__.return_value = mock_client_instance
+            mock_client_instance.request.return_value = mock_response
+
+            client = GoogleCalendarClient()
+            event_id = client.create_lift_event(lift)
+
+            assert event_id is None
+
+    @patch("httpx.Client")
+    def test_create_lift_event_no_response(self, mock_client):
+        """Test lift event creation with no response."""
+        mock_creds = create_mock_google_credentials()
+        with patch(
+            "fitness.integrations.google.calendar_client.get_credentials",
+            return_value=mock_creds,
+        ):
+            lift = _make_test_lift()
+
+            mock_client_instance = Mock()
+            mock_client.return_value.__enter__.return_value = mock_client_instance
+            mock_client_instance.request.return_value = None
+
+            client = GoogleCalendarClient()
+            event_id = client.create_lift_event(lift)
+
+            assert event_id is None

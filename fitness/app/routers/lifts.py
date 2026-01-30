@@ -12,11 +12,14 @@ from fitness.models.user import User
 from fitness.models.lift import Lift
 from fitness.db.lifts import (
     get_all_lifts,
+    get_all_lifts_with_sync,
     get_lifts_in_date_range,
+    get_lifts_in_date_range_with_sync,
     get_lift_by_id,
     get_lift_count,
     get_all_exercise_templates,
 )
+from fitness.models.sync import SyncStatus
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,11 @@ class LiftSummary(BaseModel):
     total_volume_kg: float
     total_sets: int
     exercise_count: int
+    is_synced: bool = False
+    sync_status: Optional[SyncStatus] = None
+    synced_at: Optional[datetime] = None
+    google_event_id: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 class LiftsResponse(BaseModel):
@@ -88,21 +96,26 @@ async def get_lifts(
     Returns lifts in descending order by start time.
     """
     if start_date or end_date:
-        lifts = get_lifts_in_date_range(start_date, end_date)
+        lifts_with_sync = get_lifts_in_date_range_with_sync(start_date, end_date)
     else:
-        lifts = get_all_lifts()
+        lifts_with_sync = get_all_lifts_with_sync()
 
     summaries = [
         LiftSummary(
-            id=lift.id,
-            title=lift.title,
-            start_time=lift.start_time,
-            end_time=lift.end_time,
-            total_volume_kg=lift.total_volume(),
-            total_sets=lift.total_sets(),
-            exercise_count=len(lift.exercises),
+            id=lws.lift.id,
+            title=lws.lift.title,
+            start_time=lws.lift.start_time,
+            end_time=lws.lift.end_time,
+            total_volume_kg=lws.lift.total_volume(),
+            total_sets=lws.lift.total_sets(),
+            exercise_count=len(lws.lift.exercises),
+            is_synced=lws.is_synced,
+            sync_status=lws.sync_status,
+            synced_at=lws.synced_at,
+            google_event_id=lws.google_event_id,
+            error_message=lws.error_message,
         )
-        for lift in lifts
+        for lws in lifts_with_sync
     ]
 
     return LiftsResponse(
