@@ -182,7 +182,7 @@ def unsync_lift_from_calendar(
                     success=True,
                     message=f"Removed sync record for lift {lift_id}",
                     google_event_id=None,
-                    sync_status="failed",
+                    sync_status="unsynced",
                     synced_at=None,
                 )
             else:
@@ -204,7 +204,7 @@ def unsync_lift_from_calendar(
                 success=True,
                 message=f"Successfully removed sync for lift {lift_id}",
                 google_event_id=synced_lift.google_event_id,
-                sync_status="failed",
+                sync_status="unsynced",
                 synced_at=None,
             )
         else:

@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
-SyncStatus = Literal["synced", "failed", "pending"]
+SyncStatus = Literal["synced", "failed", "pending", "unsynced"]
 
 
 class SyncedRun(BaseModel):
