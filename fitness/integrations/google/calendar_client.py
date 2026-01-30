@@ -358,7 +358,7 @@ class GoogleCalendarClient:
                 try:
                     error_data = response.json()
                 except Exception:
-                    pass
+                    pass  # Not JSON, use text instead
 
             logger.error(
                 f"Failed to create calendar event: lift_id={lift.id}, "
