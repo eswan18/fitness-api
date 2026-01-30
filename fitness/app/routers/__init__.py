@@ -9,6 +9,7 @@ from .summary import router as summary_router
 from .hevy import router as hevy_router
 from .lifts import router as lifts_router
 from .exercise_templates import router as exercise_templates_router
+from .lift_sync import router as lift_sync_router
 
 __all__ = [
     "metrics_router",
@@ -22,4 +23,5 @@ __all__ = [
     "hevy_router",
     "lifts_router",
     "exercise_templates_router",
+    "lift_sync_router",
 ]

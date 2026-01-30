@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any
 
 import httpx
 from fitness.models.run import Run
+from fitness.models.lift import Lift
 from fitness.db.oauth_credentials import get_credentials, update_access_token
 
 logger = logging.getLogger(__name__)
@@ -303,6 +304,64 @@ class GoogleCalendarClient:
 
             logger.error(
                 f"Failed to create calendar event: run_id={run.id}, "
+                f"calendar_id={self.calendar_id}, status_code={status_code}, "
+                f"error_data={error_data}, response_text={error_text[:500]}"
+            )
+            return None
+
+    def create_lift_event(self, lift: Lift) -> Optional[str]:
+        """Create a calendar event for a weightlifting workout.
+
+        Args:
+            lift: The Lift object to create an event for.
+
+        Returns:
+            Google Calendar event ID if successful, None otherwise.
+        """
+        event_title = f"Lift: {lift.title}"
+
+        # Ensure timezone-aware datetimes
+        start_dt = lift.start_time
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+        end_dt = lift.end_time
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=timezone.utc)
+
+        event_data = {
+            "summary": event_title,
+            "description": f"Workout synced from fitness app\nLift ID: {lift.id}",
+            "start": {
+                "dateTime": start_dt.isoformat(),
+            },
+            "end": {
+                "dateTime": end_dt.isoformat(),
+            },
+        }
+
+        url = f"{self.base_url}/calendars/{self.calendar_id}/events"
+        response = self._make_request("POST", url, json=event_data)
+
+        if response and 200 <= response.status_code < 300:
+            event = response.json()
+            event_id = event.get("id")
+            logger.info(
+                f"Successfully created calendar event: lift_id={lift.id}, "
+                f"event_id={event_id}, calendar_id={self.calendar_id}"
+            )
+            return event_id
+        else:
+            status_code = response.status_code if response else "N/A"
+            error_text = response.text if response else "No response received"
+            error_data = None
+            if response:
+                try:
+                    error_data = response.json()
+                except Exception:
+                    pass
+
+            logger.error(
+                f"Failed to create calendar event: lift_id={lift.id}, "
                 f"calendar_id={self.calendar_id}, status_code={status_code}, "
                 f"error_data={error_data}, response_text={error_text[:500]}"
             )
