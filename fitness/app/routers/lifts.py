@@ -17,6 +17,8 @@ from fitness.db.lifts import (
     get_lift_count,
     get_all_exercise_templates,
 )
+from fitness.db.synced_lifts import get_all_synced_lifts
+from fitness.models.sync import SyncStatus
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,11 @@ class LiftSummary(BaseModel):
     total_volume_kg: float
     total_sets: int
     exercise_count: int
+    is_synced: bool = False
+    sync_status: Optional[SyncStatus] = None
+    synced_at: Optional[datetime] = None
+    google_event_id: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 class LiftsResponse(BaseModel):
@@ -92,18 +99,29 @@ async def get_lifts(
     else:
         lifts = get_all_lifts()
 
-    summaries = [
-        LiftSummary(
-            id=lift.id,
-            title=lift.title,
-            start_time=lift.start_time,
-            end_time=lift.end_time,
-            total_volume_kg=lift.total_volume(),
-            total_sets=lift.total_sets(),
-            exercise_count=len(lift.exercises),
+    # Build sync lookup from synced_lifts table
+    synced_lifts = get_all_synced_lifts()
+    sync_by_lift_id = {sl.lift_id: sl for sl in synced_lifts}
+
+    summaries = []
+    for lift in lifts:
+        sl = sync_by_lift_id.get(lift.id)
+        summaries.append(
+            LiftSummary(
+                id=lift.id,
+                title=lift.title,
+                start_time=lift.start_time,
+                end_time=lift.end_time,
+                total_volume_kg=lift.total_volume(),
+                total_sets=lift.total_sets(),
+                exercise_count=len(lift.exercises),
+                is_synced=sl is not None and sl.sync_status == "synced",
+                sync_status=sl.sync_status if sl else None,
+                synced_at=sl.synced_at if sl else None,
+                google_event_id=sl.google_event_id if sl else None,
+                error_message=sl.error_message if sl else None,
+            )
         )
-        for lift in lifts
-    ]
 
     return LiftsResponse(
         lifts=summaries,

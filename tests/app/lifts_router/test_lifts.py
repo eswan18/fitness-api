@@ -9,10 +9,12 @@ from tests._factories.lift import LiftFactory
 class TestGetLifts:
     """Test GET /lifts endpoint."""
 
+    @patch("fitness.app.routers.lifts.get_all_synced_lifts", return_value=[])
     @patch("fitness.app.routers.lifts.get_all_lifts")
     def test_get_lifts_returns_list(
         self,
         mock_get_lifts: MagicMock,
+        _mock_synced: MagicMock,
         viewer_client: TestClient,
     ):
         """Test that get lifts returns lift summaries."""
@@ -31,10 +33,12 @@ class TestGetLifts:
         assert data["lifts"][0]["id"] == "hevy_100"
         assert data["lifts"][0]["title"] == "Push Day"
 
+    @patch("fitness.app.routers.lifts.get_all_synced_lifts", return_value=[])
     @patch("fitness.app.routers.lifts.get_all_lifts")
     def test_get_lifts_empty(
         self,
         mock_get_lifts: MagicMock,
+        _mock_synced: MagicMock,
         viewer_client: TestClient,
     ):
         """Test that get lifts returns empty list when no lifts."""
@@ -136,10 +140,12 @@ class TestGetLift:
 class TestGetLiftsDateFiltering:
     """Test GET /lifts endpoint with date filtering."""
 
+    @patch("fitness.app.routers.lifts.get_all_synced_lifts", return_value=[])
     @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
     def test_get_lifts_with_start_date_only(
         self,
         mock_get_lifts: MagicMock,
+        _mock_synced: MagicMock,
         viewer_client: TestClient,
     ):
         """Test filtering lifts with only start_date."""
@@ -157,10 +163,12 @@ class TestGetLiftsDateFiltering:
         assert call_args[0][0] == date(2024, 1, 1)
         assert call_args[0][1] is None
 
+    @patch("fitness.app.routers.lifts.get_all_synced_lifts", return_value=[])
     @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
     def test_get_lifts_with_end_date_only(
         self,
         mock_get_lifts: MagicMock,
+        _mock_synced: MagicMock,
         viewer_client: TestClient,
     ):
         """Test filtering lifts with only end_date."""
@@ -178,10 +186,12 @@ class TestGetLiftsDateFiltering:
         assert call_args[0][0] is None
         assert call_args[0][1] == date(2024, 12, 31)
 
+    @patch("fitness.app.routers.lifts.get_all_synced_lifts", return_value=[])
     @patch("fitness.app.routers.lifts.get_lifts_in_date_range")
     def test_get_lifts_with_both_dates(
         self,
         mock_get_lifts: MagicMock,
+        _mock_synced: MagicMock,
         viewer_client: TestClient,
     ):
         """Test filtering lifts with both start_date and end_date."""
@@ -198,10 +208,12 @@ class TestGetLiftsDateFiltering:
         assert call_args[0][0] == date(2024, 1, 1)
         assert call_args[0][1] == date(2024, 12, 31)
 
+    @patch("fitness.app.routers.lifts.get_all_synced_lifts", return_value=[])
     @patch("fitness.app.routers.lifts.get_all_lifts")
     def test_get_lifts_without_dates_uses_get_all(
         self,
         mock_get_all: MagicMock,
+        _mock_synced: MagicMock,
         viewer_client: TestClient,
     ):
         """Test that no date params uses get_all_lifts."""
