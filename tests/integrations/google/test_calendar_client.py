@@ -609,19 +609,20 @@ class TestGoogleCalendarClientGetEvent:
             assert event is None
 
 
-def _make_test_lift(**kwargs) -> Lift:
+def _make_test_lift(
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+) -> Lift:
     """Create a test Lift object with sensible defaults."""
-    defaults = {
-        "id": "hevy_workout_123",
-        "title": "Push Day",
-        "description": "Chest and triceps",
-        "start_time": datetime(2025, 8, 9, 14, 0, 0, tzinfo=timezone.utc),
-        "end_time": datetime(2025, 8, 9, 15, 30, 0, tzinfo=timezone.utc),
-        "source": "Hevy",
-        "exercises": [],
-    }
-    defaults.update(kwargs)
-    return Lift(**defaults)
+    return Lift(
+        id="hevy_workout_123",
+        title="Push Day",
+        description="Chest and triceps",
+        start_time=start_time or datetime(2025, 8, 9, 14, 0, 0, tzinfo=timezone.utc),
+        end_time=end_time or datetime(2025, 8, 9, 15, 30, 0, tzinfo=timezone.utc),
+        source="Hevy",
+        exercises=[],
+    )
 
 
 class TestGoogleCalendarClientCreateLiftEvent:
