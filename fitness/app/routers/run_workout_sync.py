@@ -29,6 +29,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sync", tags=["sync"])
 
 
+# Static routes must be registered before parameterized routes to avoid
+# path parameters like {run_workout_id} matching "failed".
+
+
+@router.get("/run-workouts", response_model=List[SyncedRunWorkout])
+def get_all_run_workout_sync_records(
+    _user: User = Depends(require_viewer),
+) -> List[SyncedRunWorkout]:
+    """Get all run workout sync records for debugging/admin purposes."""
+    return get_all_synced_run_workouts()
+
+
+@router.get("/run-workouts/failed", response_model=List[SyncedRunWorkout])
+def get_failed_run_workout_sync_records(
+    _user: User = Depends(require_viewer),
+) -> List[SyncedRunWorkout]:
+    """Get all run workouts with failed sync status for retry/debugging."""
+    return get_failed_run_workout_syncs()
+
+
 @router.get("/run-workouts/{run_workout_id}/status", response_model=SyncRunWorkoutStatusResponse)
 def get_run_workout_sync_status(
     run_workout_id: str,
@@ -152,7 +172,7 @@ def sync_run_workout_to_calendar(
             else:
                 create_synced_run_workout(
                     run_workout_id=run_workout_id,
-                    google_event_id="",
+                    google_event_id=None,
                     sync_status="failed",
                     error_message=error_msg,
                 )
@@ -239,19 +259,3 @@ def unsync_run_workout_from_calendar(
             sync_status=synced.sync_status,
             synced_at=synced.synced_at,
         )
-
-
-@router.get("/run-workouts", response_model=List[SyncedRunWorkout])
-def get_all_run_workout_sync_records(
-    _user: User = Depends(require_viewer),
-) -> List[SyncedRunWorkout]:
-    """Get all run workout sync records for debugging/admin purposes."""
-    return get_all_synced_run_workouts()
-
-
-@router.get("/run-workouts/failed", response_model=List[SyncedRunWorkout])
-def get_failed_run_workout_sync_records(
-    _user: User = Depends(require_viewer),
-) -> List[SyncedRunWorkout]:
-    """Get all run workouts with failed sync status for retry/debugging."""
-    return get_failed_run_workout_syncs()

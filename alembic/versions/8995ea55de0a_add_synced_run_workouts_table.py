@@ -24,7 +24,7 @@ def upgrade() -> None:
             id SERIAL PRIMARY KEY,
             run_workout_id VARCHAR(255) NOT NULL,
             run_workout_version INTEGER NOT NULL DEFAULT 1,
-            google_event_id VARCHAR(255) NOT NULL,
+            google_event_id VARCHAR(255),
             synced_at TIMESTAMP NOT NULL DEFAULT NOW(),
             sync_status VARCHAR(20) NOT NULL DEFAULT 'synced'
                 CHECK (sync_status IN ('synced', 'failed', 'pending')),

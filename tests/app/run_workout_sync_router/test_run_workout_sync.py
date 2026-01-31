@@ -23,7 +23,7 @@ def _make_workout(id: str = "rw_1", title: str = "Speed Workout") -> RunWorkout:
 
 def _make_synced_run_workout(
     run_workout_id: str = "rw_1",
-    google_event_id: str = "gcal_123",
+    google_event_id: str | None = "gcal_123",
     sync_status: SyncStatus = "synced",
     error_message: str | None = None,
 ) -> SyncedRunWorkout:
@@ -295,7 +295,7 @@ class TestUnsyncRunWorkout:
     ):
         """A failed sync record should be deletable without calling Google."""
         mock_get.return_value = _make_synced_run_workout(
-            sync_status="failed", google_event_id=""
+            sync_status="failed", google_event_id=None
         )
         response = editor_client.delete("/sync/run-workouts/rw_1")
         assert response.status_code == 200

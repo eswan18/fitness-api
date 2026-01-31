@@ -95,7 +95,9 @@ class SyncedRunWorkout(BaseModel):
     run_workout_version: int = Field(
         default=1, description="Version of the run workout that was synced"
     )
-    google_event_id: str = Field(description="Google Calendar event ID")
+    google_event_id: Optional[str] = Field(
+        default=None, description="Google Calendar event ID"
+    )
     synced_at: datetime = Field(description="When the sync occurred")
     sync_status: SyncStatus = Field(default="synced")
     error_message: Optional[str] = Field(

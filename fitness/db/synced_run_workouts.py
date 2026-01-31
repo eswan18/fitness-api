@@ -73,7 +73,7 @@ def get_synced_run_workout(run_workout_id: str) -> SyncedRunWorkout | None:
 
 def create_synced_run_workout(
     run_workout_id: str,
-    google_event_id: str,
+    google_event_id: str | None,
     run_workout_version: int = 1,
     sync_status: SyncStatus = "synced",
     error_message: str | None = None,
