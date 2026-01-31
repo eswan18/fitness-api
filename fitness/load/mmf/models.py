@@ -72,14 +72,14 @@ class MmfActivity(BaseModel):
     avg_pace: float = Field(
         validation_alias=AliasChoices("avg_pace", "Avg Pace (min/mi)")
     )
-    max_pace: float = Field(
-        validation_alias=AliasChoices("max_pace", "Max Pace (min/mi)")
+    max_pace: Annotated[float | None, BeforeValidator(empty_str_to_none)] = Field(
+        validation_alias=AliasChoices("max_pace", "Max Pace (min/mi)"),
     )
     avg_speed: float = Field(
         validation_alias=AliasChoices("avg_speed", "Avg Speed (mi/h)")
     )
-    max_speed: float = Field(
-        validation_alias=AliasChoices("max_speed", "Max Speed (mi/h)")
+    max_speed: Annotated[float | None, BeforeValidator(empty_str_to_none)] = Field(
+        validation_alias=AliasChoices("max_speed", "Max Speed (mi/h)"),
     )
     avg_heart_rate: Annotated[float | None, BeforeValidator(empty_str_to_none)] = Field(
         validation_alias=AliasChoices("avg_heart_rate", "Avg Heart Rate"),
