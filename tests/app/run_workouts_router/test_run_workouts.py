@@ -334,7 +334,7 @@ class TestActivityFeed:
         assert len(data) == 2
         assert all(item["type"] == "run" for item in data)
 
-    @patch(f"{_DB_MOD}.get_all_synced_run_workouts", return_value=[])
+    @patch(f"{_DB_MOD}.get_synced_run_workouts_by_ids", return_value=[])
     @patch(f"{_DB_MOD}.get_run_workouts_by_ids")
     @patch("fitness.db.runs.get_all_run_details")
     def test_workout_grouped(
@@ -407,7 +407,7 @@ class TestActivityFeed:
         assert data[0]["item"]["id"] == "run_1"
         assert data[1]["item"]["id"] == "run_2"
 
-    @patch(f"{_DB_MOD}.get_all_synced_run_workouts", return_value=[])
+    @patch(f"{_DB_MOD}.get_synced_run_workouts_by_ids", return_value=[])
     @patch(f"{_DB_MOD}.get_run_workouts_by_ids")
     @patch("fitness.db.runs.get_all_run_details")
     def test_workout_aggregates(

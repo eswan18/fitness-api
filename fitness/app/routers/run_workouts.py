@@ -11,7 +11,7 @@ from fitness.app.auth import require_viewer, require_editor
 from fitness.models.user import User
 from fitness.models.run_detail import RunDetail
 from fitness.models.run_workout import RunWorkout, RunWorkoutDetail
-from fitness.db.synced_run_workouts import get_all_synced_run_workouts
+from fitness.db.synced_run_workouts import get_synced_run_workouts_by_ids
 from fitness.db.run_workouts import (
     create_run_workout,
     get_run_workout_by_id,
@@ -238,8 +238,8 @@ def build_activity_feed(
     # Add workouts (batch-fetch to avoid N+1 queries)
     if workout_runs:
         workouts_by_id = get_run_workouts_by_ids(list(workout_runs.keys()))
-        all_syncs = get_all_synced_run_workouts()
-        syncs_by_workout_id = {s.run_workout_id: s for s in all_syncs}
+        workout_syncs = get_synced_run_workouts_by_ids(list(workout_runs.keys()))
+        syncs_by_workout_id = {s.run_workout_id: s for s in workout_syncs}
 
         for workout_id, runs in workout_runs.items():
             workout = workouts_by_id.get(workout_id)

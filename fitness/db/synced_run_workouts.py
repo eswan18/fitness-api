@@ -256,6 +256,35 @@ def delete_synced_run_workout(run_workout_id: str) -> bool:
         raise
 
 
+def get_synced_run_workouts_by_ids(run_workout_ids: list[str]) -> list[SyncedRunWorkout]:
+    """Get sync records for a specific set of run workout IDs."""
+    if not run_workout_ids:
+        return []
+    try:
+        logger.debug(f"Querying sync records for {len(run_workout_ids)} workout IDs")
+
+        with get_db_cursor() as cursor:
+            placeholders = sql.SQL(", ").join([sql.Placeholder()] * len(run_workout_ids))
+            query = sql.SQL("""
+                SELECT id, run_workout_id, run_workout_version, google_event_id, synced_at,
+                       sync_status, error_message, created_at, updated_at
+                FROM synced_run_workouts
+                WHERE run_workout_id IN ({placeholders})
+            """).format(placeholders=placeholders)
+            cursor.execute(query, run_workout_ids)
+
+            results = [_row_to_synced_run_workout(row) for row in cursor.fetchall()]
+
+            logger.debug(f"Retrieved sync records: requested={len(run_workout_ids)}, found={len(results)}")
+            return results
+    except Exception as e:
+        logger.exception(
+            f"Database error retrieving sync records by IDs: "
+            f"exception_type={type(e).__name__}, error={e}"
+        )
+        raise
+
+
 def get_all_synced_run_workouts() -> list[SyncedRunWorkout]:
     """Get all sync records."""
     try:
