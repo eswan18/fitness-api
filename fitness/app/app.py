@@ -32,6 +32,7 @@ from .routers import (
     exercise_templates_router,
     lift_sync_router,
     run_workouts_router,
+    run_workout_sync_router,
 )
 from .models import EnvironmentResponse
 from .auth import require_viewer
@@ -76,6 +77,7 @@ app.include_router(lifts_router)
 app.include_router(exercise_templates_router)
 app.include_router(lift_sync_router)
 app.include_router(run_workouts_router)
+app.include_router(run_workout_sync_router)
 app.add_middleware(
     CORSMiddleware,  # type: ignore[arg-type]
     allow_origins=[

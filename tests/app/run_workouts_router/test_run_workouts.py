@@ -334,12 +334,14 @@ class TestActivityFeed:
         assert len(data) == 2
         assert all(item["type"] == "run" for item in data)
 
+    @patch(f"{_DB_MOD}.get_all_synced_run_workouts", return_value=[])
     @patch(f"{_DB_MOD}.get_run_workouts_by_ids")
     @patch("fitness.db.runs.get_all_run_details")
     def test_workout_grouped(
         self,
         mock_get_details: MagicMock,
         mock_get_workouts: MagicMock,
+        _mock_syncs: MagicMock,
         viewer_client: TestClient,
     ):
         mock_get_details.return_value = [
@@ -405,12 +407,14 @@ class TestActivityFeed:
         assert data[0]["item"]["id"] == "run_1"
         assert data[1]["item"]["id"] == "run_2"
 
+    @patch(f"{_DB_MOD}.get_all_synced_run_workouts", return_value=[])
     @patch(f"{_DB_MOD}.get_run_workouts_by_ids")
     @patch("fitness.db.runs.get_all_run_details")
     def test_workout_aggregates(
         self,
         mock_get_details: MagicMock,
         mock_get_workouts: MagicMock,
+        _mock_syncs: MagicMock,
         viewer_client: TestClient,
     ):
         """Verify computed aggregates for a workout in the feed."""

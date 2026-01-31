@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 import httpx
 from fitness.models.run import Run
 from fitness.models.lift import Lift
+from fitness.models.run_workout import RunWorkout
 from fitness.db.oauth_credentials import get_credentials, update_access_token
 
 logger = logging.getLogger(__name__)
@@ -362,6 +363,103 @@ class GoogleCalendarClient:
 
             logger.error(
                 f"Failed to create calendar event: lift_id={lift.id}, "
+                f"calendar_id={self.calendar_id}, status_code={status_code}, "
+                f"error_data={error_data}, response_text={error_text[:500]}"
+            )
+            return None
+
+    def create_run_workout_event(
+        self, workout: RunWorkout, runs: list[Run]
+    ) -> Optional[str]:
+        """Create a calendar event for a run workout (grouped runs).
+
+        Args:
+            workout: The RunWorkout object.
+            runs: The constituent Run objects, sorted by datetime_utc.
+
+        Returns:
+            Google Calendar event ID if successful, None otherwise.
+        """
+        if not runs:
+            logger.error(f"No runs provided for workout {workout.id}")
+            return None
+
+        # Sort runs by start time
+        sorted_runs = sorted(runs, key=lambda r: r.datetime_utc)
+
+        # Event spans from first run start to last run end
+        first_run = sorted_runs[0]
+        last_run = sorted_runs[-1]
+        start_dt_utc = first_run.datetime_utc.replace(tzinfo=timezone.utc)
+        end_dt_utc = last_run.datetime_utc.replace(tzinfo=timezone.utc) + timedelta(
+            seconds=int(last_run.duration)
+        )
+
+        # Compute summary stats
+        total_distance = sum(r.distance for r in sorted_runs)
+        total_duration = sum(r.duration for r in sorted_runs)
+        total_minutes = int(total_duration) // 60
+        total_seconds = int(total_duration) % 60
+
+        # Weighted average HR
+        hr_runs = [(r.avg_heart_rate, r.duration) for r in sorted_runs if r.avg_heart_rate]
+        avg_hr = None
+        if hr_runs:
+            total_hr_weight = sum(hr * dur for hr, dur in hr_runs)
+            total_weight = sum(dur for _, dur in hr_runs)
+            if total_weight > 0:
+                avg_hr = total_hr_weight / total_weight
+
+        # Build description
+        lines = [
+            f"{len(sorted_runs)} runs · {total_distance:.2f} mi · {total_minutes}:{total_seconds:02d}",
+        ]
+        if avg_hr is not None:
+            lines.append(f"Avg HR: {avg_hr:.0f} bpm")
+        if workout.notes:
+            lines.append(f"\n{workout.notes}")
+        lines.append("")
+        for i, run in enumerate(sorted_runs, 1):
+            pace_seconds = int(run.duration / run.distance) if run.distance > 0 else 0
+            pace_min = pace_seconds // 60
+            pace_sec = pace_seconds % 60
+            lines.append(f"  {i}. {run.distance:.2f} mi @ {pace_min}:{pace_sec:02d}/mi")
+        lines.append(f"\nWorkout ID: {workout.id}")
+
+        event_data = {
+            "summary": workout.title,
+            "description": "\n".join(lines),
+            "start": {
+                "dateTime": start_dt_utc.isoformat(),
+            },
+            "end": {
+                "dateTime": end_dt_utc.isoformat(),
+            },
+        }
+
+        url = f"{self.base_url}/calendars/{self.calendar_id}/events"
+        response = self._make_request("POST", url, json=event_data)
+
+        if response and 200 <= response.status_code < 300:
+            event = response.json()
+            event_id = event.get("id")
+            logger.info(
+                f"Successfully created calendar event: run_workout_id={workout.id}, "
+                f"event_id={event_id}, calendar_id={self.calendar_id}"
+            )
+            return event_id
+        else:
+            status_code = response.status_code if response else "N/A"
+            error_text = response.text if response else "No response received"
+            error_data = None
+            if response:
+                try:
+                    error_data = response.json()
+                except Exception:
+                    pass
+
+            logger.error(
+                f"Failed to create calendar event: run_workout_id={workout.id}, "
                 f"calendar_id={self.calendar_id}, status_code={status_code}, "
                 f"error_data={error_data}, response_text={error_text[:500]}"
             )

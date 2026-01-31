@@ -11,6 +11,7 @@ from fitness.app.auth import require_viewer, require_editor
 from fitness.models.user import User
 from fitness.models.run_detail import RunDetail
 from fitness.models.run_workout import RunWorkout, RunWorkoutDetail
+from fitness.db.synced_run_workouts import get_all_synced_run_workouts
 from fitness.db.run_workouts import (
     create_run_workout,
     get_run_workout_by_id,
@@ -234,20 +235,28 @@ def build_activity_feed(
     for run in solo_runs:
         feed.append(ActivityFeedRunItem(item=run))
 
-    # Batch-fetch all referenced workouts to avoid N+1 queries
-    workouts_by_id = get_run_workouts_by_ids(list(workout_runs.keys()))
+    # Add workouts (batch-fetch to avoid N+1 queries)
+    if workout_runs:
+        workouts_by_id = get_run_workouts_by_ids(list(workout_runs.keys()))
+        all_syncs = get_all_synced_run_workouts()
+        syncs_by_workout_id = {s.run_workout_id: s for s in all_syncs}
 
-    # Add workouts
-    for workout_id, runs in workout_runs.items():
-        workout = workouts_by_id.get(workout_id)
-        if workout is None:
-            # Workout was deleted but runs still have FK — treat as solo
-            for run in runs:
-                feed.append(ActivityFeedRunItem(item=run))
-            continue
+        for workout_id, runs in workout_runs.items():
+            workout = workouts_by_id.get(workout_id)
+            if workout is None:
+                # Workout was deleted but runs still have FK — treat as solo
+                for run in runs:
+                    feed.append(ActivityFeedRunItem(item=run))
+                continue
 
-        detail = _compute_workout_detail(workout, runs)
-        feed.append(ActivityFeedWorkoutItem(item=detail))
+            detail = _compute_workout_detail(workout, runs)
+            # Enrich with sync status
+            sync_record = syncs_by_workout_id.get(workout_id)
+            if sync_record is not None:
+                detail.is_synced = sync_record.sync_status == "synced"
+                detail.sync_status = sync_record.sync_status
+                detail.google_event_id = sync_record.google_event_id
+            feed.append(ActivityFeedWorkoutItem(item=detail))
 
     # Sort by effective datetime
     def sort_key(
