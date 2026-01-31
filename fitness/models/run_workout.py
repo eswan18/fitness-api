@@ -6,6 +6,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from fitness.models.run_detail import RunDetail
+from fitness.models.sync import SyncStatus
 
 
 class RunWorkout(BaseModel):
@@ -32,5 +33,8 @@ class RunWorkoutDetail(BaseModel):
     avg_heart_rate: Optional[float] = None  # duration-weighted average
     run_count: int
     runs: list[RunDetail]
+    is_synced: bool = False
+    sync_status: Optional[SyncStatus] = None
+    google_event_id: Optional[str] = None
     created_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
