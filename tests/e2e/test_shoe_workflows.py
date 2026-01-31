@@ -102,7 +102,9 @@ def test_complete_shoe_lifecycle(viewer_client, editor_client):
     assert retired_test_shoe["retirement_notes"] == retirement_notes
 
     # 6. Test including retired shoes in mileage
-    res = viewer_client.get("/metrics/mileage/by-shoe", params={"include_retired": True})
+    res = viewer_client.get(
+        "/metrics/mileage/by-shoe", params={"include_retired": True}
+    )
     assert res.status_code == 200
     all_shoe_mileage = res.json()
 
@@ -406,7 +408,9 @@ def test_shoe_mileage_consistency(viewer_client, editor_client):
     assert res.status_code == 200
 
     # Get mileage after retirement (should be same when including retired)
-    res = viewer_client.get("/metrics/mileage/by-shoe", params={"include_retired": True})
+    res = viewer_client.get(
+        "/metrics/mileage/by-shoe", params={"include_retired": True}
+    )
     assert res.status_code == 200
     retired_mileage = res.json()
 

@@ -84,7 +84,9 @@ def test_runs_filtering_and_sorting(viewer_client):
     assert inserted == 3
 
     # Test date filtering
-    res = viewer_client.get("/runs", params={"start": "2024-02-03", "end": "2024-02-08"})
+    res = viewer_client.get(
+        "/runs", params={"start": "2024-02-03", "end": "2024-02-08"}
+    )
     assert res.status_code == 200
     filtered_runs = res.json()
     filtered_ids = [r["id"] for r in filtered_runs]
@@ -93,7 +95,9 @@ def test_runs_filtering_and_sorting(viewer_client):
     assert "sort_test_3" not in filtered_ids
 
     # Test sorting by distance (ascending)
-    res = viewer_client.get("/runs", params={"sort_by": "distance", "sort_order": "asc"})
+    res = viewer_client.get(
+        "/runs", params={"sort_by": "distance", "sort_order": "asc"}
+    )
     assert res.status_code == 200
     sorted_runs = res.json()
 
@@ -105,7 +109,9 @@ def test_runs_filtering_and_sorting(viewer_client):
         assert distances == sorted(distances)
 
     # Test sorting by heart rate (descending)
-    res = viewer_client.get("/runs", params={"sort_by": "heart_rate", "sort_order": "desc"})
+    res = viewer_client.get(
+        "/runs", params={"sort_by": "heart_rate", "sort_order": "desc"}
+    )
     assert res.status_code == 200
     hr_sorted_runs = res.json()
 
@@ -315,7 +321,9 @@ def test_timezone_handling(viewer_client):
     assert "tz_test_1" in tz_run_ids or "tz_test_2" in tz_run_ids
 
     # Test with UTC (no timezone conversion)
-    res = viewer_client.get("/runs", params={"start": "2024-06-01", "end": "2024-06-01"})
+    res = viewer_client.get(
+        "/runs", params={"start": "2024-06-01", "end": "2024-06-01"}
+    )
     assert res.status_code == 200
     utc_runs = res.json()
 

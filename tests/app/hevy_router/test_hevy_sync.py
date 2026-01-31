@@ -49,7 +49,11 @@ class TestSyncHevyData:
         workout_3 = workout_factory.make({"id": "300", "title": "Leg Day"})
 
         # Configure the mock client
-        mock_hevy_client.get_all_workouts.return_value = [workout_1, workout_2, workout_3]
+        mock_hevy_client.get_all_workouts.return_value = [
+            workout_1,
+            workout_2,
+            workout_3,
+        ]
         mock_hevy_client.get_exercise_template_by_id.return_value = None
 
         # Mock existing lift IDs in DB (prefixed) - "200" already exists

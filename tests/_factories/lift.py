@@ -65,10 +65,18 @@ class LiftFactory:
             source="Hevy",
             exercises=[
                 exercise_factory.make(
-                    {"index": 0, "title": "Bench Press", "exercise_template_id": "hevy_bp_001"}
+                    {
+                        "index": 0,
+                        "title": "Bench Press",
+                        "exercise_template_id": "hevy_bp_001",
+                    }
                 ),
                 exercise_factory.make(
-                    {"index": 1, "title": "Incline Press", "exercise_template_id": "hevy_ip_001"}
+                    {
+                        "index": 1,
+                        "title": "Incline Press",
+                        "exercise_template_id": "hevy_ip_001",
+                    }
                 ),
             ],
             deleted_at=None,

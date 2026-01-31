@@ -108,7 +108,9 @@ def create_synced_lift(
 
             result = cursor.fetchone()
             if result is None:
-                raise RuntimeError(f"Failed to create sync record for lift_id={lift_id}")
+                raise RuntimeError(
+                    f"Failed to create sync record for lift_id={lift_id}"
+                )
             sync_id, created_at, updated_at = result
 
             logger.info(

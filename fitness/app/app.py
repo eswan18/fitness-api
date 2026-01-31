@@ -216,7 +216,9 @@ def sort_runs_generic(
             return run.type
         elif sort_by == "shoes":
             # Handle RunDetail (shoes) and base Run (shoe_name)
-            return str(getattr(run, "shoes", None) or getattr(run, "shoe_name", "") or "")
+            return str(
+                getattr(run, "shoes", None) or getattr(run, "shoe_name", "") or ""
+            )
         else:
             # Default to date if unknown sort field
             return getattr(run, "localized_datetime", run.datetime_utc)

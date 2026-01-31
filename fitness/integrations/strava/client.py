@@ -139,9 +139,7 @@ class StravaClient:
 
             return response
 
-    def get_activities(
-        self, after: Optional[datetime] = None
-    ) -> list[StravaActivity]:
+    def get_activities(self, after: Optional[datetime] = None) -> list[StravaActivity]:
         """Get the activities from the Strava API.
 
         Args:
@@ -169,7 +167,9 @@ class StravaClient:
                 f"(page size: {per_page})"
             )
         else:
-            logger.info(f"Fetching all activities from Strava API (page size: {per_page})")
+            logger.info(
+                f"Fetching all activities from Strava API (page size: {per_page})"
+            )
 
         while True:
             params: dict[str, int] = {"per_page": per_page, "page": page}
@@ -236,7 +236,9 @@ class StravaClient:
                 logger.error(
                     f"Failed to fetch gear {id}: no response (token refresh may have failed)"
                 )
-                raise httpx.RequestError(f"Failed to fetch gear {id} - token refresh failed")
+                raise httpx.RequestError(
+                    f"Failed to fetch gear {id} - token refresh failed"
+                )
 
             if response.status_code != 200:
                 logger.error(

@@ -47,7 +47,9 @@ def mock_db_calls(monkeypatch):
     monkeypatch.setattr(
         "fitness.db.runs.get_run_details_in_date_range", lambda *args, **kwargs: []
     )
-    monkeypatch.setattr("fitness.db.runs.get_all_run_details", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "fitness.db.runs.get_all_run_details", lambda *args, **kwargs: []
+    )
 
 
 # Shared test user data
