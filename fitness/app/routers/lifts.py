@@ -1,7 +1,9 @@
 """Generic router for lifting workout data."""
 
 import logging
-from datetime import datetime, date
+import zoneinfo
+from collections import defaultdict
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -246,6 +248,57 @@ async def get_frequent_exercises(
     return [
         FrequentExerciseItem(name=name, count=count) for name, count in top_exercises
     ]
+
+
+@router.get("/by-day")
+async def get_lifts_by_day(
+    start_date: date = Query(..., description="Start date (inclusive)"),
+    end_date: date = Query(..., description="End date (inclusive)"),
+    user_timezone: Optional[str] = Query(
+        None, description="User timezone (e.g. America/Chicago)"
+    ),
+    _user: User = Depends(require_viewer),
+) -> list[dict]:
+    """Get lift session counts by day with timezone-aware grouping.
+
+    Returns a list of dicts with keys {"date", "count"} for each day in the range.
+    """
+    # Validate timezone if provided
+    tz = None
+    if user_timezone:
+        try:
+            tz = zoneinfo.ZoneInfo(user_timezone)
+        except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+            raise HTTPException(
+                status_code=400, detail=f"Invalid timezone: {user_timezone}"
+            )
+
+    # Over-fetch from DB with buffer on both sides: get_lifts_in_date_range uses
+    # exclusive end (start_time < end_date), and UTC times can differ from local
+    # dates by up to ±14 hours depending on timezone.
+    lifts = get_lifts_in_date_range(
+        start_date - timedelta(days=1), end_date + timedelta(days=2)
+    )
+
+    # Group lifts by local date
+    counts_by_date: dict[date, int] = defaultdict(int)
+    for lift in lifts:
+        if tz:
+            utc_aware = lift.start_time.replace(tzinfo=timezone.utc)
+            local_date = utc_aware.astimezone(tz).date()
+        else:
+            local_date = lift.start_time.date()
+        if start_date <= local_date <= end_date:
+            counts_by_date[local_date] += 1
+
+    # Fill in all days in range
+    result = []
+    current = start_date
+    while current <= end_date:
+        result.append({"date": current, "count": counts_by_date.get(current, 0)})
+        current += timedelta(days=1)
+
+    return result
 
 
 @router.get("/{lift_id}")
