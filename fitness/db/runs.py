@@ -198,7 +198,8 @@ def get_run_details_in_date_range(
         query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
                    COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
-                   sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version
+                   sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
+                   r.run_workout_id
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             LEFT JOIN synced_runs sr ON sr.run_id = r.id
@@ -225,7 +226,8 @@ def get_all_run_details(
         query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
                    COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
-                   sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version
+                   sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
+                   r.run_workout_id
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             LEFT JOIN synced_runs sr ON sr.run_id = r.id
@@ -322,6 +324,7 @@ def _row_to_run_detail(row) -> RunDetail:
         run_version,
         error_message,
         run_table_version,
+        run_workout_id,
     ) = row
 
     # Normalize shoe_name
@@ -341,6 +344,7 @@ def _row_to_run_detail(row) -> RunDetail:
         shoe_retirement_notes=retirement_notes,
         deleted_at=deleted_at,
         version=run_table_version,
+        run_workout_id=run_workout_id,
         is_synced=(sync_status == "synced"),
         sync_status=sync_status,
         synced_at=synced_at,
