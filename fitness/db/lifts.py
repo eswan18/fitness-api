@@ -71,7 +71,9 @@ def get_lifts_in_date_range(
             conditions.append(sql.SQL("start_time < %s"))
             params.append(end_date)
 
-        where_clause = sql.SQL(" AND ").join(conditions) if conditions else sql.SQL("TRUE")
+        where_clause = (
+            sql.SQL(" AND ").join(conditions) if conditions else sql.SQL("TRUE")
+        )
 
         query = sql.SQL("""
             SELECT id, title, description, start_time, end_time, exercises,
@@ -121,10 +123,13 @@ def get_all_lifts_with_sync(include_deleted: bool = False) -> list[LiftWithSync]
             if conditions
             else sql.SQL("")
         )
-        query = sql.SQL(_LIFT_WITH_SYNC_QUERY + """
+        query = sql.SQL(
+            _LIFT_WITH_SYNC_QUERY
+            + """
             {where_clause}
             ORDER BY l.start_time DESC
-        """).format(where_clause=where_clause)
+        """
+        ).format(where_clause=where_clause)
         cursor.execute(query)
         return [_row_to_lift_with_sync(row) for row in cursor.fetchall()]
 
@@ -150,11 +155,16 @@ def get_lifts_in_date_range_with_sync(
             conditions.append(sql.SQL("l.start_time < %s"))
             params.append(end_date)
 
-        where_clause = sql.SQL(" AND ").join(conditions) if conditions else sql.SQL("TRUE")
-        query = sql.SQL(_LIFT_WITH_SYNC_QUERY + """
+        where_clause = (
+            sql.SQL(" AND ").join(conditions) if conditions else sql.SQL("TRUE")
+        )
+        query = sql.SQL(
+            _LIFT_WITH_SYNC_QUERY
+            + """
             WHERE {where_clause}
             ORDER BY l.start_time DESC
-        """).format(where_clause=where_clause)
+        """
+        ).format(where_clause=where_clause)
         cursor.execute(query, params)
         return [_row_to_lift_with_sync(row) for row in cursor.fetchall()]
 
@@ -352,7 +362,9 @@ def _row_to_lift(row: tuple) -> Lift:
 
     # Parse exercises from JSON
     exercises_data = (
-        exercises_json if isinstance(exercises_json, list) else json.loads(exercises_json or "[]")
+        exercises_json
+        if isinstance(exercises_json, list)
+        else json.loads(exercises_json or "[]")
     )
     exercises = [_dict_to_exercise(e) for e in exercises_data]
 
@@ -371,13 +383,24 @@ def _row_to_lift(row: tuple) -> Lift:
 def _row_to_lift_with_sync(row: tuple) -> LiftWithSync:
     """Convert a database row (with sync columns) to a LiftWithSync."""
     (
-        id_, title, description, start_time, end_time,
-        exercises_json, source, deleted_at,
-        sync_status, synced_at, google_event_id, error_message,
+        id_,
+        title,
+        description,
+        start_time,
+        end_time,
+        exercises_json,
+        source,
+        deleted_at,
+        sync_status,
+        synced_at,
+        google_event_id,
+        error_message,
     ) = row
 
     exercises_data = (
-        exercises_json if isinstance(exercises_json, list) else json.loads(exercises_json or "[]")
+        exercises_json
+        if isinstance(exercises_json, list)
+        else json.loads(exercises_json or "[]")
     )
     exercises = [_dict_to_exercise(e) for e in exercises_data]
 

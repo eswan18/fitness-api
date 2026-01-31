@@ -16,16 +16,17 @@ class TestAuthenticationEndpoints:
         assert "WWW-Authenticate" in response.headers
         assert "Bearer" in response.headers["WWW-Authenticate"]
 
-    def test_sync_with_valid_credentials(
-        self, auth_client: TestClient, monkeypatch
-    ):
+    def test_sync_with_valid_credentials(self, auth_client: TestClient, monkeypatch):
         """POST /strava/sync should succeed with valid OAuth token (editor)."""
         with monkeypatch.context() as m:
             m.setattr(
-                "fitness.app.routers.strava.load_strava_runs", lambda client, after=None: []
+                "fitness.app.routers.strava.load_strava_runs",
+                lambda client, after=None: [],
             )
             m.setattr("fitness.app.routers.strava.get_existing_run_ids", lambda: [])
-            m.setattr("fitness.app.routers.strava.get_last_sync_time", lambda provider: None)
+            m.setattr(
+                "fitness.app.routers.strava.get_last_sync_time", lambda provider: None
+            )
             m.setattr(
                 "fitness.app.routers.strava.update_last_sync_time",
                 lambda provider, synced_at: None,
@@ -191,7 +192,5 @@ class TestDualAuthentication:
     def test_trmnl_endpoint_with_invalid_api_key(self, client: TestClient, monkeypatch):
         """GET /summary/trmnl should fail with invalid API key."""
         monkeypatch.setenv("TRMNL_API_KEY", TEST_API_KEY)
-        response = client.get(
-            "/summary/trmnl", headers={"X-API-Key": "wrong_key"}
-        )
+        response = client.get("/summary/trmnl", headers={"X-API-Key": "wrong_key"})
         assert response.status_code == 401

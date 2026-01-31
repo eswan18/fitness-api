@@ -71,10 +71,18 @@ class HevyWorkoutFactory:
             updated_at=datetime(2024, 1, 15, 11, 30, 0, tzinfo=timezone.utc),
             exercises=[
                 exercise_factory.make(
-                    {"index": 0, "title": "Bench Press", "exercise_template_id": "bp_001"}
+                    {
+                        "index": 0,
+                        "title": "Bench Press",
+                        "exercise_template_id": "bp_001",
+                    }
                 ),
                 exercise_factory.make(
-                    {"index": 1, "title": "Incline Press", "exercise_template_id": "ip_001"}
+                    {
+                        "index": 1,
+                        "title": "Incline Press",
+                        "exercise_template_id": "ip_001",
+                    }
                 ),
             ],
         )

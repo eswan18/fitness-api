@@ -86,7 +86,9 @@ class FrequentExerciseItem(BaseModel):
 
 @router.get("", response_model=LiftsResponse)
 async def get_lifts(
-    start_date: Optional[date] = Query(None, description="Filter lifts on or after this date"),
+    start_date: Optional[date] = Query(
+        None, description="Filter lifts on or after this date"
+    ),
     end_date: Optional[date] = Query(None, description="Filter lifts before this date"),
     _user: User = Depends(require_viewer),
 ) -> LiftsResponse:
@@ -135,7 +137,9 @@ async def get_lifts_count(
 
 @router.get("/stats", response_model=LiftStatsResponse)
 async def get_lifts_stats(
-    start_date: Optional[date] = Query(None, description="Filter stats on or after this date"),
+    start_date: Optional[date] = Query(
+        None, description="Filter stats on or after this date"
+    ),
     end_date: Optional[date] = Query(None, description="Filter stats before this date"),
     _user: User = Depends(require_viewer),
 ) -> LiftStatsResponse:
@@ -173,7 +177,9 @@ async def get_lifts_stats(
 
 @router.get("/sets-by-muscle", response_model=list[SetsByMuscleItem])
 async def get_sets_by_muscle(
-    start_date: Optional[date] = Query(None, description="Filter on or after this date"),
+    start_date: Optional[date] = Query(
+        None, description="Filter on or after this date"
+    ),
     end_date: Optional[date] = Query(None, description="Filter before this date"),
     _user: User = Depends(require_viewer),
 ) -> list[SetsByMuscleItem]:
@@ -209,7 +215,9 @@ async def get_sets_by_muscle(
 
 @router.get("/frequent-exercises", response_model=list[FrequentExerciseItem])
 async def get_frequent_exercises(
-    start_date: Optional[date] = Query(None, description="Filter on or after this date"),
+    start_date: Optional[date] = Query(
+        None, description="Filter on or after this date"
+    ),
     end_date: Optional[date] = Query(None, description="Filter before this date"),
     limit: int = Query(5, description="Number of exercises to return", ge=1, le=20),
     _user: User = Depends(require_viewer),
@@ -235,7 +243,9 @@ async def get_frequent_exercises(
     sorted_exercises = sorted(exercise_counts.items(), key=lambda x: x[1], reverse=True)
     top_exercises = sorted_exercises[:limit]
 
-    return [FrequentExerciseItem(name=name, count=count) for name, count in top_exercises]
+    return [
+        FrequentExerciseItem(name=name, count=count) for name, count in top_exercises
+    ]
 
 
 @router.get("/{lift_id}")

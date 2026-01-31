@@ -167,6 +167,7 @@ class TestGetLiftsDateFiltering:
         # Verify start_date was passed, end_date is None
         call_args = mock_get_lifts.call_args
         from datetime import date
+
         assert call_args[0][0] == date(2024, 1, 1)
         assert call_args[0][1] is None
 
@@ -188,6 +189,7 @@ class TestGetLiftsDateFiltering:
         # Verify end_date was passed, start_date is None
         call_args = mock_get_lifts.call_args
         from datetime import date
+
         assert call_args[0][0] is None
         assert call_args[0][1] == date(2024, 12, 31)
 
@@ -208,6 +210,7 @@ class TestGetLiftsDateFiltering:
         mock_get_lifts.assert_called_once()
         call_args = mock_get_lifts.call_args
         from datetime import date
+
         assert call_args[0][0] == date(2024, 1, 1)
         assert call_args[0][1] == date(2024, 12, 31)
 
@@ -353,14 +356,18 @@ class TestGetSetsByMuscle:
         workout_factory = LiftFactory()
 
         # Create exercises with known template IDs
-        chest_exercise = exercise_factory.make({
-            "title": "Bench Press",
-            "exercise_template_id": "hevy_bp_001",
-        })
-        back_exercise = exercise_factory.make({
-            "title": "Rows",
-            "exercise_template_id": "hevy_row_001",
-        })
+        chest_exercise = exercise_factory.make(
+            {
+                "title": "Bench Press",
+                "exercise_template_id": "hevy_bp_001",
+            }
+        )
+        back_exercise = exercise_factory.make(
+            {
+                "title": "Rows",
+                "exercise_template_id": "hevy_row_001",
+            }
+        )
 
         workout = workout_factory.make(
             {"id": "hevy_100"},
@@ -369,14 +376,18 @@ class TestGetSetsByMuscle:
         mock_get_lifts.return_value = [workout]
 
         # Create matching templates with muscle groups
-        chest_template = template_factory.make({
-            "id": "hevy_bp_001",
-            "primary_muscle_group": "chest",
-        })
-        back_template = template_factory.make({
-            "id": "hevy_row_001",
-            "primary_muscle_group": "lats",
-        })
+        chest_template = template_factory.make(
+            {
+                "id": "hevy_bp_001",
+                "primary_muscle_group": "chest",
+            }
+        )
+        back_template = template_factory.make(
+            {
+                "id": "hevy_row_001",
+                "primary_muscle_group": "lats",
+            }
+        )
         mock_get_templates.return_value = [chest_template, back_template]
 
         response = viewer_client.get("/lifts/sets-by-muscle")
@@ -406,10 +417,12 @@ class TestGetSetsByMuscle:
         workout = workout_factory.make({"id": "hevy_100"})
         mock_get_lifts.return_value = [workout]
 
-        template = template_factory.make({
-            "id": "hevy_bp_001",
-            "primary_muscle_group": "chest",
-        })
+        template = template_factory.make(
+            {
+                "id": "hevy_bp_001",
+                "primary_muscle_group": "chest",
+            }
+        )
         mock_get_templates.return_value = [template]
 
         response = viewer_client.get("/lifts/sets-by-muscle?start_date=2024-01-01")
@@ -418,6 +431,7 @@ class TestGetSetsByMuscle:
         mock_get_lifts.assert_called_once()
         # Verify correct date arguments were passed
         from datetime import date
+
         call_args = mock_get_lifts.call_args
         assert call_args[0][0] == date(2024, 1, 1)
         assert call_args[0][1] is None
@@ -460,18 +474,22 @@ class TestGetSetsByMuscle:
         workout_factory = LiftFactory()
 
         # Create exercise with a template ID that won't match any template
-        exercise = exercise_factory.make({
-            "title": "Unknown Exercise",
-            "exercise_template_id": "hevy_unknown_001",
-        })
+        exercise = exercise_factory.make(
+            {
+                "title": "Unknown Exercise",
+                "exercise_template_id": "hevy_unknown_001",
+            }
+        )
         workout = workout_factory.make({"id": "hevy_100"}, exercises=[exercise])
         mock_get_lifts.return_value = [workout]
 
         # Templates list doesn't include the exercise's template_id
-        template = template_factory.make({
-            "id": "hevy_other_001",
-            "primary_muscle_group": "chest",
-        })
+        template = template_factory.make(
+            {
+                "id": "hevy_other_001",
+                "primary_muscle_group": "chest",
+            }
+        )
         mock_get_templates.return_value = [template]
 
         response = viewer_client.get("/lifts/sets-by-muscle")
@@ -570,6 +588,7 @@ class TestGetFrequentExercises:
         mock_get_lifts.assert_called_once()
         # Verify correct date arguments were passed
         from datetime import date
+
         call_args = mock_get_lifts.call_args
         assert call_args[0][0] == date(2024, 1, 1)
         assert call_args[0][1] is None

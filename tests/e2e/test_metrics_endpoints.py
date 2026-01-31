@@ -182,7 +182,9 @@ def test_shoe_mileage_metrics(viewer_client):
     assert test_shoe_b["mileage"] >= 3.0
 
     # Test include_retired parameter
-    res = viewer_client.get("/metrics/mileage/by-shoe", params={"include_retired": True})
+    res = viewer_client.get(
+        "/metrics/mileage/by-shoe", params={"include_retired": True}
+    )
     assert res.status_code == 200
     all_shoes = res.json()
     assert isinstance(all_shoes, list)

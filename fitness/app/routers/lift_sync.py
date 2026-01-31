@@ -133,7 +133,9 @@ def sync_lift_to_calendar(
                     sync_status="failed",
                     error_message=error_msg,
                 )
-                logger.info(f"Updated sync record to 'failed' status for lift {lift_id}")
+                logger.info(
+                    f"Updated sync record to 'failed' status for lift {lift_id}"
+                )
             else:
                 create_synced_lift(
                     lift_id=lift_id,
@@ -228,12 +230,16 @@ def unsync_lift_from_calendar(
 
 
 @router.get("/lifts", response_model=List[SyncedLift])
-def get_all_lift_sync_records(_user: User = Depends(require_viewer)) -> List[SyncedLift]:
+def get_all_lift_sync_records(
+    _user: User = Depends(require_viewer),
+) -> List[SyncedLift]:
     """Get all lift sync records for debugging/admin purposes."""
     return get_all_synced_lifts()
 
 
 @router.get("/lifts/failed", response_model=List[SyncedLift])
-def get_failed_lift_sync_records(_user: User = Depends(require_viewer)) -> List[SyncedLift]:
+def get_failed_lift_sync_records(
+    _user: User = Depends(require_viewer),
+) -> List[SyncedLift]:
     """Get all lifts with failed sync status for retry/debugging."""
     return get_failed_lift_syncs()

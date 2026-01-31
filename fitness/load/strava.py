@@ -21,7 +21,9 @@ def load_strava_runs(
         List of Strava activities with gear information.
     """
     if after:
-        logger.info(f"Starting Strava data load (incremental, after {after.isoformat()})")
+        logger.info(
+            f"Starting Strava data load (incremental, after {after.isoformat()})"
+        )
     else:
         logger.info("Starting Strava data load (full sync)")
 

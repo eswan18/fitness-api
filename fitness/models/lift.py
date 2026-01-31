@@ -171,7 +171,9 @@ class Lift(BaseModel):
             start_time=hevy_workout.start_time.replace(tzinfo=None),
             end_time=hevy_workout.end_time.replace(tzinfo=None),
             source="Hevy",
-            exercises=[Exercise.from_hevy(e, id_prefix) for e in hevy_workout.exercises],
+            exercises=[
+                Exercise.from_hevy(e, id_prefix) for e in hevy_workout.exercises
+            ],
         )
 
 

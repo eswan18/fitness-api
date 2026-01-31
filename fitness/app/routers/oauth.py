@@ -55,7 +55,9 @@ def strava_oauth_authorize(user: User = Depends(require_editor)) -> RedirectResp
 
 
 @router.get("/strava/authorize-url", response_model=OAuthAuthorizeUrl)
-def strava_oauth_authorize_url(_user: User = Depends(require_editor)) -> OAuthAuthorizeUrl:
+def strava_oauth_authorize_url(
+    _user: User = Depends(require_editor),
+) -> OAuthAuthorizeUrl:
     """Get the Strava OAuth authorization URL.
 
     Returns the URL as JSON so the frontend can redirect after authenticating.
@@ -118,7 +120,9 @@ def google_oauth_authorize(user: User = Depends(require_editor)) -> RedirectResp
 
 
 @router.get("/google/authorize-url", response_model=OAuthAuthorizeUrl)
-def google_oauth_authorize_url(_user: User = Depends(require_editor)) -> OAuthAuthorizeUrl:
+def google_oauth_authorize_url(
+    _user: User = Depends(require_editor),
+) -> OAuthAuthorizeUrl:
     """Get the Google OAuth authorization URL.
 
     Returns the URL as JSON so the frontend can redirect after authenticating.
