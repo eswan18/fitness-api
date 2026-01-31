@@ -427,7 +427,7 @@ class GoogleCalendarClient:
         lines.append(f"\nWorkout ID: {workout.id}")
 
         event_data = {
-            "summary": workout.title,
+            "summary": f"Run Workout: {workout.title}",
             "description": "\n".join(lines),
             "start": {
                 "dateTime": start_dt_utc.isoformat(),
