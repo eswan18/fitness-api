@@ -12,6 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from fitness.models import Run
 from fitness.models.run_detail import RunDetail
+from fitness.app.routers.run_workouts import (
+    ActivityFeedRunItem,
+    ActivityFeedWorkoutItem,
+)
 from .constants import DEFAULT_START, DEFAULT_END
 from .dependencies import all_runs
 from .routers import (
@@ -192,7 +196,7 @@ def read_activity_feed(
     end: date = DEFAULT_END,
     sort_order: Literal["asc", "desc"] = "desc",
     _user: User = Depends(require_viewer),
-) -> list:
+) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem]:
     """Get a unified activity feed of solo runs and run workouts.
 
     Runs that belong to a workout appear nested inside their workout entry
