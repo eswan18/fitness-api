@@ -12,6 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from fitness.models import Run
 from fitness.models.run_detail import RunDetail
+from fitness.app.routers.run_workouts import (
+    ActivityFeedRunItem,
+    ActivityFeedWorkoutItem,
+)
 from .constants import DEFAULT_START, DEFAULT_END
 from .dependencies import all_runs
 from .routers import (
@@ -27,6 +31,7 @@ from .routers import (
     lifts_router,
     exercise_templates_router,
     lift_sync_router,
+    run_workouts_router,
 )
 from .models import EnvironmentResponse
 from .auth import require_viewer
@@ -70,6 +75,7 @@ app.include_router(hevy_router)
 app.include_router(lifts_router)
 app.include_router(exercise_templates_router)
 app.include_router(lift_sync_router)
+app.include_router(run_workouts_router)
 app.add_middleware(
     CORSMiddleware,  # type: ignore[arg-type]
     allow_origins=[
@@ -184,6 +190,29 @@ def read_run_details_alt(
     )
 
 
+@app.get("/run-activity-feed")
+def read_activity_feed(
+    start: date = DEFAULT_START,
+    end: date = DEFAULT_END,
+    sort_order: Literal["asc", "desc"] = "desc",
+    _user: User = Depends(require_viewer),
+) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem]:
+    """Get a unified activity feed of solo runs and run workouts.
+
+    Runs that belong to a workout appear nested inside their workout entry
+    rather than as separate items. Sorted by date.
+    """
+    from fitness.db.runs import get_run_details_in_date_range, get_all_run_details
+    from fitness.app.routers.run_workouts import build_activity_feed
+
+    if start != DEFAULT_START or end != DEFAULT_END:
+        all_runs = get_run_details_in_date_range(start, end)
+    else:
+        all_runs = get_all_run_details()
+
+    return build_activity_feed(all_runs, sort_order=sort_order)
+
+
 def sort_runs_generic(
     runs: list[T], sort_by: RunSortBy, sort_order: SortOrder
 ) -> list[T]:
@@ -223,7 +252,7 @@ def sort_runs_generic(
             # Default to date if unknown sort field
             return getattr(run, "localized_datetime", run.datetime_utc)
 
-    return sorted(runs, key=get_sort_key, reverse=reverse)  # type: ignore[type-var]
+    return sorted(runs, key=get_sort_key, reverse=reverse)
 
 
 @app.get("/health")

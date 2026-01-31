@@ -24,6 +24,7 @@ class RunDetail(BaseModel):
     shoe_retirement_notes: Optional[str] = None
     deleted_at: Optional[datetime] = None
     version: Optional[int] = None
+    run_workout_id: Optional[str] = None
 
     # Sync information (from synced_runs)
     is_synced: bool = False
