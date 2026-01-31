@@ -176,9 +176,7 @@ def set_run_workout_runs(workout_id: str, run_ids: list[str]) -> None:
                     raise ValueError(f"Run workout {workout_id} not found")
 
                 # Validate new run IDs (exclude runs currently in THIS workout)
-                _validate_run_ids(
-                    cursor, run_ids, exclude_workout_id=workout_id
-                )
+                _validate_run_ids(cursor, run_ids, exclude_workout_id=workout_id)
 
                 # Clear existing associations
                 cursor.execute(
@@ -287,9 +285,7 @@ def _validate_run_ids(
         )
 
 
-def _assign_runs_to_workout(
-    cursor, workout_id: str, run_ids: list[str]
-) -> None:
+def _assign_runs_to_workout(cursor, workout_id: str, run_ids: list[str]) -> None:
     """Set run_workout_id on the given runs."""
     from psycopg import sql
 

@@ -147,7 +147,9 @@ async def get_workout(
     """Get a single run workout with full details and nested runs."""
     workout = get_run_workout_by_id(workout_id)
     if workout is None:
-        raise HTTPException(status_code=404, detail=f"Run workout {workout_id} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Run workout {workout_id} not found"
+        )
     return _build_workout_detail_response(workout)
 
 
@@ -167,7 +169,9 @@ async def patch_workout(
         notes=request.notes,
     )
     if workout is None:
-        raise HTTPException(status_code=404, detail=f"Run workout {workout_id} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Run workout {workout_id} not found"
+        )
     return _build_workout_detail_response(workout)
 
 
@@ -185,7 +189,9 @@ async def replace_workout_runs(
 
     workout = get_run_workout_by_id(workout_id)
     if workout is None:
-        raise HTTPException(status_code=404, detail=f"Run workout {workout_id} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Run workout {workout_id} not found"
+        )
     return _build_workout_detail_response(workout)
 
 
@@ -197,7 +203,9 @@ async def remove_workout(
     """Soft-delete a run workout and unlink its runs."""
     deleted = delete_run_workout(workout_id)
     if not deleted:
-        raise HTTPException(status_code=404, detail=f"Run workout {workout_id} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Run workout {workout_id} not found"
+        )
     return {"message": f"Run workout {workout_id} deleted"}
 
 
