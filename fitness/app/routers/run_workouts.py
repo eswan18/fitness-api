@@ -14,6 +14,7 @@ from fitness.models.run_workout import RunWorkout, RunWorkoutDetail
 from fitness.db.run_workouts import (
     create_run_workout,
     get_run_workout_by_id,
+    get_run_workouts_by_ids,
     get_all_run_workouts,
     update_run_workout,
     set_run_workout_runs,
@@ -22,6 +23,7 @@ from fitness.db.run_workouts import (
 )
 from fitness.db.runs import (
     get_all_run_details,
+    get_run_details_by_ids,
 )
 
 logger = logging.getLogger(__name__)
@@ -133,7 +135,8 @@ async def list_workouts(
 ) -> list[RunWorkoutSummary]:
     """List all run workouts with summary stats."""
     workouts = get_all_run_workouts()
-    return [_build_workout_summary(w) for w in workouts]
+    all_details = get_all_run_details()
+    return [_build_workout_summary(w, all_details) for w in workouts]
 
 
 @router.get("/{workout_id}", response_model=RunWorkoutDetailResponse)
@@ -223,9 +226,12 @@ def build_activity_feed(
     for run in solo_runs:
         feed.append(ActivityFeedRunItem(item=run))
 
+    # Batch-fetch all referenced workouts to avoid N+1 queries
+    workouts_by_id = get_run_workouts_by_ids(list(workout_runs.keys()))
+
     # Add workouts
     for workout_id, runs in workout_runs.items():
-        workout = get_run_workout_by_id(workout_id)
+        workout = workouts_by_id.get(workout_id)
         if workout is None:
             # Workout was deleted but runs still have FK — treat as solo
             for run in runs:
@@ -252,10 +258,11 @@ def build_activity_feed(
 # --- Helpers ---
 
 
-def _build_workout_summary(workout: RunWorkout) -> RunWorkoutSummary:
-    """Build a summary response for a workout by querying its runs."""
+def _build_workout_summary(
+    workout: RunWorkout, all_details: list[RunDetail]
+) -> RunWorkoutSummary:
+    """Build a summary response for a workout from pre-fetched run details."""
     run_ids = get_run_ids_for_workout(workout.id)
-    all_details = get_all_run_details()
     runs = [r for r in all_details if r.id in set(run_ids)]
     runs.sort(key=lambda r: r.datetime_utc)
 
@@ -276,8 +283,7 @@ def _build_workout_detail_response(
 ) -> RunWorkoutDetailResponse:
     """Build a detail response for a workout by querying its runs."""
     run_ids = get_run_ids_for_workout(workout.id)
-    all_details = get_all_run_details()
-    runs = [r for r in all_details if r.id in set(run_ids)]
+    runs = get_run_details_by_ids(run_ids)
     runs.sort(key=lambda r: r.datetime_utc)
 
     if not runs:

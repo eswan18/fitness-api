@@ -52,7 +52,7 @@ _DB_MOD = "fitness.app.routers.run_workouts"
 class TestCreateRunWorkout:
     """Test POST /run-workouts."""
 
-    @patch(f"{_DB_MOD}.get_all_run_details")
+    @patch(f"{_DB_MOD}.get_run_details_by_ids")
     @patch(f"{_DB_MOD}.get_run_ids_for_workout")
     @patch(f"{_DB_MOD}.create_run_workout")
     def test_create_success(
@@ -142,13 +142,16 @@ class TestListRunWorkouts:
         assert data[0]["title"] == "Speed Workout"
         assert data[0]["run_count"] == 2
 
+    @patch(f"{_DB_MOD}.get_all_run_details")
     @patch(f"{_DB_MOD}.get_all_run_workouts")
     def test_list_empty(
         self,
         mock_list: MagicMock,
+        mock_get_details: MagicMock,
         viewer_client: TestClient,
     ):
         mock_list.return_value = []
+        mock_get_details.return_value = []
         response = viewer_client.get("/run-workouts")
         assert response.status_code == 200
         assert response.json() == []
@@ -157,7 +160,7 @@ class TestListRunWorkouts:
 class TestGetRunWorkout:
     """Test GET /run-workouts/{id}."""
 
-    @patch(f"{_DB_MOD}.get_all_run_details")
+    @patch(f"{_DB_MOD}.get_run_details_by_ids")
     @patch(f"{_DB_MOD}.get_run_ids_for_workout")
     @patch(f"{_DB_MOD}.get_run_workout_by_id")
     def test_get_workout(
@@ -195,7 +198,7 @@ class TestGetRunWorkout:
 class TestUpdateRunWorkout:
     """Test PATCH /run-workouts/{id}."""
 
-    @patch(f"{_DB_MOD}.get_all_run_details")
+    @patch(f"{_DB_MOD}.get_run_details_by_ids")
     @patch(f"{_DB_MOD}.get_run_ids_for_workout")
     @patch(f"{_DB_MOD}.update_run_workout")
     def test_update_title(
@@ -271,7 +274,7 @@ class TestDeleteRunWorkout:
 class TestReplaceWorkoutRuns:
     """Test PUT /run-workouts/{id}/runs."""
 
-    @patch(f"{_DB_MOD}.get_all_run_details")
+    @patch(f"{_DB_MOD}.get_run_details_by_ids")
     @patch(f"{_DB_MOD}.get_run_ids_for_workout")
     @patch(f"{_DB_MOD}.get_run_workout_by_id")
     @patch(f"{_DB_MOD}.set_run_workout_runs")
@@ -331,12 +334,12 @@ class TestActivityFeed:
         assert len(data) == 2
         assert all(item["type"] == "run" for item in data)
 
-    @patch(f"{_DB_MOD}.get_run_workout_by_id")
+    @patch(f"{_DB_MOD}.get_run_workouts_by_ids")
     @patch("fitness.db.runs.get_all_run_details")
     def test_workout_grouped(
         self,
         mock_get_details: MagicMock,
-        mock_get_workout: MagicMock,
+        mock_get_workouts: MagicMock,
         viewer_client: TestClient,
     ):
         mock_get_details.return_value = [
@@ -352,7 +355,7 @@ class TestActivityFeed:
                 run_workout_id="rw_1",
             ),
         ]
-        mock_get_workout.return_value = _make_workout(id="rw_1")
+        mock_get_workouts.return_value = {"rw_1": _make_workout(id="rw_1")}
 
         response = viewer_client.get("/run-activity-feed")
         assert response.status_code == 200
@@ -402,12 +405,12 @@ class TestActivityFeed:
         assert data[0]["item"]["id"] == "run_1"
         assert data[1]["item"]["id"] == "run_2"
 
-    @patch(f"{_DB_MOD}.get_run_workout_by_id")
+    @patch(f"{_DB_MOD}.get_run_workouts_by_ids")
     @patch("fitness.db.runs.get_all_run_details")
     def test_workout_aggregates(
         self,
         mock_get_details: MagicMock,
-        mock_get_workout: MagicMock,
+        mock_get_workouts: MagicMock,
         viewer_client: TestClient,
     ):
         """Verify computed aggregates for a workout in the feed."""
@@ -429,7 +432,7 @@ class TestActivityFeed:
                 run_workout_id="rw_1",
             ),
         ]
-        mock_get_workout.return_value = _make_workout(id="rw_1")
+        mock_get_workouts.return_value = {"rw_1": _make_workout(id="rw_1")}
 
         response = viewer_client.get("/run-activity-feed")
         assert response.status_code == 200

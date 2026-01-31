@@ -239,6 +239,28 @@ def get_all_run_details(
         return [_row_to_run_detail(row) for row in rows]
 
 
+def get_run_details_by_ids(run_ids: list[str]) -> list[RunDetail]:
+    """Get detailed runs for a specific set of run IDs."""
+    if not run_ids:
+        return []
+    with get_db_cursor() as cursor:
+        placeholders = sql.SQL(", ").join(sql.Placeholder() * len(run_ids))
+        query = sql.SQL("""
+            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
+                   COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
+                   sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
+                   r.run_workout_id
+            FROM runs r
+            LEFT JOIN shoes s ON r.shoe_id = s.id
+            LEFT JOIN synced_runs sr ON sr.run_id = r.id
+            WHERE r.id IN ({placeholders}) AND r.deleted_at IS NULL
+            ORDER BY r.datetime_utc ASC
+        """).format(placeholders=placeholders)
+        cursor.execute(query, run_ids)
+        rows = cursor.fetchall()
+        return [_row_to_run_detail(row) for row in rows]
+
+
 def get_run_by_id(run_id: str, include_deleted: bool = False) -> Run | None:
     """Get a single run by its ID.
 

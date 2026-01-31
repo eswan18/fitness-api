@@ -81,6 +81,25 @@ def get_run_workout_by_id(
         return _row_to_run_workout(row) if row else None
 
 
+def get_run_workouts_by_ids(workout_ids: list[str]) -> dict[str, RunWorkout]:
+    """Get multiple run workouts by ID (non-deleted only). Returns a dict keyed by ID."""
+    if not workout_ids:
+        return {}
+    from psycopg import sql as psql
+
+    with get_db_cursor() as cursor:
+        placeholders = psql.SQL(", ").join(psql.Placeholder() * len(workout_ids))
+        cursor.execute(
+            psql.SQL("""
+                SELECT id, title, notes, created_at, updated_at, deleted_at
+                FROM run_workouts
+                WHERE id IN ({}) AND deleted_at IS NULL
+            """).format(placeholders),
+            workout_ids,
+        )
+        return {row[0]: _row_to_run_workout(row) for row in cursor.fetchall()}
+
+
 def get_all_run_workouts(include_deleted: bool = False) -> list[RunWorkout]:
     """Get all run workouts."""
     with get_db_cursor() as cursor:
