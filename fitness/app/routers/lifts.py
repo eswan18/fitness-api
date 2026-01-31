@@ -263,7 +263,9 @@ async def get_lifts_by_day(
 
     Returns a list of dicts with keys {"date", "count"} for each day in the range.
     """
-    lifts = get_lifts_in_date_range(start, end)
+    # Fetch with a buffer day because get_lifts_in_date_range uses exclusive end
+    # (start_time < end_date) and UTC times can be a day ahead of local times.
+    lifts = get_lifts_in_date_range(start, end + timedelta(days=2))
 
     # Group lifts by local date
     counts_by_date: dict[date, int] = defaultdict(int)
