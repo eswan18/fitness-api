@@ -1,7 +1,7 @@
 """CRUD routes for run workouts and the unified activity feed."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -354,8 +354,6 @@ def _compute_elapsed_seconds(runs: list[RunDetail]) -> float:
         return 0.0
     first_start = runs[0].datetime_utc
     last_run = runs[-1]
-    from datetime import timedelta
-
     last_end = last_run.datetime_utc + timedelta(seconds=last_run.duration)
     return (last_end - first_start).total_seconds()
 
