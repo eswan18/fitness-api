@@ -86,11 +86,50 @@ tests/
 
 ## Environment Variables
 
-Key variables (see `.env.dev.example`):
-- `DATABASE_URL` - PostgreSQL connection string
-- `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REFRESH_TOKEN`
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optional, for calendar sync)
-- `IDENTITY_PROVIDER_URL` - OAuth provider base URL
+See `.env.dev.example` for a template. 🔑 = secret, do not commit.
+
+### Required
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` 🔑 | PostgreSQL connection string |
+| `IDENTITY_PROVIDER_URL` | OAuth identity provider base URL |
+| `JWT_AUDIENCE` | Expected JWT audience claim |
+| `PUBLIC_API_BASE_URL` | Public URL of this API (used in OAuth redirects) |
+| `PUBLIC_DASHBOARD_BASE_URL` | Public URL of the frontend dashboard |
+| `TRMNL_API_KEY` 🔑 | API key for TRMNL device authentication |
+
+### Strava integration
+
+| Variable | Description |
+|----------|-------------|
+| `STRAVA_CLIENT_ID` 🔑 | Strava OAuth client ID |
+| `STRAVA_CLIENT_SECRET` 🔑 | Strava OAuth client secret |
+| `STRAVA_OAUTH_URL` | Strava OAuth authorize URL |
+| `STRAVA_TOKEN_URL` | Strava OAuth token URL |
+
+### Google Calendar integration (optional)
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_CLIENT_ID` 🔑 | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` 🔑 | Google OAuth client secret |
+| `GOOGLE_CALENDAR_ID` | Target calendar ID (defaults to `primary`) |
+
+### Hevy integration (optional)
+
+| Variable | Description |
+|----------|-------------|
+| `HEVY_API_KEY` 🔑 | Hevy API key for lifting data sync |
+
+### Other optional
+
+| Variable | Description |
+|----------|-------------|
+| `ENV` | Environment name; loads `.env.dev` or `.env.prod` (default: `dev`) |
+| `VERCEL_ENV` | Set automatically on Vercel deployments |
+| `LOG_LEVEL` | Logging level (default: `WARNING`) |
+| `MMF_TIMEZONE` | Timezone for MapMyFitness data (default: `America/Chicago`) |
 
 ## Testing Notes
 
