@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fitness-api-staging
+  namespace: argocd
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: fitness-api=us-central1-docker.pkg.dev/ethans-services/containers/fitness-api
+    argocd-image-updater.argoproj.io/fitness-api.update-strategy: latest
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/eswan18/fitness-api
+    targetRevision: main
+    path: k8s/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: fitness-api-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fitness-api-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/eswan18/fitness-api
+    targetRevision: main
+    path: k8s/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: fitness-api-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fitness-api
+spec:
+  replicas: 1
+  template:
+    spec:
+      serviceAccountName: fitness-api-staging-ksa
+      containers:
+        - name: fitness-api
+          envFrom:
+            - configMapRef:
+                name: fitness-api-config
+            - configMapRef:
+                name: fitness-api-staging-env-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: fitness-api-staging-secrets
+                  key: DATABASE_URL
+            - name: STRAVA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: fitness-api-staging-secrets
+                  key: STRAVA_CLIENT_ID
+            - name: STRAVA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fitness-api-staging-secrets
+                  key: STRAVA_CLIENT_SECRET
+            - name: TRMNL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fitness-api-staging-secrets
+                  key: TRMNL_API_KEY
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: fitness-api-staging-secrets
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fitness-api-staging-secrets
+                  key: GOOGLE_CLIENT_SECRET
+            - name: HEVY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fitness-api-staging-secrets
+                  key: HEVY_API_KEY
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: fitness-api-staging-secrets
