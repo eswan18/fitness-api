@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fitness-api-config
+data:
+  IDENTITY_PROVIDER_URL: "https://identity.ethanswan.com"
+  JWT_AUDIENCE: "ethanswan:fitness"
+  LOG_LEVEL: "INFO"
+  PUBLIC_API_BASE_URL: "https://fitness-api.ethanswan.com"
+  PUBLIC_DASHBOARD_BASE_URL: "https://fitness.ethanswan.com"

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fitness-api-staging-env-config
+data:
+  STRAVA_OAUTH_URL: "https://www.strava.com/oauth/authorize"
+  STRAVA_TOKEN_URL: "https://www.strava.com/oauth/token"
