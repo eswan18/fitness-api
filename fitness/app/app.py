@@ -4,7 +4,10 @@ from .env_loader import get_current_environment
 
 import os
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import date, datetime
+from pathlib import Path
 from typing import Literal, TypeVar
 
 from fastapi import FastAPI, Depends, Response
@@ -63,7 +66,49 @@ PUBLIC_API_BASE_URL = os.environ["PUBLIC_API_BASE_URL"]
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+
+def check_migrations() -> None:
+    """Check that the database is up to date with the latest Alembic migration.
+
+    Raises RuntimeError if the database revision doesn't match the latest
+    migration head, preventing the app from starting.
+    """
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    from fitness.db.connection import get_db_cursor
+
+    alembic_ini = Path(__file__).resolve().parents[2] / "alembic.ini"
+    alembic_cfg = Config(str(alembic_ini))
+    script = ScriptDirectory.from_config(alembic_cfg)
+    head_rev = script.get_current_head()
+
+    try:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT version_num FROM alembic_version")
+            row = cur.fetchone()
+            db_rev = row[0] if row else None
+    except Exception as exc:
+        raise RuntimeError(
+            "Could not query alembic_version table — migrations may not have been run. "
+            "Run 'alembic upgrade head' to initialize the database."
+        ) from exc
+
+    if db_rev != head_rev:
+        raise RuntimeError(
+            f"Database migration mismatch: database is at {db_rev} but latest migration is {head_rev}. "
+            "Run 'alembic upgrade head' to apply pending migrations."
+        )
+    logger.info("Database migrations are up to date (revision %s).", db_rev)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    check_migrations()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 app.include_router(metrics_router)
 app.include_router(shoe_router)
 app.include_router(run_router)
