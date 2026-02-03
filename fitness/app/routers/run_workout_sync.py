@@ -49,7 +49,9 @@ def get_failed_run_workout_sync_records(
     return get_failed_run_workout_syncs()
 
 
-@router.get("/run-workouts/{run_workout_id}/status", response_model=SyncRunWorkoutStatusResponse)
+@router.get(
+    "/run-workouts/{run_workout_id}/status", response_model=SyncRunWorkoutStatusResponse
+)
 def get_run_workout_sync_status(
     run_workout_id: str,
     _user: User = Depends(require_viewer),
@@ -233,7 +235,9 @@ def unsync_run_workout_from_calendar(
         deleted = delete_synced_run_workout(run_workout_id)
 
         if deleted:
-            logger.info(f"Successfully unsynced run workout {run_workout_id} from Google Calendar")
+            logger.info(
+                f"Successfully unsynced run workout {run_workout_id} from Google Calendar"
+            )
             return SyncResponse(
                 success=True,
                 message=f"Successfully removed sync for run workout {run_workout_id}",

@@ -402,7 +402,9 @@ class GoogleCalendarClient:
         total_seconds = int(total_duration) % 60
 
         # Weighted average HR
-        hr_runs = [(r.avg_heart_rate, r.duration) for r in sorted_runs if r.avg_heart_rate]
+        hr_runs = [
+            (r.avg_heart_rate, r.duration) for r in sorted_runs if r.avg_heart_rate
+        ]
         avg_hr = None
         if hr_runs:
             total_hr_weight = sum(hr * dur for hr, dur in hr_runs)
