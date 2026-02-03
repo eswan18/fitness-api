@@ -134,7 +134,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-assert False
 
 
 # Configure basic logging
