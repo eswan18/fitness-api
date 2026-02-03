@@ -88,11 +88,11 @@ def check_migrations() -> None:
             cur.execute("SELECT version_num FROM alembic_version")
             row = cur.fetchone()
             db_rev = row[0] if row else None
-    except Exception:
+    except Exception as exc:
         raise RuntimeError(
             "Could not query alembic_version table — migrations may not have been run. "
             "Run 'alembic upgrade head' to initialize the database."
-        )
+        ) from exc
 
     if db_rev != head_rev:
         raise RuntimeError(
