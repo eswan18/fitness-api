@@ -130,12 +130,16 @@ class TestSyncRunWorkout:
         mock_get_run_ids.return_value = ["run_1", "run_2"]
         mock_get_run.side_effect = [
             _make_run_detail("run_1"),
-            _make_run_detail("run_2", dt=datetime(2024, 6, 1, 8, 30, 0, tzinfo=timezone.utc)),
+            _make_run_detail(
+                "run_2", dt=datetime(2024, 6, 1, 8, 30, 0, tzinfo=timezone.utc)
+            ),
         ]
         mock_calendar = MagicMock()
         mock_calendar.create_run_workout_event.return_value = "gcal_456"
         mock_calendar_cls.return_value = mock_calendar
-        mock_create_sync.return_value = _make_synced_run_workout(google_event_id="gcal_456")
+        mock_create_sync.return_value = _make_synced_run_workout(
+            google_event_id="gcal_456"
+        )
 
         response = editor_client.post("/sync/run-workouts/rw_1")
         assert response.status_code == 200
@@ -238,7 +242,9 @@ class TestSyncRunWorkout:
         mock_calendar = MagicMock()
         mock_calendar.create_run_workout_event.return_value = "gcal_789"
         mock_calendar_cls.return_value = mock_calendar
-        mock_update_sync.return_value = _make_synced_run_workout(google_event_id="gcal_789")
+        mock_update_sync.return_value = _make_synced_run_workout(
+            google_event_id="gcal_789"
+        )
 
         response = editor_client.post("/sync/run-workouts/rw_1")
         assert response.status_code == 200

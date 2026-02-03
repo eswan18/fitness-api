@@ -54,7 +54,9 @@ def get_synced_run_workout(run_workout_id: str) -> SyncedRunWorkout | None:
 
             row = cursor.fetchone()
             if row is None:
-                logger.debug(f"No sync record found for run_workout_id={run_workout_id}")
+                logger.debug(
+                    f"No sync record found for run_workout_id={run_workout_id}"
+                )
                 return None
 
             synced = _row_to_synced_run_workout(row)
@@ -209,7 +211,9 @@ def update_synced_run_workout(
             row = cursor.fetchone()
 
             if row is None:
-                logger.warning(f"No sync record found to update: run_workout_id={run_workout_id}")
+                logger.warning(
+                    f"No sync record found to update: run_workout_id={run_workout_id}"
+                )
                 return None
 
             synced = _row_to_synced_run_workout(row)
@@ -233,7 +237,10 @@ def delete_synced_run_workout(run_workout_id: str) -> bool:
         logger.info(f"Deleting sync record: run_workout_id={run_workout_id}")
 
         with get_db_cursor() as cursor:
-            cursor.execute("DELETE FROM synced_run_workouts WHERE run_workout_id = %s", (run_workout_id,))
+            cursor.execute(
+                "DELETE FROM synced_run_workouts WHERE run_workout_id = %s",
+                (run_workout_id,),
+            )
             deleted_count = cursor.rowcount
 
             if deleted_count > 0:
@@ -256,7 +263,9 @@ def delete_synced_run_workout(run_workout_id: str) -> bool:
         raise
 
 
-def get_synced_run_workouts_by_ids(run_workout_ids: list[str]) -> list[SyncedRunWorkout]:
+def get_synced_run_workouts_by_ids(
+    run_workout_ids: list[str],
+) -> list[SyncedRunWorkout]:
     """Get sync records for a specific set of run workout IDs."""
     if not run_workout_ids:
         return []
@@ -264,7 +273,9 @@ def get_synced_run_workouts_by_ids(run_workout_ids: list[str]) -> list[SyncedRun
         logger.debug(f"Querying sync records for {len(run_workout_ids)} workout IDs")
 
         with get_db_cursor() as cursor:
-            placeholders = sql.SQL(", ").join([sql.Placeholder()] * len(run_workout_ids))
+            placeholders = sql.SQL(", ").join(
+                [sql.Placeholder()] * len(run_workout_ids)
+            )
             query = sql.SQL("""
                 SELECT id, run_workout_id, run_workout_version, google_event_id, synced_at,
                        sync_status, error_message, created_at, updated_at
@@ -275,7 +286,9 @@ def get_synced_run_workouts_by_ids(run_workout_ids: list[str]) -> list[SyncedRun
 
             results = [_row_to_synced_run_workout(row) for row in cursor.fetchall()]
 
-            logger.debug(f"Retrieved sync records: requested={len(run_workout_ids)}, found={len(results)}")
+            logger.debug(
+                f"Retrieved sync records: requested={len(run_workout_ids)}, found={len(results)}"
+            )
             return results
     except Exception as e:
         logger.exception(
@@ -332,7 +345,9 @@ def get_failed_run_workout_syncs() -> list[SyncedRunWorkout]:
 
             results = [_row_to_synced_run_workout(row) for row in cursor.fetchall()]
 
-            logger.info(f"Retrieved failed run workout sync records: count={len(results)}")
+            logger.info(
+                f"Retrieved failed run workout sync records: count={len(results)}"
+            )
             return results
     except Exception as e:
         logger.exception(
