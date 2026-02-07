@@ -3,5 +3,6 @@ kind: ConfigMap
 metadata:
   name: fitness-api-staging-env-config
 data:
+  ENV: "staging"
   STRAVA_OAUTH_URL: "https://www.strava.com/oauth/authorize"
   STRAVA_TOKEN_URL: "https://www.strava.com/oauth/token"

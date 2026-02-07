@@ -1,7 +1,8 @@
 """Load environment variables early for the FastAPI app.
 
-Selects the .env file based on ENV ("dev" or "prod") before any other imports
-run, so dependent modules see configured settings.
+Attempts to load a .env.{ENV} file (e.g. .env.dev, .env.staging, .env.prod).
+In K8s, no .env file exists so this is a no-op; env vars come from configmaps
+and secrets instead.
 """
 
 import os
@@ -9,16 +10,7 @@ import sys
 from typing import Literal
 from dotenv import load_dotenv
 
-EnvironmentName = Literal[
-    "dev", "prod", "vercel-production", "vercel-preview", "vercel-development"
-]
-
-# Mapping from Vercel's VERCEL_ENV values to our EnvironmentName
-_VERCEL_TO_ENV: dict[str, EnvironmentName] = {
-    "production": "vercel-production",
-    "preview": "vercel-preview",
-    "development": "vercel-development",
-}
+EnvironmentName = Literal["dev", "staging", "prod"]
 
 # Required environment variables that must be set for the app to run.
 # If any are missing, the app will fail to start with a clear error message.
@@ -51,30 +43,21 @@ def validate_required_env_vars() -> None:
 
 
 # Load env vars before any app code runs.
-if "VERCEL_ENV" in os.environ:
-    # We're running on vercel and don't need to load the env file.
-    pass
-elif (env := os.getenv("ENV", "dev")) in ("dev", "prod"):
-    print(f"Loading environment variables from .env.{env}")
-    load_dotenv(f".env.{env}", verbose=True)
-else:
-    raise ValueError("Invalid environment and VERCEL_ENV is not set")
+# Always attempt to load a .env file for the current environment.
+# In K8s, no .env file exists so load_dotenv is a no-op; env vars come from
+# configmaps and secrets instead.
+env = os.getenv("ENV", "dev")
+if env not in ("dev", "staging", "prod"):
+    raise ValueError(f"Invalid ENV value: {env}. Must be 'dev', 'staging', or 'prod'.")
+load_dotenv(f".env.{env}", verbose=True)
 
 # Validate required env vars after loading.
 validate_required_env_vars()
 
 
 def get_current_environment() -> EnvironmentName:
-    """Get the current environment (dev, prod, or vercel)."""
-    if "VERCEL_ENV" in os.environ:
-        vercel_env = os.environ["VERCEL_ENV"].lower()
-        if env_name := _VERCEL_TO_ENV.get(vercel_env):
-            return env_name
-        raise ValueError(f"Invalid VERCEL_ENV: {vercel_env}")
-
+    """Get the current environment (dev, staging, or prod)."""
     env = os.getenv("ENV", "dev")
-    if env == "dev":
-        return "dev"
-    if env == "prod":
-        return "prod"
-    raise ValueError(f"Invalid environment: {env}")
+    if env in ("dev", "staging", "prod"):
+        return env  # type: ignore[return-value]
+    raise ValueError(f"Invalid ENV value: {env}. Must be 'dev', 'staging', or 'prod'.")
