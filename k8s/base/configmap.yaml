@@ -3,8 +3,5 @@ kind: ConfigMap
 metadata:
   name: fitness-api-config
 data:
-  JWT_AUDIENCE: "ethanswan:fitness"
   LOG_LEVEL: "INFO"
-  PUBLIC_API_BASE_URL: "https://fitness-api.ethanswan.com"
-  PUBLIC_DASHBOARD_BASE_URL: "https://fitness.ethanswan.com"
   GOOGLE_CALENDAR_ID: "t5pjvqpna5k9pm0sn6tf0125pg@group.calendar.google.com"

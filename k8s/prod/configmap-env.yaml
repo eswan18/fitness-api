@@ -6,5 +6,8 @@ data:
   ENV: "prod"
   IDENTITY_PROVIDER_URL: "http://identity.identity-prod.svc.cluster.local"
   JWT_ISSUER: "https://identity.ethanswan.com"
+  PUBLIC_API_BASE_URL: "https://fitness-api.ethanswan.com"
+  PUBLIC_DASHBOARD_BASE_URL: "https://fitness.ethanswan.com"
+  JWT_AUDIENCE: "ethanswan:fitness"
   STRAVA_OAUTH_URL: "https://www.strava.com/oauth/authorize"
   STRAVA_TOKEN_URL: "https://www.strava.com/oauth/token"
