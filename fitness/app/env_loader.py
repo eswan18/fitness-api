@@ -1,8 +1,8 @@
 """Load environment variables early for the FastAPI app.
 
-For local dev, loads a .env file based on ENV ("dev" or "prod").
-In K8s (ENV="staging" or "prod"), env vars are injected via configmaps
-and secrets, so no .env file is loaded.
+Attempts to load a .env.{ENV} file (e.g. .env.dev, .env.staging, .env.prod).
+In K8s, no .env file exists so this is a no-op; env vars come from configmaps
+and secrets instead.
 """
 
 import os
@@ -43,16 +43,13 @@ def validate_required_env_vars() -> None:
 
 
 # Load env vars before any app code runs.
-# In K8s (staging/prod), env vars are injected via configmaps and secrets.
-# For local dev, load from a .env file.
+# Always attempt to load a .env file for the current environment.
+# In K8s, no .env file exists so load_dotenv is a no-op; env vars come from
+# configmaps and secrets instead.
 env = os.getenv("ENV", "dev")
-if env in ("staging", "prod"):
-    print(f"Running in {env} environment (env vars from configmaps/secrets)")
-elif env == "dev":
-    print("Loading environment variables from .env.dev")
-    load_dotenv(".env.dev", verbose=True)
-else:
+if env not in ("dev", "staging", "prod"):
     raise ValueError(f"Invalid ENV value: {env}. Must be 'dev', 'staging', or 'prod'.")
+load_dotenv(f".env.{env}", verbose=True)
 
 # Validate required env vars after loading.
 validate_required_env_vars()
