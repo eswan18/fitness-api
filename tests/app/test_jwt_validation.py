@@ -17,6 +17,7 @@ from fitness.app.oauth import (
     get_jwks_client,
     get_identity_provider_url,
     get_jwt_audience,
+    get_jwt_issuer,
     JWKS_CACHE_DURATION,
 )
 
@@ -338,15 +339,14 @@ class TestGetJwksClient:
 class TestEnvironmentConfig:
     """Test environment variable configuration functions."""
 
-    def test_get_identity_provider_url_default(self):
-        """Test default identity provider URL."""
+    def test_get_identity_provider_url_raises_when_missing(self):
+        """Test that missing IDENTITY_PROVIDER_URL raises KeyError."""
         with patch.dict("os.environ", {}, clear=True):
-            # Remove the env var if it exists
             import os
 
             os.environ.pop("IDENTITY_PROVIDER_URL", None)
-            url = get_identity_provider_url()
-            assert url == "http://localhost:8080"
+            with pytest.raises(KeyError):
+                get_identity_provider_url()
 
     def test_get_identity_provider_url_from_env(self):
         """Test identity provider URL from environment."""
@@ -363,6 +363,27 @@ class TestEnvironmentConfig:
         ):
             url = get_identity_provider_url()
             assert url == "https://auth.example.com"
+
+    def test_get_jwt_issuer_from_env(self):
+        """Test JWT issuer from environment."""
+        with patch.dict("os.environ", {"JWT_ISSUER": "https://identity.example.com"}):
+            issuer = get_jwt_issuer()
+            assert issuer == "https://identity.example.com"
+
+    def test_get_jwt_issuer_strips_trailing_slash(self):
+        """Test that trailing slash is stripped from issuer."""
+        with patch.dict("os.environ", {"JWT_ISSUER": "https://identity.example.com/"}):
+            issuer = get_jwt_issuer()
+            assert issuer == "https://identity.example.com"
+
+    def test_get_jwt_issuer_raises_when_missing(self):
+        """Test that missing JWT_ISSUER raises KeyError."""
+        with patch.dict("os.environ", {}, clear=True):
+            import os
+
+            os.environ.pop("JWT_ISSUER", None)
+            with pytest.raises(KeyError):
+                get_jwt_issuer()
 
     def test_get_jwt_audience_from_env(self):
         """Test JWT audience from environment."""
