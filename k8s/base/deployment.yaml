@@ -41,6 +41,12 @@ spec:
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 30
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           resources:
             requests:
               memory: "80Mi"
