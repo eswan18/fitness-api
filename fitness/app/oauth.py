@@ -24,9 +24,18 @@ JWKS_CACHE_DURATION = 3600  # 1 hour
 
 
 def get_identity_provider_url() -> str:
-    """Get identity provider base URL from environment."""
-    url = os.getenv("IDENTITY_PROVIDER_URL", "http://localhost:8080")
+    """Get identity provider base URL from environment (used for JWKS fetching)."""
+    url = os.environ["IDENTITY_PROVIDER_URL"]
     return url.rstrip("/")
+
+
+def get_jwt_issuer() -> str:
+    """Get expected JWT issuer from environment.
+
+    This is the public URL of the identity provider, which may differ from
+    IDENTITY_PROVIDER_URL when using internal K8s DNS for network calls.
+    """
+    return os.environ["JWT_ISSUER"].rstrip("/")
 
 
 def get_jwt_audience() -> str:
@@ -63,14 +72,14 @@ def validate_jwt_token(token: str) -> Optional[Dict[str, Any]]:
         jwks_client = get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(token)
 
-        identity_url = get_identity_provider_url()
+        issuer = get_jwt_issuer()
         audience = get_jwt_audience()
 
         decoded = jwt.decode(
             token,
             signing_key.key,
             algorithms=["ES256"],
-            issuer=identity_url,
+            issuer=issuer,
             audience=audience,
             options={"require": ["exp", "iss", "sub", "aud"]},
         )
