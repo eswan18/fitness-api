@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fitness-api-staging-ts
+spec:
+  defaultBackend:
+    service:
+      name: fitness-api
+      port:
+        number: 80
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - fitness-api-staging

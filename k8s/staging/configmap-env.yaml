@@ -5,9 +5,9 @@ metadata:
 data:
   ENV: "staging"
   IDENTITY_PROVIDER_URL: "http://identity.identity-staging.svc.cluster.local"
-  JWT_ISSUER: "https://identity-staging.ethanswan.com"
-  PUBLIC_API_BASE_URL: "https://fitness-api-staging.ethanswan.com"
-  PUBLIC_DASHBOARD_BASE_URL: "https://fitness-staging.ethanswan.com"
+  JWT_ISSUER: "https://identity-staging.tailc06f30.ts.net"
+  PUBLIC_API_BASE_URL: "https://fitness-api-staging.tailc06f30.ts.net"
+  PUBLIC_DASHBOARD_BASE_URL: "https://fitness-staging.tailc06f30.ts.net"
   JWT_AUDIENCE: "ethanswan:fitness"
   STRAVA_OAUTH_URL: "https://www.strava.com/oauth/authorize"
   STRAVA_TOKEN_URL: "https://www.strava.com/oauth/token"
