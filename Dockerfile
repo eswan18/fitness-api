@@ -23,7 +23,7 @@ COPY --from=builder /app /app
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-USER 1000
+USER appuser
 
 EXPOSE 8000
 
