@@ -5,6 +5,7 @@ namespace: fitness-api-staging
 
 resources:
   - ../base
+  - namespace.yaml
   - secret-provider-class.yaml
   - configmap-env.yaml
 
