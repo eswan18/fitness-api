@@ -127,7 +127,6 @@ See `.env.dev.example` for a template. 🔑 = secret, do not commit.
 | Variable | Description |
 |----------|-------------|
 | `ENV` | Environment name; loads `.env.dev` or `.env.prod` (default: `dev`) |
-| `VERCEL_ENV` | Set automatically on Vercel deployments |
 | `LOG_LEVEL` | Logging level (default: `WARNING`) |
 | `MMF_TIMEZONE` | Timezone for MapMyFitness data (default: `America/Chicago`) |
 
