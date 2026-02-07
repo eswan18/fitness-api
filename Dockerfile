@@ -16,7 +16,7 @@ RUN uv sync --frozen --no-dev --no-editable
 
 FROM python:3.13-slim
 
-RUN useradd --create-home appuser
+RUN useradd --create-home --uid 1000 appuser
 
 WORKDIR /app
 COPY --from=builder /app /app
