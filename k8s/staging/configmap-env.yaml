@@ -4,5 +4,6 @@ metadata:
   name: fitness-api-staging-env-config
 data:
   ENV: "staging"
+  IDENTITY_PROVIDER_URL: "http://identity.identity-staging.svc.cluster.local"
   STRAVA_OAUTH_URL: "https://www.strava.com/oauth/authorize"
   STRAVA_TOKEN_URL: "https://www.strava.com/oauth/token"

@@ -4,5 +4,6 @@ metadata:
   name: fitness-api-prod-env-config
 data:
   ENV: "prod"
+  IDENTITY_PROVIDER_URL: "http://identity.identity-prod.svc.cluster.local"
   STRAVA_OAUTH_URL: "https://www.strava.com/oauth/authorize"
   STRAVA_TOKEN_URL: "https://www.strava.com/oauth/token"
