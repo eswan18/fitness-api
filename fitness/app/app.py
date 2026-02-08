@@ -63,6 +63,7 @@ SortOrder = Literal["asc", "desc"]
 T = TypeVar("T", Run, RunDetail)
 
 PUBLIC_API_BASE_URL = os.environ["PUBLIC_API_BASE_URL"]
+PUBLIC_DASHBOARD_BASE_URL = os.environ["PUBLIC_DASHBOARD_BASE_URL"]
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",  # Vite dev server
         "http://127.0.0.1:5173",
-        "https://fitness.ethanswan.com",  # Production dashboard
+        PUBLIC_DASHBOARD_BASE_URL,
     ],
     allow_credentials=True,
     allow_methods=["*"],
