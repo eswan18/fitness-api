@@ -198,6 +198,7 @@ class TestGetRunWorkout:
 class TestUpdateRunWorkout:
     """Test PATCH /run-workouts/{id}."""
 
+    @patch(f"{_DB_MOD}.is_run_workout_synced", return_value=False)
     @patch(f"{_DB_MOD}.get_run_details_by_ids")
     @patch(f"{_DB_MOD}.get_run_ids_for_workout")
     @patch(f"{_DB_MOD}.update_run_workout")
@@ -206,6 +207,7 @@ class TestUpdateRunWorkout:
         mock_update: MagicMock,
         mock_get_ids: MagicMock,
         mock_get_details: MagicMock,
+        _mock_synced: MagicMock,
         editor_client: TestClient,
     ):
         mock_update.return_value = _make_workout(title="Updated Title")
@@ -222,17 +224,24 @@ class TestUpdateRunWorkout:
         assert response.status_code == 200
         assert response.json()["title"] == "Updated Title"
 
-    def test_update_no_fields(self, editor_client: TestClient):
+    @patch(f"{_DB_MOD}.is_run_workout_synced", return_value=False)
+    def test_update_no_fields(
+        self,
+        _mock_synced: MagicMock,
+        editor_client: TestClient,
+    ):
         response = editor_client.patch(
             "/run-workouts/rw_test-1",
             json={},
         )
         assert response.status_code == 400
 
+    @patch(f"{_DB_MOD}.is_run_workout_synced", return_value=False)
     @patch(f"{_DB_MOD}.update_run_workout")
     def test_update_not_found(
         self,
         mock_update: MagicMock,
+        _mock_synced: MagicMock,
         editor_client: TestClient,
     ):
         mock_update.return_value = None
@@ -246,20 +255,24 @@ class TestUpdateRunWorkout:
 class TestDeleteRunWorkout:
     """Test DELETE /run-workouts/{id}."""
 
+    @patch(f"{_DB_MOD}.is_run_workout_synced", return_value=False)
     @patch(f"{_DB_MOD}.delete_run_workout")
     def test_delete_success(
         self,
         mock_delete: MagicMock,
+        _mock_synced: MagicMock,
         editor_client: TestClient,
     ):
         mock_delete.return_value = True
         response = editor_client.delete("/run-workouts/rw_test-1")
         assert response.status_code == 200
 
+    @patch(f"{_DB_MOD}.is_run_workout_synced", return_value=False)
     @patch(f"{_DB_MOD}.delete_run_workout")
     def test_delete_not_found(
         self,
         mock_delete: MagicMock,
+        _mock_synced: MagicMock,
         editor_client: TestClient,
     ):
         mock_delete.return_value = False
@@ -274,6 +287,7 @@ class TestDeleteRunWorkout:
 class TestReplaceWorkoutRuns:
     """Test PUT /run-workouts/{id}/runs."""
 
+    @patch(f"{_DB_MOD}.is_run_workout_synced", return_value=False)
     @patch(f"{_DB_MOD}.get_run_details_by_ids")
     @patch(f"{_DB_MOD}.get_run_ids_for_workout")
     @patch(f"{_DB_MOD}.get_run_workout_by_id")
@@ -284,6 +298,7 @@ class TestReplaceWorkoutRuns:
         mock_get: MagicMock,
         mock_get_ids: MagicMock,
         mock_get_details: MagicMock,
+        _mock_synced: MagicMock,
         editor_client: TestClient,
     ):
         mock_set.return_value = None
@@ -312,6 +327,49 @@ class TestReplaceWorkoutRuns:
             json={"run_ids": ["run_1"]},
         )
         assert response.status_code == 422
+
+
+class TestSyncedWorkoutRejection:
+    """Test that synced run workouts cannot be edited."""
+
+    @patch(f"{_DB_MOD}.is_run_workout_synced", return_value=True)
+    def test_update_synced_workout_rejected(
+        self,
+        _mock_synced: MagicMock,
+        editor_client: TestClient,
+    ):
+        """Test that updating a synced workout returns 409 Conflict."""
+        response = editor_client.patch(
+            "/run-workouts/rw_test-1",
+            json={"title": "New Title"},
+        )
+        assert response.status_code == 409
+        assert "synced" in response.json()["detail"]
+
+    @patch(f"{_DB_MOD}.is_run_workout_synced", return_value=True)
+    def test_replace_runs_synced_workout_rejected(
+        self,
+        _mock_synced: MagicMock,
+        editor_client: TestClient,
+    ):
+        """Test that replacing runs in a synced workout returns 409 Conflict."""
+        response = editor_client.put(
+            "/run-workouts/rw_test-1/runs",
+            json={"run_ids": ["run_3", "run_4"]},
+        )
+        assert response.status_code == 409
+        assert "synced" in response.json()["detail"]
+
+    @patch(f"{_DB_MOD}.is_run_workout_synced", return_value=True)
+    def test_delete_synced_workout_rejected(
+        self,
+        _mock_synced: MagicMock,
+        editor_client: TestClient,
+    ):
+        """Test that deleting a synced workout returns 409 Conflict."""
+        response = editor_client.delete("/run-workouts/rw_test-1")
+        assert response.status_code == 409
+        assert "synced" in response.json()["detail"]
 
 
 class TestActivityFeed:

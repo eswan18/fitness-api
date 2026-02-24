@@ -50,12 +50,14 @@ def sample_history_record():
 class TestUpdateRunEndpoint:
     """Test the PATCH /runs/{run_id} endpoint."""
 
+    @patch("fitness.app.routers.run.is_run_synced", return_value=False)
     @patch("fitness.app.routers.run.get_run_by_id")
     @patch("fitness.app.routers.run.update_run_with_history")
     def test_update_run_success(
         self,
         mock_update: MagicMock,
         mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
         sample_run,
         auth_client: TestClient,
     ):
@@ -125,9 +127,14 @@ class TestUpdateRunEndpoint:
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]
 
+    @patch("fitness.app.routers.run.is_run_synced", return_value=False)
     @patch("fitness.app.routers.run.get_run_by_id")
     def test_update_run_no_fields(
-        self, mock_get_run: MagicMock, sample_run, auth_client: TestClient
+        self,
+        mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
+        sample_run,
+        auth_client: TestClient,
     ):
         """Test update with no valid fields provided."""
         mock_get_run.return_value = sample_run
@@ -147,9 +154,14 @@ class TestUpdateRunEndpoint:
 
         assert response.status_code == 422  # Validation error
 
+    @patch("fitness.app.routers.run.is_run_synced", return_value=False)
     @patch("fitness.app.routers.run.get_run_by_id")
     def test_update_run_invalid_field(
-        self, mock_get_run: MagicMock, sample_run: Run, auth_client: TestClient
+        self,
+        mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
+        sample_run: Run,
+        auth_client: TestClient,
     ):
         """Test update with invalid field (ignored by Pydantic, no valid fields remain)."""
         mock_get_run.return_value = sample_run
@@ -279,6 +291,7 @@ class TestGetRunVersionEndpoint:
 class TestRestoreRunEndpoint:
     """Test the POST /runs/{run_id}/restore/{version_number} endpoint."""
 
+    @patch("fitness.app.routers.run.is_run_synced", return_value=False)
     @patch("fitness.app.routers.run.get_run_by_id")
     @patch("fitness.app.routers.run.get_run_version")
     @patch("fitness.app.routers.run.update_run_with_history")
@@ -287,6 +300,7 @@ class TestRestoreRunEndpoint:
         mock_update: MagicMock,
         mock_get_version: MagicMock,
         mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
         sample_run: Run,
         sample_history_record: RunHistoryRecord,
         auth_client: TestClient,
@@ -320,12 +334,14 @@ class TestRestoreRunEndpoint:
 
         assert response.status_code == 404
 
+    @patch("fitness.app.routers.run.is_run_synced", return_value=False)
     @patch("fitness.app.routers.run.get_run_by_id")
     @patch("fitness.app.routers.run.get_run_version")
     def test_restore_run_version_not_found(
         self,
         mock_get_version: MagicMock,
         mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
         sample_run: Run,
         auth_client: TestClient,
     ):
@@ -337,6 +353,49 @@ class TestRestoreRunEndpoint:
 
         assert response.status_code == 404
         assert "Version 99 not found" in response.json()["detail"]
+
+
+class TestSyncedRunRejection:
+    """Test that synced runs cannot be edited."""
+
+    @patch("fitness.app.routers.run.is_run_synced", return_value=True)
+    @patch("fitness.app.routers.run.get_run_by_id")
+    def test_update_synced_run_rejected(
+        self,
+        mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
+        sample_run: Run,
+        auth_client: TestClient,
+    ):
+        """Test that updating a synced run returns 409 Conflict."""
+        mock_get_run.return_value = sample_run
+
+        update_data = {
+            "distance": 5.5,
+            "changed_by": "user123",
+        }
+
+        response = auth_client.patch("/runs/test_run_123", json=update_data)
+
+        assert response.status_code == 409
+        assert "synced" in response.json()["detail"]
+
+    @patch("fitness.app.routers.run.is_run_synced", return_value=True)
+    @patch("fitness.app.routers.run.get_run_by_id")
+    def test_restore_synced_run_rejected(
+        self,
+        mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
+        sample_run: Run,
+        auth_client: TestClient,
+    ):
+        """Test that restoring a synced run returns 409 Conflict."""
+        mock_get_run.return_value = sample_run
+
+        response = auth_client.post("/runs/test_run_123/restore/1?restored_by=user123")
+
+        assert response.status_code == 409
+        assert "synced" in response.json()["detail"]
 
 
 class TestAuthenticationRequirements:

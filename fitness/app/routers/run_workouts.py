@@ -11,7 +11,10 @@ from fitness.app.auth import require_viewer, require_editor
 from fitness.models.user import User
 from fitness.models.run_detail import RunDetail
 from fitness.models.run_workout import RunWorkout, RunWorkoutDetail
-from fitness.db.synced_run_workouts import get_synced_run_workouts_by_ids
+from fitness.db.synced_run_workouts import (
+    get_synced_run_workouts_by_ids,
+    is_run_workout_synced,
+)
 from fitness.db.run_workouts import (
     create_run_workout,
     get_run_workout_by_id,
@@ -109,6 +112,15 @@ class ActivityFeedWorkoutItem(BaseModel):
     item: RunWorkoutDetail
 
 
+def _reject_if_workout_synced(workout_id: str) -> None:
+    """Raise 409 Conflict if the run workout is synced to Google Calendar."""
+    if is_run_workout_synced(workout_id):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Run workout {workout_id} is synced and cannot be edited",
+        )
+
+
 # --- CRUD Endpoints ---
 
 
@@ -161,6 +173,8 @@ async def patch_workout(
     _user: User = Depends(require_editor),
 ) -> RunWorkoutDetailResponse:
     """Update a run workout's title and/or notes."""
+    _reject_if_workout_synced(workout_id)
+
     if request.title is None and request.notes is None:
         raise HTTPException(status_code=400, detail="No fields to update")
 
@@ -183,6 +197,8 @@ async def replace_workout_runs(
     _user: User = Depends(require_editor),
 ) -> RunWorkoutDetailResponse:
     """Replace the set of runs in a workout."""
+    _reject_if_workout_synced(workout_id)
+
     try:
         set_run_workout_runs(workout_id, request.run_ids)
     except ValueError as e:
@@ -202,6 +218,8 @@ async def remove_workout(
     _user: User = Depends(require_editor),
 ) -> dict[str, str]:
     """Soft-delete a run workout and unlink its runs."""
+    _reject_if_workout_synced(workout_id)
+
     deleted = delete_run_workout(workout_id)
     if not deleted:
         raise HTTPException(
