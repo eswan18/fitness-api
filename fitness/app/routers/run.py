@@ -20,6 +20,7 @@ from fitness.db.runs_history import (
     get_run_version,
     RunHistoryRecord,
 )
+from fitness.db.synced_runs import is_run_synced
 from fitness.app.auth import require_viewer, require_editor
 from fitness.models.user import User
 from fitness.models import Run
@@ -36,6 +37,15 @@ def _get_run_or_404(run_id: str) -> Run:
             detail=f"Run with ID {run_id} not found",
         )
     return run
+
+
+def _reject_if_synced(run_id: str) -> None:
+    """Raise 409 Conflict if the run is synced to Google Calendar."""
+    if is_run_synced(run_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Run {run_id} is synced and cannot be edited",
+        )
 
 
 router = APIRouter(prefix="/runs", tags=["run-editing"])
@@ -141,6 +151,7 @@ def update_run(
     """
     try:
         _get_run_or_404(run_id)
+        _reject_if_synced(run_id)
 
         # Build updates dictionary, excluding None values and metadata fields
         updates = update_request.model_dump(
@@ -270,6 +281,7 @@ def restore_run_to_version(
     """
     try:
         _get_run_or_404(run_id)
+        _reject_if_synced(run_id)
 
         # Get the historical version to restore to
         historical_version = get_run_version(run_id, version_number)
