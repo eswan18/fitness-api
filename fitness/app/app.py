@@ -185,8 +185,7 @@ def read_all_runs(
     from fitness.db.runs import get_runs_in_date_range
 
     if user_timezone is None:
-        runs = get_runs_in_date_range(start, end)
-        filtered_runs = [run for run in runs if start <= run.datetime_utc.date() <= end]
+        filtered_runs = get_runs_in_date_range(start, end)
     else:
         # Widen by 1 day on each side to account for UTC-to-local offset
         runs = get_runs_in_date_range(start - timedelta(days=1), end + timedelta(days=1))
