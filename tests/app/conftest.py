@@ -38,9 +38,7 @@ def mock_db_calls(monkeypatch):
     monkeypatch.setattr(
         "fitness.db.runs.get_runs_for_date_range", lambda *args, **kwargs: []
     )
-    monkeypatch.setattr(
-        "fitness.db.runs.get_all_runs", lambda *args, **kwargs: []
-    )
+    monkeypatch.setattr("fitness.db.runs.get_all_runs", lambda *args, **kwargs: [])
     monkeypatch.setattr(
         sys.modules["fitness.app.app"],
         "get_runs_for_date_range",

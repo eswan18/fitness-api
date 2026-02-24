@@ -87,7 +87,9 @@ def get_runs_for_date_range(
     in Python after timezone conversion.
     """
     if user_timezone is not None:
-        return get_runs_in_date_range(start - timedelta(days=1), end + timedelta(days=1))
+        return get_runs_in_date_range(
+            start - timedelta(days=1), end + timedelta(days=1)
+        )
     return get_runs_in_date_range(start, end)
 
 

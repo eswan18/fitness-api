@@ -11,9 +11,7 @@ def test_mileage_total_widens_dates_for_timezone(
 ):
     """When user_timezone is provided, the query date range should be widened by +-1 day."""
     mock = MagicMock(return_value=[])
-    monkeypatch.setattr(
-        "fitness.app.routers.metrics.get_runs_for_date_range", mock
-    )
+    monkeypatch.setattr("fitness.app.routers.metrics.get_runs_for_date_range", mock)
 
     viewer_client.get(
         "/metrics/mileage/total",
@@ -34,9 +32,7 @@ def test_mileage_total_no_buffer_without_timezone(
 ):
     """Without user_timezone, the query should use exact dates (no buffer)."""
     mock = MagicMock(return_value=[])
-    monkeypatch.setattr(
-        "fitness.app.routers.metrics.get_runs_for_date_range", mock
-    )
+    monkeypatch.setattr("fitness.app.routers.metrics.get_runs_for_date_range", mock)
 
     viewer_client.get(
         "/metrics/mileage/total",
@@ -51,9 +47,7 @@ def test_rolling_mileage_includes_lookback_window(
 ):
     """Rolling mileage should expand start by (window-1) days for the lookback."""
     mock = MagicMock(return_value=[])
-    monkeypatch.setattr(
-        "fitness.app.routers.metrics.get_runs_for_date_range", mock
-    )
+    monkeypatch.setattr("fitness.app.routers.metrics.get_runs_for_date_range", mock)
 
     viewer_client.get(
         "/metrics/mileage/rolling-by-day",
@@ -66,18 +60,14 @@ def test_rolling_mileage_includes_lookback_window(
     )
 
     expected_start = date(2025, 6, 1) - timedelta(days=6)  # window-1 = 6
-    mock.assert_called_once_with(
-        expected_start, date(2025, 6, 30), "America/Chicago"
-    )
+    mock.assert_called_once_with(expected_start, date(2025, 6, 30), "America/Chicago")
 
 
 def test_training_load_uses_all_runs(monkeypatch, viewer_client: TestClient):
     """Training load needs full history for ATL/CTL convergence, not date-filtered."""
     mock_all = MagicMock(return_value=[])
     mock_date_range = MagicMock(return_value=[])
-    monkeypatch.setattr(
-        "fitness.app.routers.metrics.get_all_runs", mock_all
-    )
+    monkeypatch.setattr("fitness.app.routers.metrics.get_all_runs", mock_all)
     monkeypatch.setattr(
         "fitness.app.routers.metrics.get_runs_for_date_range", mock_date_range
     )
