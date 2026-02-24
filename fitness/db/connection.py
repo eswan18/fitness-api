@@ -3,6 +3,9 @@ from contextlib import contextmanager
 from typing import Iterator
 
 import psycopg
+from psycopg_pool import ConnectionPool
+
+_pool: ConnectionPool | None = None
 
 
 def get_database_url() -> str:
@@ -23,18 +26,32 @@ def get_sqlalchemy_database_url() -> str:
     return url
 
 
+def init_pool() -> None:
+    """Create the connection pool. Call once at app startup."""
+    global _pool
+    _pool = ConnectionPool(get_database_url(), min_size=2, max_size=10)
+
+
+def close_pool() -> None:
+    """Close the connection pool. Call once at app shutdown."""
+    global _pool
+    if _pool is not None:
+        _pool.close()
+        _pool = None
+
+
 @contextmanager
 def get_db_connection() -> Iterator[psycopg.Connection]:
-    """Get a database connection context manager.
-
-    Explicitly closes the connection to ensure proper cleanup in serverless environments.
-    """
-    url = get_database_url()
-    conn = psycopg.connect(url)
-    try:
-        yield conn
-    finally:
-        conn.close()
+    """Get a database connection from the pool, or create one directly if no pool exists."""
+    if _pool is not None:
+        with _pool.connection() as conn:
+            yield conn
+    else:
+        conn = psycopg.connect(get_database_url())
+        try:
+            yield conn
+        finally:
+            conn.close()
 
 
 @contextmanager

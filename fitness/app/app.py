@@ -105,8 +105,12 @@ def check_migrations() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    from fitness.db.connection import init_pool, close_pool
+
+    init_pool()
     check_migrations()
     yield
+    close_pool()
 
 
 app = FastAPI(lifespan=lifespan)
