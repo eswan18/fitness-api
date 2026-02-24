@@ -13,6 +13,7 @@ from typing import Literal, TypeVar
 from fastapi import FastAPI, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from fitness.db.runs import get_runs_in_date_range
 from fitness.models import Run
 from fitness.models.run_detail import RunDetail
 from fitness.app.routers.run_workouts import (
@@ -182,8 +183,6 @@ def read_all_runs(
         sort_by: Field to sort by (date, distance, duration, pace, heart_rate, source, type, shoes).
         sort_order: Sort order, ascending or descending.
     """
-    from fitness.db.runs import get_runs_in_date_range
-
     if user_timezone is None:
         filtered_runs = get_runs_in_date_range(start, end)
     else:
