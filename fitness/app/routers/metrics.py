@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Dict
 
 from fastapi import APIRouter, Depends
@@ -11,12 +11,12 @@ from fitness.agg import (
     total_seconds,
     training_stress_balance,
 )
+from fitness.db.runs import get_runs_for_date_range, get_all_runs
 from fitness.db.shoes import get_shoes
 from fitness.agg.training_load import trimp_by_day
 from fitness.app.constants import DEFAULT_START, DEFAULT_END
-from fitness.app.dependencies import all_runs
 from fitness.app.auth import require_viewer
-from fitness.models import Run, Sex, DayTrainingLoad, ShoeMileage, User
+from fitness.models import Sex, DayTrainingLoad, ShoeMileage, User
 from fitness.app.models import (
     DayMileage,
 )
@@ -29,7 +29,6 @@ def read_total_seconds(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,
     user_timezone: str | None = None,
-    runs: list[Run] = Depends(all_runs),
     _user: User = Depends(require_viewer),
 ) -> float:
     """Get total seconds.
@@ -38,8 +37,8 @@ def read_total_seconds(
         start: Inclusive start date for filtering (local to `user_timezone` if provided).
         end: Inclusive end date for filtering (local to `user_timezone` if provided).
         user_timezone: IANA timezone for local-date filtering and display. If None, use UTC dates.
-        runs: Dependency injection of all runs from the database.
     """
+    runs = get_runs_for_date_range(start, end, user_timezone)
     return total_seconds(runs, start, end, user_timezone)
 
 
@@ -48,7 +47,6 @@ def read_total_mileage(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,
     user_timezone: str | None = None,
-    runs: list[Run] = Depends(all_runs),
     _user: User = Depends(require_viewer),
 ) -> float:
     """Get total mileage.
@@ -57,8 +55,8 @@ def read_total_mileage(
         start: Inclusive start date for filtering (local to `user_timezone` if provided).
         end: Inclusive end date for filtering (local to `user_timezone` if provided).
         user_timezone: IANA timezone for local-date filtering and display. If None, use UTC dates.
-        runs: Dependency injection of all runs from the database.
     """
+    runs = get_runs_for_date_range(start, end, user_timezone)
     return total_mileage(runs, start, end, user_timezone)
 
 
@@ -67,13 +65,13 @@ def read_mileage_by_day(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,
     user_timezone: str | None = None,
-    runs: list[Run] = Depends(all_runs),
     _user: User = Depends(require_viewer),
 ) -> list[DayMileage]:
     """Get mileage by day.
 
     Returns a list of DayMileage entries for each day in [start, end].
     """
+    runs = get_runs_for_date_range(start, end, user_timezone)
     tuples: list[tuple[date, float]] = miles_by_day(runs, start, end, user_timezone)
     results = [DayMileage(date=day, mileage=miles) for (day, miles) in tuples]
     return results
@@ -85,7 +83,6 @@ def read_rolling_mileage_by_day(
     end: date = DEFAULT_END,
     window: int = 1,
     user_timezone: str | None = None,
-    runs: list[Run] = Depends(all_runs),
     _user: User = Depends(require_viewer),
 ) -> list[DayMileage]:
     """Get rolling sum of mileage over a window by day.
@@ -93,6 +90,9 @@ def read_rolling_mileage_by_day(
     Args:
         window: Number of days in the rolling window (>= 1).
     """
+    # Expand start by (window-1) days for the rolling lookback
+    lookback_start = start - timedelta(days=window - 1)
+    runs = get_runs_for_date_range(lookback_start, end, user_timezone)
     tuples: list[tuple[date, float]] = rolling_sum(
         runs, start, end, window, user_timezone
     )
@@ -103,7 +103,6 @@ def read_rolling_mileage_by_day(
 @router.get("/mileage/by-shoe", response_model=List[ShoeMileage])
 def read_miles_by_shoe(
     include_retired: bool = False,
-    runs: list[Run] = Depends(all_runs),
     _user: User = Depends(require_viewer),
 ) -> list[ShoeMileage]:
     """
@@ -115,6 +114,7 @@ def read_miles_by_shoe(
     Returns:
         List of ShoeMileage objects containing full shoe data including retirement info
     """
+    runs = get_all_runs()
     shoes = get_shoes()
     return mileage_by_shoes(runs, shoes=shoes, include_retired=include_retired)
 
@@ -127,13 +127,14 @@ def read_training_load_by_day(
     resting_hr: float,
     sex: Sex,
     user_timezone: str | None = None,
-    runs: list[Run] = Depends(all_runs),
     _user: User = Depends(require_viewer),
 ) -> list[DayTrainingLoad]:
     """Get training load by day.
 
     Computes CTL/ATL/TSB over the specified range using heart-rate-enabled runs.
+    Needs full history for ATL/CTL convergence.
     """
+    runs = get_all_runs()
     return training_stress_balance(
         runs=runs,
         max_hr=max_hr,
@@ -153,12 +154,12 @@ def read_trimp_by_day(
     resting_hr: float = 42,
     sex: Sex = "M",
     user_timezone: str | None = None,
-    runs: list[Run] = Depends(all_runs),
     _user: User = Depends(require_viewer),
 ) -> list[dict]:
     """Get TRIMP values by day.
 
     Returns a list of dicts with keys {"date", "trimp"} for each day.
     """
+    runs = get_runs_for_date_range(start, end, user_timezone)
     day_trimps = trimp_by_day(runs, start, end, max_hr, resting_hr, sex, user_timezone)
     return [{"date": dt.date, "trimp": dt.trimp} for dt in day_trimps]

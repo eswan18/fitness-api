@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from psycopg import sql
 
@@ -50,6 +50,47 @@ def get_all_runs(include_deleted: bool = False) -> list[Run]:
             """)
         rows = cursor.fetchall()
         return [_row_to_run(row) for row in rows]
+
+
+def get_runs_in_date_range(
+    start_date: date,
+    end_date: date,
+    include_deleted: bool = False,
+) -> list[Run]:
+    """Get runs within a date range with shoe information."""
+    with get_db_cursor() as cursor:
+        deleted_filter = sql.SQL("")
+        if not include_deleted:
+            deleted_filter = sql.SQL(" AND r.deleted_at IS NULL")
+        query = sql.SQL("""
+            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source,
+                   r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
+            FROM runs r
+            LEFT JOIN shoes s ON r.shoe_id = s.id
+            WHERE DATE(r.datetime_utc) BETWEEN %s AND %s{deleted_filter}
+            ORDER BY r.datetime_utc
+        """).format(deleted_filter=deleted_filter)
+        cursor.execute(query, [start_date, end_date])
+        rows = cursor.fetchall()
+        return [_row_to_run(row) for row in rows]
+
+
+def get_runs_for_date_range(
+    start: date,
+    end: date,
+    user_timezone: str | None = None,
+) -> list[Run]:
+    """Fetch runs for a date range, widening by 1 day when timezone conversion is needed.
+
+    When user_timezone is set, the SQL query is widened by +-1 day to account for
+    UTC-to-local date offset (max +-14 hours). Callers still do exact filtering
+    in Python after timezone conversion.
+    """
+    if user_timezone is not None:
+        return get_runs_in_date_range(
+            start - timedelta(days=1), end + timedelta(days=1)
+        )
+    return get_runs_in_date_range(start, end)
 
 
 def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:

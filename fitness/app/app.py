@@ -13,6 +13,7 @@ from typing import Literal, TypeVar
 from fastapi import FastAPI, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from fitness.db.runs import get_runs_for_date_range
 from fitness.models import Run
 from fitness.models.run_detail import RunDetail
 from fitness.app.routers.run_workouts import (
@@ -20,7 +21,6 @@ from fitness.app.routers.run_workouts import (
     ActivityFeedWorkoutItem,
 )
 from .constants import DEFAULT_START, DEFAULT_END
-from .dependencies import all_runs
 from .routers import (
     metrics_router,
     shoe_router,
@@ -172,7 +172,6 @@ def read_all_runs(
     user_timezone: str | None = None,
     sort_by: RunSortBy = "date",
     sort_order: SortOrder = "desc",
-    runs: list[Run] = Depends(all_runs),
     _user: User = Depends(require_viewer),
 ) -> list[Run]:
     """Get all runs with optional sorting.
@@ -183,20 +182,16 @@ def read_all_runs(
         user_timezone: IANA timezone for local-date filtering and display. If None, use UTC dates.
         sort_by: Field to sort by (date, distance, duration, pace, heart_rate, source, type, shoes).
         sort_order: Sort order, ascending or descending.
-        runs: Dependency injection of all runs from the database.
     """
-    # Filter first to get the right date range
     if user_timezone is None:
-        # Simple UTC filtering
-        filtered_runs = [run for run in runs if start <= run.datetime_utc.date() <= end]
+        filtered_runs = get_runs_for_date_range(start, end)
     else:
-        # Convert to user timezone and filter by local dates
+        runs = get_runs_for_date_range(start, end, user_timezone)
         localized_runs = convert_runs_to_user_timezone(runs, user_timezone)
         filtered_runs = [
             run for run in localized_runs if start <= run.local_date <= end
         ]
 
-    # Apply sorting to filtered runs
     return sort_runs_generic(filtered_runs, sort_by, sort_order)
 
 

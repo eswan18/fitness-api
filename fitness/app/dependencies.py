@@ -2,17 +2,10 @@ import logging
 
 from fastapi import HTTPException
 
-from fitness.models import Run
-from fitness.db.runs import get_all_runs
 from fitness.db.oauth_credentials import get_credentials
 from fitness.integrations.strava.client import StravaClient
 
 logger = logging.getLogger(__name__)
-
-
-def all_runs() -> list[Run]:
-    """Get all runs from the database."""
-    return get_all_runs()
 
 
 def strava_client() -> StravaClient:
