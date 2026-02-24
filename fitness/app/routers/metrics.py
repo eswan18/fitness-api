@@ -11,7 +11,7 @@ from fitness.agg import (
     total_seconds,
     training_stress_balance,
 )
-from fitness.db.runs import get_runs_in_date_range, get_all_runs
+from fitness.db.runs import get_runs_for_date_range, get_all_runs
 from fitness.db.shoes import get_shoes
 from fitness.agg.training_load import trimp_by_day
 from fitness.app.constants import DEFAULT_START, DEFAULT_END
@@ -38,10 +38,7 @@ def read_total_seconds(
         end: Inclusive end date for filtering (local to `user_timezone` if provided).
         user_timezone: IANA timezone for local-date filtering and display. If None, use UTC dates.
     """
-    if user_timezone is not None:
-        runs = get_runs_in_date_range(start - timedelta(days=1), end + timedelta(days=1))
-    else:
-        runs = get_runs_in_date_range(start, end)
+    runs = get_runs_for_date_range(start, end, user_timezone)
     return total_seconds(runs, start, end, user_timezone)
 
 
@@ -59,10 +56,7 @@ def read_total_mileage(
         end: Inclusive end date for filtering (local to `user_timezone` if provided).
         user_timezone: IANA timezone for local-date filtering and display. If None, use UTC dates.
     """
-    if user_timezone is not None:
-        runs = get_runs_in_date_range(start - timedelta(days=1), end + timedelta(days=1))
-    else:
-        runs = get_runs_in_date_range(start, end)
+    runs = get_runs_for_date_range(start, end, user_timezone)
     return total_mileage(runs, start, end, user_timezone)
 
 
@@ -77,10 +71,7 @@ def read_mileage_by_day(
 
     Returns a list of DayMileage entries for each day in [start, end].
     """
-    if user_timezone is not None:
-        runs = get_runs_in_date_range(start - timedelta(days=1), end + timedelta(days=1))
-    else:
-        runs = get_runs_in_date_range(start, end)
+    runs = get_runs_for_date_range(start, end, user_timezone)
     tuples: list[tuple[date, float]] = miles_by_day(runs, start, end, user_timezone)
     results = [DayMileage(date=day, mileage=miles) for (day, miles) in tuples]
     return results
@@ -99,11 +90,9 @@ def read_rolling_mileage_by_day(
     Args:
         window: Number of days in the rolling window (>= 1).
     """
-    # Expand start by (window-1) days for the lookback, plus 1 day for timezone buffer
-    tz_buffer = timedelta(days=1) if user_timezone is not None else timedelta(days=0)
-    query_start = start - timedelta(days=window - 1) - tz_buffer
-    query_end = end + tz_buffer
-    runs = get_runs_in_date_range(query_start, query_end)
+    # Expand start by (window-1) days for the rolling lookback
+    lookback_start = start - timedelta(days=window - 1)
+    runs = get_runs_for_date_range(lookback_start, end, user_timezone)
     tuples: list[tuple[date, float]] = rolling_sum(
         runs, start, end, window, user_timezone
     )
@@ -171,9 +160,6 @@ def read_trimp_by_day(
 
     Returns a list of dicts with keys {"date", "trimp"} for each day.
     """
-    if user_timezone is not None:
-        runs = get_runs_in_date_range(start - timedelta(days=1), end + timedelta(days=1))
-    else:
-        runs = get_runs_in_date_range(start, end)
+    runs = get_runs_for_date_range(start, end, user_timezone)
     day_trimps = trimp_by_day(runs, start, end, max_hr, resting_hr, sex, user_timezone)
     return [{"date": dt.date, "trimp": dt.trimp} for dt in day_trimps]

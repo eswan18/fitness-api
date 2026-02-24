@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from psycopg import sql
 
@@ -73,6 +73,22 @@ def get_runs_in_date_range(
         cursor.execute(query, [start_date, end_date])
         rows = cursor.fetchall()
         return [_row_to_run(row) for row in rows]
+
+
+def get_runs_for_date_range(
+    start: date,
+    end: date,
+    user_timezone: str | None = None,
+) -> list[Run]:
+    """Fetch runs for a date range, widening by 1 day when timezone conversion is needed.
+
+    When user_timezone is set, the SQL query is widened by +-1 day to account for
+    UTC-to-local date offset (max +-14 hours). Callers still do exact filtering
+    in Python after timezone conversion.
+    """
+    if user_timezone is not None:
+        return get_runs_in_date_range(start - timedelta(days=1), end + timedelta(days=1))
+    return get_runs_in_date_range(start, end)
 
 
 def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:

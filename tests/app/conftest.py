@@ -31,20 +31,23 @@ def mock_db_calls(monkeypatch):
     # Mock shoes - patch at the import locations where get_shoes is used
     monkeypatch.setattr("fitness.app.routers.shoes.get_shoes", lambda **kwargs: [])
     monkeypatch.setattr("fitness.app.routers.metrics.get_shoes", lambda **kwargs: [])
-    # Mock run queries - patch at each module-level import location
+    # Mock run queries - patch at source module and each module-level import location
     monkeypatch.setattr(
         "fitness.db.runs.get_runs_in_date_range", lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "fitness.db.runs.get_runs_for_date_range", lambda *args, **kwargs: []
     )
     monkeypatch.setattr(
         "fitness.db.runs.get_all_runs", lambda *args, **kwargs: []
     )
     monkeypatch.setattr(
         sys.modules["fitness.app.app"],
-        "get_runs_in_date_range",
+        "get_runs_for_date_range",
         lambda *args, **kwargs: [],
     )
     monkeypatch.setattr(
-        "fitness.app.routers.metrics.get_runs_in_date_range",
+        "fitness.app.routers.metrics.get_runs_for_date_range",
         lambda *args, **kwargs: [],
     )
     monkeypatch.setattr(

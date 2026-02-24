@@ -6,14 +6,14 @@ import os
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from typing import Literal, TypeVar
 
 from fastapi import FastAPI, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from fitness.db.runs import get_runs_in_date_range
+from fitness.db.runs import get_runs_for_date_range
 from fitness.models import Run
 from fitness.models.run_detail import RunDetail
 from fitness.app.routers.run_workouts import (
@@ -184,10 +184,9 @@ def read_all_runs(
         sort_order: Sort order, ascending or descending.
     """
     if user_timezone is None:
-        filtered_runs = get_runs_in_date_range(start, end)
+        filtered_runs = get_runs_for_date_range(start, end)
     else:
-        # Widen by 1 day on each side to account for UTC-to-local offset
-        runs = get_runs_in_date_range(start - timedelta(days=1), end + timedelta(days=1))
+        runs = get_runs_for_date_range(start, end, user_timezone)
         localized_runs = convert_runs_to_user_timezone(runs, user_timezone)
         filtered_runs = [
             run for run in localized_runs if start <= run.local_date <= end
