@@ -52,6 +52,29 @@ def get_all_runs(include_deleted: bool = False) -> list[Run]:
         return [_row_to_run(row) for row in rows]
 
 
+def get_runs_in_date_range(
+    start_date: date,
+    end_date: date,
+    include_deleted: bool = False,
+) -> list[Run]:
+    """Get runs within a date range with shoe information."""
+    with get_db_cursor() as cursor:
+        deleted_filter = sql.SQL("")
+        if not include_deleted:
+            deleted_filter = sql.SQL(" AND r.deleted_at IS NULL")
+        query = sql.SQL("""
+            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source,
+                   r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
+            FROM runs r
+            LEFT JOIN shoes s ON r.shoe_id = s.id
+            WHERE DATE(r.datetime_utc) BETWEEN %s AND %s{deleted_filter}
+            ORDER BY r.datetime_utc
+        """).format(deleted_filter=deleted_filter)
+        cursor.execute(query, [start_date, end_date])
+        rows = cursor.fetchall()
+        return [_row_to_run(row) for row in rows]
+
+
 def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
     """Insert multiple runs into the database in chunks with automatic history creation. Returns the number of inserted rows."""
     if not runs:

@@ -6,7 +6,7 @@ import os
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Literal, TypeVar
 
@@ -20,7 +20,6 @@ from fitness.app.routers.run_workouts import (
     ActivityFeedWorkoutItem,
 )
 from .constants import DEFAULT_START, DEFAULT_END
-from .dependencies import all_runs
 from .routers import (
     metrics_router,
     shoe_router,
@@ -172,7 +171,6 @@ def read_all_runs(
     user_timezone: str | None = None,
     sort_by: RunSortBy = "date",
     sort_order: SortOrder = "desc",
-    runs: list[Run] = Depends(all_runs),
     _user: User = Depends(require_viewer),
 ) -> list[Run]:
     """Get all runs with optional sorting.
@@ -183,20 +181,20 @@ def read_all_runs(
         user_timezone: IANA timezone for local-date filtering and display. If None, use UTC dates.
         sort_by: Field to sort by (date, distance, duration, pace, heart_rate, source, type, shoes).
         sort_order: Sort order, ascending or descending.
-        runs: Dependency injection of all runs from the database.
     """
-    # Filter first to get the right date range
+    from fitness.db.runs import get_runs_in_date_range
+
     if user_timezone is None:
-        # Simple UTC filtering
+        runs = get_runs_in_date_range(start, end)
         filtered_runs = [run for run in runs if start <= run.datetime_utc.date() <= end]
     else:
-        # Convert to user timezone and filter by local dates
+        # Widen by 1 day on each side to account for UTC-to-local offset
+        runs = get_runs_in_date_range(start - timedelta(days=1), end + timedelta(days=1))
         localized_runs = convert_runs_to_user_timezone(runs, user_timezone)
         filtered_runs = [
             run for run in localized_runs if start <= run.local_date <= end
         ]
 
-    # Apply sorting to filtered runs
     return sort_runs_generic(filtered_runs, sort_by, sort_order)
 
 

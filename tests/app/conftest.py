@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 
 from fitness.app.app import app
-from fitness.app.dependencies import strava_client, all_runs
+from fitness.app.dependencies import strava_client
 from fitness.models.user import User, Role
 
 
@@ -22,19 +22,6 @@ def override_strava_client():
 
 
 @pytest.fixture(autouse=True)
-def override_all_runs():
-    """Override all_runs dependency to avoid DB hits.
-
-    This fixture is autouse=True so it applies to all tests in tests/app/.
-    Returns an empty list by default. Tests can use dependency_overrides
-    directly if they need different data.
-    """
-    app.dependency_overrides[all_runs] = lambda: []
-    yield
-    app.dependency_overrides.pop(all_runs, None)
-
-
-@pytest.fixture(autouse=True)
 def mock_db_calls(monkeypatch):
     """Mock DB calls to avoid DB hits.
 
@@ -43,7 +30,25 @@ def mock_db_calls(monkeypatch):
     # Mock shoes - patch at the import locations where get_shoes is used
     monkeypatch.setattr("fitness.app.routers.shoes.get_shoes", lambda **kwargs: [])
     monkeypatch.setattr("fitness.app.routers.metrics.get_shoes", lambda **kwargs: [])
-    # Mock run details - patch at the source module, not the import location
+    # Mock run queries - patch at import locations for module-level imports,
+    # and at source module for local imports (e.g. app.py)
+    monkeypatch.setattr(
+        "fitness.db.runs.get_runs_in_date_range", lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "fitness.db.runs.get_all_runs", lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "fitness.app.routers.metrics.get_runs_in_date_range",
+        lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "fitness.app.routers.metrics.get_all_runs", lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr(
+        "fitness.app.routers.summary.get_all_runs", lambda *args, **kwargs: []
+    )
+    # Mock run details - patch at the source module
     monkeypatch.setattr(
         "fitness.db.runs.get_run_details_in_date_range", lambda *args, **kwargs: []
     )
