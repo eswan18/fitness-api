@@ -51,10 +51,10 @@ spec:
           resources:
             requests:
               memory: "80Mi"
-              cpu: "5m"
+              cpu: "40m"
             limits:
               memory: "256Mi"
-              cpu: "200m"
+              cpu: "400m"
           volumeMounts:
             - name: secrets-store
               mountPath: "/mnt/secrets"
