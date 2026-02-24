@@ -1,9 +1,58 @@
 """Test that endpoints call DB functions with correctly widened date ranges."""
 
+import sys
 from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
+
+
+# -- Endpoint wiring tests for /runs --
+
+
+def test_runs_endpoint_widens_dates_for_timezone(
+    monkeypatch, viewer_client: TestClient
+):
+    """The /runs endpoint should pass user_timezone through to get_runs_for_date_range."""
+    mock = MagicMock(return_value=[])
+    monkeypatch.setattr(
+        sys.modules["fitness.app.app"],
+        "get_runs_for_date_range",
+        mock,
+    )
+
+    viewer_client.get(
+        "/runs",
+        params={
+            "start": "2025-06-01",
+            "end": "2025-06-30",
+            "user_timezone": "America/Chicago",
+        },
+    )
+
+    mock.assert_called_once_with(date(2025, 6, 1), date(2025, 6, 30), "America/Chicago")
+
+
+def test_runs_endpoint_no_buffer_without_timezone(
+    monkeypatch, viewer_client: TestClient
+):
+    """The /runs endpoint should use exact dates when no timezone is provided."""
+    mock = MagicMock(return_value=[])
+    monkeypatch.setattr(
+        sys.modules["fitness.app.app"],
+        "get_runs_for_date_range",
+        mock,
+    )
+
+    viewer_client.get(
+        "/runs",
+        params={"start": "2025-06-01", "end": "2025-06-30"},
+    )
+
+    mock.assert_called_once_with(date(2025, 6, 1), date(2025, 6, 30))
+
+
+# -- Endpoint wiring tests for /metrics --
 
 
 def test_mileage_total_widens_dates_for_timezone(
