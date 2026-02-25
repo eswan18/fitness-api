@@ -449,3 +449,68 @@ def test_shoe_mileage_consistency(viewer_client, editor_client):
     assert final_shoe is not None
     assert final_shoe["mileage"] == initial_miles  # Should still be the same
     assert final_shoe["shoe"]["retired_at"] is None
+
+
+@pytest.mark.e2e
+def test_shoe_merge_workflow(viewer_client, editor_client):
+    """Test merging duplicate shoes and verifying alias resolution on re-import."""
+    # Create runs with two different shoe names (same physical shoe)
+    runs = [
+        Run(
+            id="merge_test_1",
+            datetime_utc=datetime(2024, 6, 1, 10, 0, 0),
+            type="Outdoor Run",
+            distance=5.0,
+            duration=2400.0,
+            source="Strava",
+        ),
+        Run(
+            id="merge_test_2",
+            datetime_utc=datetime(2024, 6, 2, 10, 0, 0),
+            type="Outdoor Run",
+            distance=6.0,
+            duration=2800.0,
+            source="MapMyFitness",
+        ),
+    ]
+    runs[0]._shoe_name = "Merge Shoe A"
+    runs[1]._shoe_name = "Merge Shoe B"
+
+    inserted = bulk_create_runs(runs)
+    assert inserted == 2
+
+    shoe_a_id = generate_shoe_id("Merge Shoe A")
+    shoe_b_id = generate_shoe_id("Merge Shoe B")
+
+    # Merge B into A
+    res = editor_client.post(
+        "/shoes/merge",
+        json={"keep_shoe_id": shoe_a_id, "merge_shoe_id": shoe_b_id},
+    )
+    assert res.status_code == 200
+
+    # Verify merged shoe is gone from active list
+    res = viewer_client.get("/shoes")
+    shoe_names = [s["name"] for s in res.json()]
+    assert "Merge Shoe A" in shoe_names
+    assert "Merge Shoe B" not in shoe_names
+
+    # Re-import a run with the old merged name — should resolve via alias
+    new_run = Run(
+        id="merge_test_3",
+        datetime_utc=datetime(2024, 6, 3, 10, 0, 0),
+        type="Outdoor Run",
+        distance=4.0,
+        duration=2000.0,
+        source="MapMyFitness",
+    )
+    new_run._shoe_name = "Merge Shoe B"
+    inserted = bulk_create_runs([new_run])
+    assert inserted == 1
+
+    # Verify the new run uses the kept shoe, not a recreated one
+    from fitness.db.runs import get_run_by_id
+
+    reimported = get_run_by_id("merge_test_3")
+    assert reimported is not None
+    assert reimported.shoe_id == shoe_a_id

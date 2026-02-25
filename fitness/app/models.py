@@ -56,6 +56,13 @@ class UpdateShoeRequest(BaseModel):
     retirement_notes: Optional[str] = None
 
 
+class MergeShoesRequest(BaseModel):
+    """Request model for merging two shoes."""
+
+    keep_shoe_id: str
+    merge_shoe_id: str
+
+
 class EnvironmentResponse(BaseModel):
     """Response model for the environment endpoint."""
 
