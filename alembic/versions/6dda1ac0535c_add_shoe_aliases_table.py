@@ -5,6 +5,7 @@ Revises: 8995ea55de0a
 Create Date: 2026-02-25 02:41:15.260205+00:00
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -32,4 +33,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     op.execute("DROP INDEX IF EXISTS idx_shoe_aliases_shoe_id")
-    op.execute("DROP TABLE IF EXISTS shoe_aliases") 
+    op.execute("DROP TABLE IF EXISTS shoe_aliases")

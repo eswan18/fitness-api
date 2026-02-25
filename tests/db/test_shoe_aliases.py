@@ -1,5 +1,9 @@
+from datetime import datetime
 from unittest.mock import MagicMock, patch
-from fitness.db.shoes import get_shoe_ids_by_alias_names
+
+from fitness.db.runs import bulk_create_runs
+from fitness.db.shoes import get_shoe_ids_by_alias_names, merge_shoes
+from fitness.models import Run
 
 
 def test_get_shoe_ids_by_alias_names_returns_mapping():
@@ -18,8 +22,6 @@ def test_get_shoe_ids_by_alias_names_empty_input():
     result = get_shoe_ids_by_alias_names(set())
     assert result == {}
 
-
-from fitness.db.shoes import merge_shoes
 
 
 def test_merge_shoes_executes_all_statements():
@@ -41,10 +43,6 @@ def test_merge_shoes_executes_all_statements():
     # Should have executed: update runs, update runs_history, insert alias, soft-delete shoe
     assert mock_cursor.execute.call_count == 4
 
-
-from fitness.db.runs import bulk_create_runs
-from fitness.models import Run
-from datetime import datetime
 
 
 def test_bulk_create_runs_resolves_aliases():
@@ -71,11 +69,12 @@ def test_bulk_create_runs_resolves_aliases():
     mock_conn_ctx.__enter__ = lambda s: mock_conn
     mock_conn_ctx.__exit__ = MagicMock(return_value=False)
 
-    with patch("fitness.db.shoes.get_existing_shoes_by_names", mock_get_existing), \
-         patch("fitness.db.shoes.get_shoe_ids_by_alias_names", mock_get_aliases), \
-         patch("fitness.db.shoes.bulk_create_shoes_by_names", mock_bulk_create), \
-         patch("fitness.db.runs.get_db_connection", return_value=mock_conn_ctx):
-
+    with (
+        patch("fitness.db.shoes.get_existing_shoes_by_names", mock_get_existing),
+        patch("fitness.db.shoes.get_shoe_ids_by_alias_names", mock_get_aliases),
+        patch("fitness.db.shoes.bulk_create_shoes_by_names", mock_bulk_create),
+        patch("fitness.db.runs.get_db_connection", return_value=mock_conn_ctx),
+    ):
         run = Run(
             id="test1",
             datetime_utc=datetime(2024, 1, 1),

@@ -101,7 +101,11 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
     logger.info(f"Starting bulk insert of {len(runs)} runs in chunks of {chunk_size}")
 
     # Batch check and create shoes - much more efficient!
-    from fitness.db.shoes import get_existing_shoes_by_names, bulk_create_shoes_by_names, get_shoe_ids_by_alias_names
+    from fitness.db.shoes import (
+        get_existing_shoes_by_names,
+        bulk_create_shoes_by_names,
+        get_shoe_ids_by_alias_names,
+    )
 
     # Get unique shoe names (excluding None)
     unique_shoe_names = {run.shoe_name for run in runs if run.shoe_name is not None}
