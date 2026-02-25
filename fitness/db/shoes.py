@@ -173,3 +173,18 @@ def bulk_create_shoes_by_names(shoe_names: set[str]) -> dict[str, str]:
 
         # Return mapping of name -> id
         return {name: shoe_id for shoe_id, name in shoe_data}
+
+
+def get_shoe_ids_by_alias_names(alias_names: set[str]) -> dict[str, str]:
+    """Look up shoe aliases. Returns dict mapping alias_name -> shoe_id."""
+    if not alias_names:
+        return {}
+
+    with get_db_cursor() as cursor:
+        placeholders = sql.SQL(",").join(sql.Placeholder() * len(alias_names))
+        query = sql.SQL("""
+            SELECT alias_name, shoe_id FROM shoe_aliases
+            WHERE alias_name IN ({placeholders})
+        """).format(placeholders=placeholders)
+        cursor.execute(query, list(alias_names))
+        return {alias_name: shoe_id for alias_name, shoe_id in cursor.fetchall()}
