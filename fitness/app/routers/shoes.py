@@ -8,10 +8,11 @@ from fitness.db.shoes import (
     get_shoe_by_id,
     retire_shoe_by_id,
     unretire_shoe_by_id,
+    merge_shoes,
 )
 from fitness.models.shoe import Shoe
 from fitness.models.user import User
-from fitness.app.models import UpdateShoeRequest
+from fitness.app.models import UpdateShoeRequest, MergeShoesRequest
 from fitness.app.auth import require_viewer, require_editor
 
 router = APIRouter(prefix="/shoes", tags=["shoes"])
@@ -70,3 +71,39 @@ def update_shoe(
                 status_code=404, detail=f"Shoe with ID '{shoe_id}' not found"
             )
         return {"message": f"Shoe '{shoe.name}' has been retired"}
+
+
+@router.post("/merge", response_model=Dict[str, str])
+def merge_shoes_endpoint(
+    request: MergeShoesRequest,
+    user: User = Depends(require_editor),
+) -> dict:
+    """Merge two shoes into one.
+
+    Re-points all runs from merge_shoe to keep_shoe, creates a name alias
+    so future imports resolve to keep_shoe, and soft-deletes merge_shoe.
+    """
+    if request.keep_shoe_id == request.merge_shoe_id:
+        raise HTTPException(status_code=400, detail="Cannot merge a shoe with itself")
+
+    keep_shoe = get_shoe_by_id(request.keep_shoe_id)
+    if not keep_shoe:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Shoe '{request.keep_shoe_id}' not found",
+        )
+
+    merge_shoe = get_shoe_by_id(request.merge_shoe_id)
+    if not merge_shoe:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Shoe '{request.merge_shoe_id}' not found",
+        )
+
+    merge_shoes(
+        keep_shoe_id=keep_shoe.id,
+        merge_shoe_id=merge_shoe.id,
+        merge_shoe_name=merge_shoe.name,
+    )
+
+    return {"message": f"Merged '{merge_shoe.name}' into '{keep_shoe.name}'"}
