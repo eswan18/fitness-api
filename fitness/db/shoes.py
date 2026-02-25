@@ -5,7 +5,7 @@ from typing import List, Optional
 from psycopg import sql
 
 from fitness.models.shoe import Shoe
-from .connection import get_db_cursor
+from .connection import get_db_cursor, get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -188,3 +188,34 @@ def get_shoe_ids_by_alias_names(alias_names: set[str]) -> dict[str, str]:
         """).format(placeholders=placeholders)
         cursor.execute(query, list(alias_names))
         return {alias_name: shoe_id for alias_name, shoe_id in cursor.fetchall()}
+
+
+def merge_shoes(keep_shoe_id: str, merge_shoe_id: str, merge_shoe_name: str) -> None:
+    """Merge one shoe into another within a single transaction.
+
+    Re-points all runs and history to keep_shoe_id, creates an alias for the
+    merged shoe's name, and soft-deletes the merged shoe.
+    """
+    with get_db_connection() as conn:
+        with conn.transaction():
+            with conn.cursor() as cursor:
+                # Re-point runs
+                cursor.execute(
+                    "UPDATE runs SET shoe_id = %s WHERE shoe_id = %s",
+                    (keep_shoe_id, merge_shoe_id),
+                )
+                # Re-point history
+                cursor.execute(
+                    "UPDATE runs_history SET shoe_id = %s WHERE shoe_id = %s",
+                    (keep_shoe_id, merge_shoe_id),
+                )
+                # Create alias
+                cursor.execute(
+                    "INSERT INTO shoe_aliases (alias_name, shoe_id) VALUES (%s, %s)",
+                    (merge_shoe_name, keep_shoe_id),
+                )
+                # Soft-delete merged shoe
+                cursor.execute(
+                    "UPDATE shoes SET deleted_at = CURRENT_TIMESTAMP WHERE id = %s",
+                    (merge_shoe_id,),
+                )
