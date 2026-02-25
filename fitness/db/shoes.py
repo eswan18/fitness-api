@@ -209,9 +209,10 @@ def merge_shoes(keep_shoe_id: str, merge_shoe_id: str, merge_shoe_name: str) -> 
                     "UPDATE runs_history SET shoe_id = %s WHERE shoe_id = %s",
                     (keep_shoe_id, merge_shoe_id),
                 )
-                # Create alias
+                # Create alias (upsert in case this name was already aliased)
                 cursor.execute(
-                    "INSERT INTO shoe_aliases (alias_name, shoe_id) VALUES (%s, %s)",
+                    "INSERT INTO shoe_aliases (alias_name, shoe_id) VALUES (%s, %s) "
+                    "ON CONFLICT (alias_name) DO UPDATE SET shoe_id = EXCLUDED.shoe_id",
                     (merge_shoe_name, keep_shoe_id),
                 )
                 # Soft-delete merged shoe
