@@ -114,6 +114,20 @@ def unretire_shoe_by_id(shoe_id: str) -> bool:
         return cursor.rowcount > 0
 
 
+def delete_shoe_by_id(shoe_id: str) -> bool:
+    """Soft-delete a shoe by ID. Returns True if shoe was found and deleted."""
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE shoes
+            SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND deleted_at IS NULL
+        """,
+            (shoe_id,),
+        )
+        return cursor.rowcount > 0
+
+
 def _row_to_shoe(row) -> Shoe:
     """Convert a database row to a Shoe object."""
     shoe_id, name, retired_at, notes, retirement_notes, deleted_at = row
