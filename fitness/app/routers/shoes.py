@@ -9,6 +9,7 @@ from fitness.db.shoes import (
     retire_shoe_by_id,
     unretire_shoe_by_id,
     merge_shoes,
+    delete_shoe_by_id,
 )
 from fitness.models.shoe import Shoe
 from fitness.models.user import User
@@ -107,3 +108,20 @@ def merge_shoes_endpoint(
     )
 
     return {"message": f"Merged '{merge_shoe.name}' into '{keep_shoe.name}'"}
+
+
+@router.delete("/{shoe_id}", response_model=Dict[str, str])
+def delete_shoe(
+    shoe_id: str,
+    user: User = Depends(require_editor),
+) -> dict:
+    """Soft-delete a shoe by ID.
+
+    Requires OAuth 2.0 Bearer token authentication with editor role.
+    """
+    success = delete_shoe_by_id(shoe_id)
+    if not success:
+        raise HTTPException(
+            status_code=404, detail=f"Shoe with ID '{shoe_id}' not found"
+        )
+    return {"message": f"Shoe {shoe_id} deleted"}
