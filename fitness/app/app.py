@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from fitness.db.runs import get_runs_for_date_range
 from fitness.models import Run
+from fitness.models.run import LocalizedRun
 from fitness.models.run_detail import RunDetail
 from fitness.app.routers.run_workouts import (
     ActivityFeedRunItem,
@@ -60,7 +61,7 @@ SortOrder = Literal["asc", "desc"]
 
 # Type variable for generic sorting function
 # Supports Run and RunDetail (which shares the sorted fields)
-T = TypeVar("T", Run, RunDetail)
+T = TypeVar("T", Run, RunDetail, LocalizedRun)
 
 PUBLIC_API_BASE_URL = os.environ["PUBLIC_API_BASE_URL"]
 PUBLIC_DASHBOARD_BASE_URL = os.environ["PUBLIC_DASHBOARD_BASE_URL"]
@@ -184,15 +185,16 @@ def read_all_runs(
         sort_order: Sort order, ascending or descending.
     """
     if user_timezone is None:
-        filtered_runs = get_runs_for_date_range(start, end)
+        return sort_runs_generic(
+            get_runs_for_date_range(start, end), sort_by, sort_order
+        )
     else:
         runs = get_runs_for_date_range(start, end, user_timezone)
         localized_runs = convert_runs_to_user_timezone(runs, user_timezone)
         filtered_runs = [
             run for run in localized_runs if start <= run.local_date <= end
         ]
-
-    return sort_runs_generic(filtered_runs, sort_by, sort_order)
+        return sort_runs_generic(filtered_runs, sort_by, sort_order)  # type: ignore[invalid-argument-type]
 
 
 @app.get("/runs/details", response_model=list[RunDetail])
