@@ -107,7 +107,7 @@ def get_run_history(run_id: str, limit: Optional[int] = None) -> List[RunHistory
             WHERE run_id = %s 
             ORDER BY version_number DESC
         """
-        params = [run_id]
+        params: list[str | int] = [run_id]
 
         if limit:
             query += " LIMIT %s"

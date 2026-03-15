@@ -203,7 +203,10 @@ async def get_sets_by_muscle(
     muscle_sets: dict[str, int] = {}
     for lift in lifts:
         for exercise in lift.exercises:
-            muscle = template_muscle_map.get(exercise.exercise_template_id)
+            exercise_id = exercise.exercise_template_id
+            if exercise_id is None:
+                continue
+            muscle = template_muscle_map.get(exercise_id)
             if muscle:
                 # Count non-warmup sets
                 non_warmup = sum(1 for s in exercise.sets if s.set_type != "warmup")

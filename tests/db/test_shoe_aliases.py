@@ -23,7 +23,6 @@ def test_get_shoe_ids_by_alias_names_empty_input():
     assert result == {}
 
 
-
 def test_merge_shoes_executes_all_statements():
     """Verify merge_shoes runs the expected SQL statements in a transaction."""
     mock_cursor = MagicMock()
@@ -42,7 +41,6 @@ def test_merge_shoes_executes_all_statements():
 
     # Should have executed: update runs, update runs_history, insert alias, soft-delete shoe
     assert mock_cursor.execute.call_count == 4
-
 
 
 def test_bulk_create_runs_resolves_aliases():

@@ -243,7 +243,9 @@ def get_run_details_in_date_range(
     Joins `runs` to `shoes` and `synced_runs`.
     """
     with get_db_cursor() as cursor:
-        conditions = [sql.SQL("DATE(r.datetime_utc) BETWEEN %s AND %s")]
+        conditions: list[sql.Composable] = [
+            sql.SQL("DATE(r.datetime_utc) BETWEEN %s AND %s")
+        ]
         conditions.extend(_build_run_detail_filters(include_deleted, synced))
         params: list = [start_date, end_date]
 
