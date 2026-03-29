@@ -1,5 +1,4 @@
 from datetime import date, timedelta
-from typing import List, Dict
 
 from fastapi import APIRouter, Depends
 
@@ -60,7 +59,7 @@ def read_total_mileage(
     return total_mileage(runs, start, end, user_timezone)
 
 
-@router.get("/mileage/by-day", response_model=List[DayMileage])
+@router.get("/mileage/by-day", response_model=list[DayMileage])
 def read_mileage_by_day(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,
@@ -77,7 +76,7 @@ def read_mileage_by_day(
     return results
 
 
-@router.get("/mileage/rolling-by-day", response_model=List[DayMileage])
+@router.get("/mileage/rolling-by-day", response_model=list[DayMileage])
 def read_rolling_mileage_by_day(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,
@@ -100,7 +99,7 @@ def read_rolling_mileage_by_day(
     return results
 
 
-@router.get("/mileage/by-shoe", response_model=List[ShoeMileage])
+@router.get("/mileage/by-shoe", response_model=list[ShoeMileage])
 def read_miles_by_shoe(
     include_retired: bool = False,
     _user: User = Depends(require_viewer),
@@ -119,7 +118,7 @@ def read_miles_by_shoe(
     return mileage_by_shoes(runs, shoes=shoes, include_retired=include_retired)
 
 
-@router.get("/training-load/by-day", response_model=List[DayTrainingLoad])
+@router.get("/training-load/by-day", response_model=list[DayTrainingLoad])
 def read_training_load_by_day(
     start: date,
     end: date,
@@ -146,7 +145,7 @@ def read_training_load_by_day(
     )
 
 
-@router.get("/trimp/by-day", response_model=List[Dict])
+@router.get("/trimp/by-day", response_model=list[dict])
 def read_trimp_by_day(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,

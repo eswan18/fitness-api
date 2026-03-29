@@ -33,21 +33,15 @@ def _build_run_detail_filters(
 def get_all_runs(include_deleted: bool = False) -> list[Run]:
     """Get all runs from the database with shoe information."""
     with get_db_cursor() as cursor:
-        if include_deleted:
-            cursor.execute("""
-                SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
-                FROM runs r
-                LEFT JOIN shoes s ON r.shoe_id = s.id
-                ORDER BY r.datetime_utc
-            """)
-        else:
-            cursor.execute("""
-                SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
-                FROM runs r
-                LEFT JOIN shoes s ON r.shoe_id = s.id
-                WHERE r.deleted_at IS NULL
-                ORDER BY r.datetime_utc
-            """)
+        deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" WHERE r.deleted_at IS NULL")
+        query = sql.SQL("""
+            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
+            FROM runs r
+            LEFT JOIN shoes s ON r.shoe_id = s.id
+            {deleted_filter}
+            ORDER BY r.datetime_utc
+        """).format(deleted_filter=deleted_filter)
+        cursor.execute(query)
         rows = cursor.fetchall()
         return [_row_to_run(row) for row in rows]
 
@@ -324,33 +318,18 @@ def get_run_by_id(run_id: str, include_deleted: bool = False) -> Run | None:
         include_deleted: If True, include soft-deleted runs. Defaults to False.
     """
     with get_db_cursor() as cursor:
-        if include_deleted:
-            cursor.execute(
-                """
-                SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
-                FROM runs r
-                LEFT JOIN shoes s ON r.shoe_id = s.id
-                WHERE r.id = %s
-            """,
-                (run_id,),
-            )
-        else:
-            cursor.execute(
-                """
-                SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
-                FROM runs r
-                LEFT JOIN shoes s ON r.shoe_id = s.id
-                WHERE r.id = %s AND r.deleted_at IS NULL
-            """,
-                (run_id,),
-            )
+        deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" AND r.deleted_at IS NULL")
+        query = sql.SQL("""
+            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
+            FROM runs r
+            LEFT JOIN shoes s ON r.shoe_id = s.id
+            WHERE r.id = %s{deleted_filter}
+        """).format(deleted_filter=deleted_filter)
+        cursor.execute(query, (run_id,))
         row = cursor.fetchone()
         if not row:
             return None
         return _row_to_run(row)
-
-
-# Removed RunWithShoes helpers; superseded by RunDetail flows
 
 
 def _row_to_run(row) -> Run:

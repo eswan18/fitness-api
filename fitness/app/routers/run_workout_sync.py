@@ -1,7 +1,6 @@
 """Google Calendar sync routes for run workouts."""
 
 import logging
-from typing import List
 
 from fastapi import APIRouter, HTTPException, status, Depends
 
@@ -21,8 +20,8 @@ from fitness.models.sync import (
     SyncRunWorkoutStatusResponse,
 )
 from fitness.models.user import User
-from fitness.integrations.google.calendar_client import GoogleCalendarClient
 from fitness.app.auth import require_viewer, require_editor
+from ._sync_helpers import perform_sync, perform_unsync
 
 logger = logging.getLogger(__name__)
 
@@ -33,18 +32,18 @@ router = APIRouter(prefix="/sync", tags=["sync"])
 # path parameters like {run_workout_id} matching "failed".
 
 
-@router.get("/run-workouts", response_model=List[SyncedRunWorkout])
+@router.get("/run-workouts", response_model=list[SyncedRunWorkout])
 def get_all_run_workout_sync_records(
     _user: User = Depends(require_viewer),
-) -> List[SyncedRunWorkout]:
+) -> list[SyncedRunWorkout]:
     """Get all run workout sync records for debugging/admin purposes."""
     return get_all_synced_run_workouts()
 
 
-@router.get("/run-workouts/failed", response_model=List[SyncedRunWorkout])
+@router.get("/run-workouts/failed", response_model=list[SyncedRunWorkout])
 def get_failed_run_workout_sync_records(
     _user: User = Depends(require_viewer),
-) -> List[SyncedRunWorkout]:
+) -> list[SyncedRunWorkout]:
     """Get all run workouts with failed sync status for retry/debugging."""
     return get_failed_run_workout_syncs()
 
@@ -106,11 +105,7 @@ def sync_run_workout_to_calendar(
 
     # Fetch constituent runs
     run_ids = get_run_ids_for_workout(run_workout_id)
-    runs = []
-    for rid in run_ids:
-        run = get_run_by_id(rid)
-        if run is not None:
-            runs.append(run)
+    runs = [run for rid in run_ids if (run := get_run_by_id(rid)) is not None]
 
     if len(runs) < 2:
         raise HTTPException(
@@ -118,79 +113,23 @@ def sync_run_workout_to_calendar(
             detail=f"Run workout {run_workout_id} has fewer than 2 valid runs",
         )
 
-    try:
-        calendar_client = GoogleCalendarClient()
-        google_event_id = calendar_client.create_run_workout_event(workout, runs)
-
-        if google_event_id is None:
-            raise Exception("Failed to create Google Calendar event")
-
-        if existing_sync:
-            updated_sync = update_synced_run_workout(
-                run_workout_id=run_workout_id,
-                google_event_id=google_event_id,
-                sync_status="synced",
-                clear_error_message=True,
-            )
-            if updated_sync is None:
-                raise HTTPException(
-                    status_code=500, detail="Failed to update sync record"
-                )
-            synced = updated_sync
-        else:
-            synced = create_synced_run_workout(
-                run_workout_id=run_workout_id,
-                google_event_id=google_event_id,
-                run_workout_version=1,
-                sync_status="synced",
-            )
-
-        logger.info(
-            f"Successfully synced run workout {run_workout_id} to Google Calendar event {google_event_id}"
-        )
-
-        return SyncResponse(
-            success=True,
-            message=f"Successfully synced run workout {run_workout_id} to Google Calendar",
-            google_event_id=synced.google_event_id,
-            sync_status=synced.sync_status,
-            synced_at=synced.synced_at,
-        )
-
-    except Exception as e:
-        error_msg = f"Failed to sync run workout {run_workout_id}: {str(e)}"
-        logger.exception(
-            f"Error syncing run workout to Google Calendar: run_workout_id={run_workout_id}, "
-            f"exception_type={type(e).__name__}, error={str(e)}"
-        )
-
-        try:
-            if existing_sync:
-                update_synced_run_workout(
-                    run_workout_id=run_workout_id,
-                    sync_status="failed",
-                    error_message=error_msg,
-                )
-            else:
-                create_synced_run_workout(
-                    run_workout_id=run_workout_id,
-                    google_event_id=None,
-                    sync_status="failed",
-                    error_message=error_msg,
-                )
-        except Exception as db_error:
-            logger.exception(
-                f"Failed to persist sync failure to database: run_workout_id={run_workout_id}, "
-                f"exception_type={type(db_error).__name__}, error={str(db_error)}"
-            )
-
-        return SyncResponse(
-            success=False,
-            message=error_msg,
-            google_event_id=None,
-            sync_status="failed",
-            synced_at=None,
-        )
+    return perform_sync(
+        entity_id=run_workout_id,
+        entity_type="run workout",
+        existing_sync=existing_sync,
+        create_calendar_event=lambda client: client.create_run_workout_event(workout, runs),
+        create_sync_record=lambda gid, s: create_synced_run_workout(
+            run_workout_id=run_workout_id, google_event_id=gid, run_workout_version=1, sync_status=s,
+        ),
+        update_sync_record=lambda gid: update_synced_run_workout(
+            run_workout_id=run_workout_id, google_event_id=gid, sync_status="synced", clear_error_message=True,
+        ),
+        record_failure=lambda gid, msg: (
+            update_synced_run_workout(run_workout_id=run_workout_id, sync_status="failed", error_message=msg)
+            if existing_sync
+            else create_synced_run_workout(run_workout_id=run_workout_id, google_event_id=gid, sync_status="failed", error_message=msg)
+        ),
+    )
 
 
 @router.delete("/run-workouts/{run_workout_id}", response_model=SyncResponse)
@@ -199,67 +138,9 @@ def unsync_run_workout_from_calendar(
     user: User = Depends(require_editor),
 ) -> SyncResponse:
     """Remove a run workout's sync from Google Calendar."""
-    synced = get_synced_run_workout(run_workout_id)
-
-    if synced is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Run workout {run_workout_id} is not currently synced",
-        )
-
-    try:
-        if not synced.google_event_id or synced.sync_status != "synced":
-            deleted = delete_synced_run_workout(run_workout_id)
-            if deleted:
-                logger.info(
-                    f"Removed local sync record for run workout {run_workout_id} without Google deletion"
-                )
-                return SyncResponse(
-                    success=True,
-                    message=f"Removed sync record for run workout {run_workout_id}",
-                    google_event_id=None,
-                    sync_status="unsynced",
-                    synced_at=None,
-                )
-            else:
-                raise Exception("Failed to delete sync record from database")
-
-        calendar_client = GoogleCalendarClient()
-        success = calendar_client.delete_workout_event(synced.google_event_id)
-
-        if not success:
-            raise Exception(
-                f"Failed to delete Google Calendar event {synced.google_event_id}"
-            )
-
-        deleted = delete_synced_run_workout(run_workout_id)
-
-        if deleted:
-            logger.info(
-                f"Successfully unsynced run workout {run_workout_id} from Google Calendar"
-            )
-            return SyncResponse(
-                success=True,
-                message=f"Successfully removed sync for run workout {run_workout_id}",
-                google_event_id=synced.google_event_id,
-                sync_status="unsynced",
-                synced_at=None,
-            )
-        else:
-            raise Exception("Failed to delete sync record from database")
-
-    except Exception as e:
-        error_msg = f"Failed to unsync run workout {run_workout_id}: {str(e)}"
-        logger.exception(
-            f"Error unsyncing run workout from Google Calendar: run_workout_id={run_workout_id}, "
-            f"google_event_id={synced.google_event_id if synced else None}, "
-            f"exception_type={type(e).__name__}, error={str(e)}"
-        )
-
-        return SyncResponse(
-            success=False,
-            message=error_msg,
-            google_event_id=synced.google_event_id,
-            sync_status=synced.sync_status,
-            synced_at=synced.synced_at,
-        )
+    return perform_unsync(
+        entity_id=run_workout_id,
+        entity_type="run workout",
+        synced_record=get_synced_run_workout(run_workout_id),
+        delete_sync_record=lambda: delete_synced_run_workout(run_workout_id),
+    )

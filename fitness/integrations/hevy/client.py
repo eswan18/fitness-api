@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 import logging
-from typing import Optional
 
 import httpx
 
@@ -40,7 +39,7 @@ class HevyClient:
 
     def _make_request(
         self, method: str, url: str, **kwargs
-    ) -> Optional[httpx.Response]:
+    ) -> httpx.Response | None:
         """Make an API request to Hevy."""
         kwargs.setdefault("timeout", 30)
 
@@ -80,8 +79,8 @@ class HevyClient:
         self,
         page: int = 1,
         page_size: int = 10,
-        since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
     ) -> list[HevyWorkout]:
         """Get workouts from Hevy API.
 
@@ -125,8 +124,8 @@ class HevyClient:
 
     def get_all_workouts(
         self,
-        since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
     ) -> list[HevyWorkout]:
         """Get all workouts, handling pagination automatically.
 
