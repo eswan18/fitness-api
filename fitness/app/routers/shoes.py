@@ -1,7 +1,6 @@
 """Shoe management routes."""
 
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Dict
 
 from fitness.db.shoes import (
     get_shoes,
@@ -19,7 +18,7 @@ from fitness.app.auth import require_viewer, require_editor
 router = APIRouter(prefix="/shoes", tags=["shoes"])
 
 
-@router.get("/", response_model=List[Shoe])
+@router.get("/", response_model=list[Shoe])
 def read_shoes(
     retired: bool | None = None,
     _user: User = Depends(require_viewer),
@@ -33,7 +32,7 @@ def read_shoes(
     return get_shoes(retired=retired)
 
 
-@router.patch("/{shoe_id}", response_model=Dict[str, str])
+@router.patch("/{shoe_id}", response_model=dict[str, str])
 def update_shoe(
     shoe_id: str,
     request: UpdateShoeRequest,
@@ -74,7 +73,7 @@ def update_shoe(
         return {"message": f"Shoe '{shoe.name}' has been retired"}
 
 
-@router.post("/merge", response_model=Dict[str, str])
+@router.post("/merge", response_model=dict[str, str])
 def merge_shoes_endpoint(
     request: MergeShoesRequest,
     user: User = Depends(require_editor),
@@ -110,7 +109,7 @@ def merge_shoes_endpoint(
     return {"message": f"Merged '{merge_shoe.name}' into '{keep_shoe.name}'"}
 
 
-@router.delete("/{shoe_id}", response_model=Dict[str, str])
+@router.delete("/{shoe_id}", response_model=dict[str, str])
 def delete_shoe(
     shoe_id: str,
     user: User = Depends(require_editor),

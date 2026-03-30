@@ -1,4 +1,4 @@
-from typing import Iterable, Optional
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import logging
@@ -79,7 +79,7 @@ class StravaClient:
 
     def _make_request(
         self, method: str, url: str, **kwargs
-    ) -> Optional[httpx.Response]:
+    ) -> httpx.Response | None:
         """Make an API request with automatic token refresh on 401 or if token is expired."""
         # Proactively refresh token if it's expired or about to expire
         if self.needs_token_refresh():
@@ -139,7 +139,7 @@ class StravaClient:
 
             return response
 
-    def get_activities(self, after: Optional[datetime] = None) -> list[StravaActivity]:
+    def get_activities(self, after: datetime | None = None) -> list[StravaActivity]:
         """Get the activities from the Strava API.
 
         Args:
@@ -149,7 +149,7 @@ class StravaClient:
         activities = activity_list_adapter.validate_python(raw_activities)
         return activities
 
-    def _get_activities_raw(self, after: Optional[datetime] = None) -> list[dict]:
+    def _get_activities_raw(self, after: datetime | None = None) -> list[dict]:
         """Get the activity data from the Strava API.
 
         Handles pagination until no more pages are returned.

@@ -150,19 +150,9 @@ logging.basicConfig(
 )
 # Configure the logging for the API itself if the user specifies it.
 if "LOG_LEVEL" in os.environ:
-    match os.environ["LOG_LEVEL"].upper():
-        case "DEBUG":
-            log_level = logging.DEBUG
-        case "INFO":
-            log_level = logging.INFO
-        case "WARNING":
-            log_level = logging.WARNING
-        case "ERROR":
-            log_level = logging.ERROR
-        case "CRITICAL":
-            log_level = logging.CRITICAL
-        case _:
-            raise ValueError(f"Invalid log level: {os.environ['LOG_LEVEL']}")
+    log_level = logging.getLevelNamesMapping().get(os.environ["LOG_LEVEL"].upper())
+    if log_level is None:
+        raise ValueError(f"Invalid log level: {os.environ['LOG_LEVEL']}")
     logging.getLogger("fitness").setLevel(log_level)
 
 

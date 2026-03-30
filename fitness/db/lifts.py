@@ -4,7 +4,6 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Optional
 
 from .connection import get_db_cursor, get_db_connection
 from fitness.models.lift import Lift, Exercise, Set, ExerciseTemplate
@@ -18,29 +17,25 @@ logger = logging.getLogger(__name__)
 
 def get_all_lifts(include_deleted: bool = False) -> list[Lift]:
     """Get all lifts from the database."""
+    from psycopg import sql
+
     with get_db_cursor() as cursor:
-        if include_deleted:
-            cursor.execute("""
-                SELECT id, title, description, start_time, end_time, exercises,
-                       source, deleted_at
-                FROM lifts
-                ORDER BY start_time DESC
-            """)
-        else:
-            cursor.execute("""
-                SELECT id, title, description, start_time, end_time, exercises,
-                       source, deleted_at
-                FROM lifts
-                WHERE deleted_at IS NULL
-                ORDER BY start_time DESC
-            """)
+        deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" WHERE deleted_at IS NULL")
+        query = sql.SQL("""
+            SELECT id, title, description, start_time, end_time, exercises,
+                   source, deleted_at
+            FROM lifts
+            {deleted_filter}
+            ORDER BY start_time DESC
+        """).format(deleted_filter=deleted_filter)
+        cursor.execute(query)
         rows = cursor.fetchall()
         return [_row_to_lift(row) for row in rows]
 
 
 def get_lifts_in_date_range(
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
     include_deleted: bool = False,
 ) -> list[Lift]:
     """Get lifts within a date range.
@@ -94,10 +89,10 @@ class LiftWithSync:
 
     lift: Lift
     is_synced: bool
-    sync_status: Optional[SyncStatus]
-    synced_at: Optional[datetime]
-    google_event_id: Optional[str]
-    error_message: Optional[str]
+    sync_status: SyncStatus | None
+    synced_at: datetime | None
+    google_event_id: str | None
+    error_message: str | None
 
 
 _LIFT_WITH_SYNC_QUERY = """
@@ -135,8 +130,8 @@ def get_all_lifts_with_sync(include_deleted: bool = False) -> list[LiftWithSync]
 
 
 def get_lifts_in_date_range_with_sync(
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
     include_deleted: bool = False,
 ) -> list[LiftWithSync]:
     """Get lifts with sync metadata within a date range."""
@@ -169,7 +164,7 @@ def get_lifts_in_date_range_with_sync(
         return [_row_to_lift_with_sync(row) for row in cursor.fetchall()]
 
 
-def get_lift_by_id(lift_id: str) -> Optional[Lift]:
+def get_lift_by_id(lift_id: str) -> Lift | None:
     """Get a single lift by ID."""
     with get_db_cursor() as cursor:
         cursor.execute(
@@ -189,11 +184,14 @@ def get_lift_by_id(lift_id: str) -> Optional[Lift]:
 
 def get_lift_count(include_deleted: bool = False) -> int:
     """Get total count of lifts."""
+    from psycopg import sql
+
     with get_db_cursor() as cursor:
-        if include_deleted:
-            cursor.execute("SELECT COUNT(*) FROM lifts")
-        else:
-            cursor.execute("SELECT COUNT(*) FROM lifts WHERE deleted_at IS NULL")
+        deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" WHERE deleted_at IS NULL")
+        query = sql.SQL("SELECT COUNT(*) FROM lifts{deleted_filter}").format(
+            deleted_filter=deleted_filter
+        )
+        cursor.execute(query)
         result = cursor.fetchone()
         return result[0] if result else 0
 
@@ -275,7 +273,7 @@ def get_all_exercise_templates() -> list[ExerciseTemplate]:
         return [_row_to_exercise_template(row) for row in rows]
 
 
-def get_exercise_template_by_id(template_id: str) -> Optional[ExerciseTemplate]:
+def get_exercise_template_by_id(template_id: str) -> ExerciseTemplate | None:
     """Get a single exercise template by ID."""
     with get_db_cursor() as cursor:
         cursor.execute(
@@ -382,38 +380,10 @@ def _row_to_lift(row: tuple) -> Lift:
 
 def _row_to_lift_with_sync(row: tuple) -> LiftWithSync:
     """Convert a database row (with sync columns) to a LiftWithSync."""
-    (
-        id_,
-        title,
-        description,
-        start_time,
-        end_time,
-        exercises_json,
-        source,
-        deleted_at,
-        sync_status,
-        synced_at,
-        google_event_id,
-        error_message,
-    ) = row
+    # First 8 columns are the lift fields, last 4 are sync metadata
+    lift = _row_to_lift(row[:8])
+    sync_status, synced_at, google_event_id, error_message = row[8:]
 
-    exercises_data = (
-        exercises_json
-        if isinstance(exercises_json, list)
-        else json.loads(exercises_json or "[]")
-    )
-    exercises = [_dict_to_exercise(e) for e in exercises_data]
-
-    lift = Lift(
-        id=id_,
-        title=title,
-        description=description,
-        start_time=start_time,
-        end_time=end_time,
-        source=source,
-        exercises=exercises,
-        deleted_at=deleted_at,
-    )
     return LiftWithSync(
         lift=lift,
         is_synced=(sync_status == "synced"),

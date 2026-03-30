@@ -9,6 +9,7 @@ from fitness.models.run_workout import RunWorkout
 from fitness.models.sync import SyncedRunWorkout, SyncStatus
 
 _MOD = "fitness.app.routers.run_workout_sync"
+_SYNC_HELPERS = "fitness.app.routers._sync_helpers"
 
 
 def _make_workout(id: str = "rw_1", title: str = "Speed Workout") -> RunWorkout:
@@ -110,7 +111,7 @@ class TestGetSyncStatus:
 class TestSyncRunWorkout:
     """Test POST /sync/run-workouts/{id}."""
 
-    @patch(f"{_MOD}.GoogleCalendarClient")
+    @patch(f"{_SYNC_HELPERS}.GoogleCalendarClient")
     @patch(f"{_MOD}.get_run_by_id")
     @patch(f"{_MOD}.get_run_ids_for_workout")
     @patch(f"{_MOD}.get_run_workout_by_id")
@@ -190,7 +191,7 @@ class TestSyncRunWorkout:
         assert "fewer than 2" in response.json()["detail"]
 
     @patch(f"{_MOD}.create_synced_run_workout")
-    @patch(f"{_MOD}.GoogleCalendarClient")
+    @patch(f"{_SYNC_HELPERS}.GoogleCalendarClient")
     @patch(f"{_MOD}.get_run_by_id")
     @patch(f"{_MOD}.get_run_ids_for_workout")
     @patch(f"{_MOD}.get_run_workout_by_id")
@@ -219,7 +220,7 @@ class TestSyncRunWorkout:
         assert data["sync_status"] == "failed"
 
     @patch(f"{_MOD}.update_synced_run_workout")
-    @patch(f"{_MOD}.GoogleCalendarClient")
+    @patch(f"{_SYNC_HELPERS}.GoogleCalendarClient")
     @patch(f"{_MOD}.get_run_by_id")
     @patch(f"{_MOD}.get_run_ids_for_workout")
     @patch(f"{_MOD}.get_run_workout_by_id")
@@ -262,7 +263,7 @@ class TestUnsyncRunWorkout:
     """Test DELETE /sync/run-workouts/{id}."""
 
     @patch(f"{_MOD}.delete_synced_run_workout", return_value=True)
-    @patch(f"{_MOD}.GoogleCalendarClient")
+    @patch(f"{_SYNC_HELPERS}.GoogleCalendarClient")
     @patch(f"{_MOD}.get_synced_run_workout")
     def test_unsync_success(
         self,
