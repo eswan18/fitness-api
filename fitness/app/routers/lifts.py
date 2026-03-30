@@ -67,6 +67,7 @@ class LiftStatsResponse(BaseModel):
     sets_in_period: int
     duration_in_period_seconds: int
     avg_duration_seconds: int
+    avg_rpe: float | None = None
 
 
 class SetsByMuscleItem(BaseModel):
@@ -81,6 +82,13 @@ class FrequentExerciseItem(BaseModel):
 
     name: str
     count: int
+
+
+class VolumeByMuscleItem(BaseModel):
+    """Volume (weight x reps) for a single muscle group."""
+
+    muscle: str
+    volume: float
 
 
 # --- Endpoints ---
@@ -164,6 +172,16 @@ async def get_lifts_stats(
     duration_in_period = sum(lift.duration_seconds() for lift in period_lifts)
     avg_duration = round(duration_in_period / len(period_lifts)) if period_lifts else 0
 
+    # Compute average RPE across non-warmup sets with RPE data
+    rpe_values = [
+        s.rpe
+        for lift in period_lifts
+        for exercise in lift.exercises
+        for s in exercise.sets
+        if s.set_type != "warmup" and s.rpe is not None
+    ]
+    avg_rpe = round(sum(rpe_values) / len(rpe_values), 1) if rpe_values else None
+
     return LiftStatsResponse(
         total_sessions=total_sessions,
         total_volume_kg=total_volume,
@@ -174,6 +192,7 @@ async def get_lifts_stats(
         sets_in_period=sum(lift.total_sets() for lift in period_lifts),
         duration_in_period_seconds=duration_in_period,
         avg_duration_seconds=avg_duration,
+        avg_rpe=avg_rpe,
     )
 
 
@@ -216,6 +235,44 @@ async def get_sets_by_muscle(
     sorted_muscles = sorted(muscle_sets.items(), key=lambda x: x[1], reverse=True)
 
     return [SetsByMuscleItem(muscle=m, sets=s) for m, s in sorted_muscles]
+
+
+@router.get("/volume-by-muscle", response_model=list[VolumeByMuscleItem])
+async def get_volume_by_muscle(
+    start_date: Optional[date] = Query(
+        None, description="Filter on or after this date"
+    ),
+    end_date: Optional[date] = Query(None, description="Filter before this date"),
+    _user: User = Depends(require_viewer),
+) -> list[VolumeByMuscleItem]:
+    """Get volume (weight x reps) grouped by primary muscle group.
+
+    Returns non-warmup set volume by muscle group for the given period.
+    """
+    if start_date or end_date:
+        lifts = get_lifts_in_date_range(start_date, end_date)
+    else:
+        lifts = get_all_lifts()
+
+    templates = get_all_exercise_templates()
+    template_muscle_map = {t.id: t.primary_muscle_group for t in templates}
+
+    muscle_volume: dict[str, float] = {}
+    for lift in lifts:
+        for exercise in lift.exercises:
+            exercise_id = exercise.exercise_template_id
+            if exercise_id is None:
+                continue
+            muscle = template_muscle_map.get(exercise_id)
+            if muscle:
+                vol = sum(
+                    s.volume() for s in exercise.sets if s.set_type != "warmup"
+                )
+                muscle_volume[muscle] = muscle_volume.get(muscle, 0) + vol
+
+    sorted_muscles = sorted(muscle_volume.items(), key=lambda x: x[1], reverse=True)
+
+    return [VolumeByMuscleItem(muscle=m, volume=round(v, 1)) for m, v in sorted_muscles]
 
 
 @router.get("/frequent-exercises", response_model=list[FrequentExerciseItem])
