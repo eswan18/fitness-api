@@ -5,7 +5,7 @@ metadata:
   namespace: argocd
   annotations:
     argocd-image-updater.argoproj.io/image-list: fitness-api=us-central1-docker.pkg.dev/ethans-services/containers/fitness-api
-    argocd-image-updater.argoproj.io/fitness-api.update-strategy: latest
+    argocd-image-updater.argoproj.io/fitness-api.update-strategy: newest-build
 spec:
   project: default
   source:
