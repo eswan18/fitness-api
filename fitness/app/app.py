@@ -40,6 +40,7 @@ from .routers import (
 )
 from .models import EnvironmentResponse
 from .auth import require_viewer
+from fitness.mcp import mcp as mcp_server
 from fitness.models.user import User
 from fitness.utils.timezone import convert_runs_to_user_timezone
 
@@ -129,6 +130,9 @@ app.include_router(exercise_templates_router)
 app.include_router(lift_sync_router)
 app.include_router(run_workouts_router)
 app.include_router(run_workout_sync_router)
+
+app.mount("/mcp", mcp_server.streamable_http_app())
+
 app.add_middleware(
     CORSMiddleware,  # type: ignore[arg-type]
     allow_origins=[
