@@ -91,7 +91,7 @@ class TestValidateJwtToken:
 
         with patch("fitness.app.oauth.get_jwks_client", return_value=mock_jwks_client):
             with patch(
-                "fitness.app.oauth.get_identity_provider_url",
+                "fitness.app.oauth.get_jwt_issuer",
                 return_value="http://localhost:8080",
             ):
                 with patch(
@@ -120,7 +120,7 @@ class TestValidateJwtToken:
 
         with patch("fitness.app.oauth.get_jwks_client", return_value=mock_jwks_client):
             with patch(
-                "fitness.app.oauth.get_identity_provider_url",
+                "fitness.app.oauth.get_jwt_issuer",
                 return_value="http://localhost:8080",
             ):
                 with patch(
@@ -142,7 +142,7 @@ class TestValidateJwtToken:
 
         with patch("fitness.app.oauth.get_jwks_client", return_value=mock_jwks_client):
             with patch(
-                "fitness.app.oauth.get_identity_provider_url",
+                "fitness.app.oauth.get_jwt_issuer",
                 return_value="http://localhost:8080",
             ):
                 with patch(
@@ -164,7 +164,7 @@ class TestValidateJwtToken:
 
         with patch("fitness.app.oauth.get_jwks_client", return_value=mock_jwks_client):
             with patch(
-                "fitness.app.oauth.get_identity_provider_url",
+                "fitness.app.oauth.get_jwt_issuer",
                 return_value="http://localhost:8080",
             ):
                 with patch(
@@ -187,7 +187,7 @@ class TestValidateJwtToken:
 
         with patch("fitness.app.oauth.get_jwks_client", return_value=mock_jwks_client):
             with patch(
-                "fitness.app.oauth.get_identity_provider_url",
+                "fitness.app.oauth.get_jwt_issuer",
                 return_value="http://localhost:8080",
             ):
                 with patch(
@@ -201,7 +201,7 @@ class TestValidateJwtToken:
         """Test that a malformed token returns None."""
         with patch("fitness.app.oauth.get_jwks_client", return_value=mock_jwks_client):
             with patch(
-                "fitness.app.oauth.get_identity_provider_url",
+                "fitness.app.oauth.get_jwt_issuer",
                 return_value="http://localhost:8080",
             ):
                 with patch(
@@ -228,7 +228,7 @@ class TestValidateJwtToken:
 
         with patch("fitness.app.oauth.get_jwks_client", return_value=mock_jwks_client):
             with patch(
-                "fitness.app.oauth.get_identity_provider_url",
+                "fitness.app.oauth.get_jwt_issuer",
                 return_value="http://localhost:8080",
             ):
                 with patch(
@@ -256,7 +256,7 @@ class TestValidateJwtToken:
 
         with patch("fitness.app.oauth.get_jwks_client", return_value=mock_jwks_client):
             with patch(
-                "fitness.app.oauth.get_identity_provider_url",
+                "fitness.app.oauth.get_jwt_issuer",
                 return_value="http://localhost:8080",
             ):
                 with patch(
