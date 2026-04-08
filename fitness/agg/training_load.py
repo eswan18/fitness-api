@@ -105,9 +105,10 @@ def training_stress_balance(
         ctl = [0.0] * len(trimp_by_date)
         tsb = [0.0] * len(trimp_by_date)
         dates = [dt for dt, _ in trimp_by_date]
+        trimp_values = [tr for _, tr in trimp_by_date]
         return [
-            DayTrainingLoad(date=d, training_load=TrainingLoad(ctl=c, atl=a, tsb=t))
-            for (d, c, a, t) in zip(dates, ctl, atl, tsb)
+            DayTrainingLoad(date=d, training_load=TrainingLoad(ctl=c, atl=a, tsb=t, trimp=tr))
+            for (d, c, a, t, tr) in zip(dates, ctl, atl, tsb, trimp_values)
         ]
 
     # Always start calculations from the beginning of running data, because these metrics converge over time.
@@ -125,9 +126,10 @@ def training_stress_balance(
     atl, ctl = _calculate_atl_and_ctl([trimp for _, trimp in trimp_by_date])
     tsb = [ctl_value - atl_value for ctl_value, atl_value in zip(ctl, atl)]
     dates = [dt for dt, _ in trimp_by_date]
+    trimp_values = [tr for _, tr in trimp_by_date]
     return [
-        DayTrainingLoad(date=d, training_load=TrainingLoad(ctl=c, atl=a, tsb=t))
-        for (d, c, a, t) in zip(dates, ctl, atl, tsb)
+        DayTrainingLoad(date=d, training_load=TrainingLoad(ctl=c, atl=a, tsb=t, trimp=tr))
+        for (d, c, a, t, tr) in zip(dates, ctl, atl, tsb, trimp_values)
         if start_date <= d <= end_date
     ]
 

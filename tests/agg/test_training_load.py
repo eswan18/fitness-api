@@ -475,6 +475,8 @@ class TestTrainingStressBalance:
             assert day_load.training_load.atl >= 0
             # TSB = CTL - ATL, so it can be negative
             assert isinstance(day_load.training_load.tsb, float)
+            # Each day has a run, so TRIMP should be positive
+            assert day_load.training_load.trimp > 0
 
     def test_training_stress_balance_no_heart_rate_runs_excluded(self):
         """Test that runs without heart rate are excluded from TSB calculation."""
@@ -525,6 +527,7 @@ class TestTrainingStressBalance:
             assert day_load.training_load.ctl == 0.0
             assert day_load.training_load.atl == 0.0
             assert day_load.training_load.tsb == 0.0
+            assert day_load.training_load.trimp == 0.0
 
     def test_training_stress_balance_different_sex(self):
         """Test that male and female calculations produce different results."""
