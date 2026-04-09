@@ -128,6 +128,7 @@ def test_training_load_uses_all_runs(monkeypatch, viewer_client: TestClient):
             "end": "2025-06-30",
             "max_hr": "192",
             "resting_hr": "42",
+            "lthr": "165",
             "sex": "M",
         },
     )

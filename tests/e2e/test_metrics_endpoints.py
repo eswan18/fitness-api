@@ -192,7 +192,7 @@ def test_shoe_mileage_metrics(viewer_client):
 
 @pytest.mark.e2e
 def test_training_load_metrics(viewer_client):
-    """Test training load and TRIMP metrics."""
+    """Test training load and hrTSS metrics."""
     # Create runs with heart rate data
     runs = [
         Run(
@@ -227,9 +227,9 @@ def test_training_load_metrics(viewer_client):
     inserted = bulk_create_runs(runs)
     assert inserted == 3
 
-    # Test TRIMP by day
+    # Test hrTSS by day
     res = viewer_client.get(
-        "/metrics/trimp/by-day",
+        "/metrics/hrtss/by-day",
         params={
             "start": "2024-10-01",
             "end": "2024-10-03",
@@ -239,24 +239,24 @@ def test_training_load_metrics(viewer_client):
         },
     )
     assert res.status_code == 200
-    trimp_data = res.json()
+    hrtss_data = res.json()
 
-    # Should have TRIMP values for days with runs
-    assert isinstance(trimp_data, list)
-    assert len(trimp_data) > 0
+    # Should have hrTSS values for days with runs
+    assert isinstance(hrtss_data, list)
+    assert len(hrtss_data) > 0
 
-    # Check structure of TRIMP data
-    trimp_entry = trimp_data[0]
-    assert "date" in trimp_entry
-    assert "trimp" in trimp_entry
-    assert isinstance(trimp_entry["trimp"], (int, float))
+    # Check structure of hrTSS data
+    hrtss_entry = hrtss_data[0]
+    assert "date" in hrtss_entry
+    assert "hrtss" in hrtss_entry
+    assert isinstance(hrtss_entry["hrtss"], (int, float))
 
     # Find specific days
-    oct_1_trimp = next(
-        (entry for entry in trimp_data if entry["date"] == "2024-10-01"), None
+    oct_1_hrtss = next(
+        (entry for entry in hrtss_data if entry["date"] == "2024-10-01"), None
     )
-    if oct_1_trimp:
-        assert oct_1_trimp["trimp"] > 0  # Should have positive TRIMP for day with run
+    if oct_1_hrtss:
+        assert oct_1_hrtss["hrtss"] > 0  # Should have positive hrTSS for day with run
 
     # Test training load by day (requires more parameters)
     res = viewer_client.get(
@@ -266,6 +266,7 @@ def test_training_load_metrics(viewer_client):
             "end": "2024-10-03",
             "max_hr": 190.0,
             "resting_hr": 50.0,
+            "lthr": 165.0,
             "sex": "M",
         },
     )
@@ -326,9 +327,9 @@ def test_metrics_with_timezone(viewer_client):
     tz_mileage = res.json()
     assert tz_mileage >= 0.0  # Should handle timezone conversion
 
-    # Test TRIMP with timezone
+    # Test hrTSS with timezone
     res = viewer_client.get(
-        "/metrics/trimp/by-day",
+        "/metrics/hrtss/by-day",
         params={
             "start": "2024-11-01",
             "end": "2024-11-01",
@@ -339,8 +340,8 @@ def test_metrics_with_timezone(viewer_client):
         },
     )
     assert res.status_code == 200
-    tz_trimp = res.json()
-    assert isinstance(tz_trimp, list)
+    tz_hrtss = res.json()
+    assert isinstance(tz_hrtss, list)
 
 
 @pytest.mark.e2e
@@ -358,7 +359,7 @@ def test_metrics_error_cases(viewer_client):
 
     # Test with invalid heart rate values
     res = viewer_client.get(
-        "/metrics/trimp/by-day",
+        "/metrics/hrtss/by-day",
         params={
             "start": "2024-01-01",
             "end": "2024-01-02",
@@ -370,7 +371,7 @@ def test_metrics_error_cases(viewer_client):
 
     # Test with invalid sex value
     res = viewer_client.get(
-        "/metrics/trimp/by-day",
+        "/metrics/hrtss/by-day",
         params={
             "start": "2024-01-01",
             "end": "2024-01-02",
@@ -402,9 +403,9 @@ def test_metrics_empty_data(viewer_client):
     assert isinstance(empty_daily, list)
     # Should return empty list or list with zero mileage
 
-    # Test TRIMP for empty range
+    # Test hrTSS for empty range
     res = viewer_client.get(
-        "/metrics/trimp/by-day",
+        "/metrics/hrtss/by-day",
         params={
             "start": "1990-01-01",
             "end": "1990-01-01",
@@ -414,5 +415,5 @@ def test_metrics_empty_data(viewer_client):
         },
     )
     assert res.status_code == 200
-    empty_trimp = res.json()
-    assert isinstance(empty_trimp, list)
+    empty_hrtss = res.json()
+    assert isinstance(empty_hrtss, list)

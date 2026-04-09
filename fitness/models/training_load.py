@@ -7,7 +7,7 @@ class TrainingLoad(BaseModel):
     atl: float
     ctl: float
     tsb: float
-    trimp: float
+    hrtss: float
 
 
 class DayTrainingLoad(BaseModel):
