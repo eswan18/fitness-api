@@ -30,3 +30,9 @@ dev:
 serve:
 	# Start a production server
 	uv run -m uvicorn fitness.app:app
+
+mcp-test:
+	# List available MCP tools (server must be running on localhost:8000)
+	curl -s -X POST http://localhost:8000/mcp/mcp \
+		-H "Content-Type: application/json" \
+		-d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}' | python -m json.tool
