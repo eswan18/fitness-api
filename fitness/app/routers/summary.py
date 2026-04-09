@@ -21,6 +21,7 @@ def get_trmnl_summary(
     user_timezone: str | None = None,
     max_hr: float = 192,
     resting_hr: float = 42,
+    lthr: float = 165,
     sex: Sex = "M",
     _user: User | None = Depends(require_viewer_or_api_key),
 ) -> TrmnlSummary:
@@ -62,6 +63,7 @@ def get_trmnl_summary(
         runs=runs,
         max_hr=max_hr,
         resting_hr=resting_hr,
+        lthr=lthr,
         sex=sex,
         start_date=today - timedelta(days=60),
         end_date=today,

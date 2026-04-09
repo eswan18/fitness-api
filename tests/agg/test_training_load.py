@@ -2,7 +2,9 @@ import pytest
 from datetime import date
 from fitness.agg.training_load import (
     trimp,
-    trimp_by_day,
+    threshold_trimp,
+    hrtss,
+    hrtss_by_day,
     training_stress_balance,
     _exponential_training_load,
     _calculate_atl_and_ctl,
@@ -99,11 +101,86 @@ class TestTrimp:
         assert result_low == 0.0
 
 
-class TestTrimpByDay:
-    """Tests for the trimp_by_day() function."""
+class TestThresholdTrimp:
+    """Tests for the threshold_trimp() function."""
+
+    def test_threshold_trimp_male(self):
+        """Test threshold TRIMP calculation for male."""
+        result = threshold_trimp(max_hr=190, resting_hr=50, lthr=165, sex="M")
+        # 60 min * hr_relative * Y, where hr_relative = (165-50)/(190-50) ≈ 0.821
+        assert result > 0
+
+    def test_threshold_trimp_female(self):
+        """Test threshold TRIMP calculation for female."""
+        result = threshold_trimp(max_hr=190, resting_hr=50, lthr=165, sex="F")
+        assert result > 0
+
+    def test_threshold_trimp_lthr_equals_resting(self):
+        """When LTHR equals resting HR, threshold TRIMP should be 0."""
+        result = threshold_trimp(max_hr=190, resting_hr=50, lthr=50, sex="M")
+        assert result == 0.0
+
+
+class TestHrtss:
+    """Tests for the hrtss() function."""
+
+    def test_60min_at_lthr_equals_100(self):
+        """A 60-minute run at LTHR should produce hrTSS ≈ 100."""
+        run = RunFactory().make(
+            {
+                "date": date(2024, 1, 1),
+                "duration": 3600,  # 60 minutes
+                "avg_heart_rate": 165,  # At LTHR
+            }
+        )
+        result = hrtss(run, max_hr=190, resting_hr=50, lthr=165, sex="M")
+        assert result == pytest.approx(100.0, abs=0.01)
+
+    def test_hrtss_scales_with_trimp(self):
+        """hrTSS should be proportional to raw TRIMP."""
+        run = RunFactory().make(
+            {
+                "date": date(2024, 1, 1),
+                "duration": 2400,  # 40 minutes
+                "avg_heart_rate": 150,
+            }
+        )
+        raw = trimp(run, max_hr=190, resting_hr=50, sex="M")
+        thr = threshold_trimp(max_hr=190, resting_hr=50, lthr=165, sex="M")
+        expected = (raw / thr) * 100.0
+        result = hrtss(run, max_hr=190, resting_hr=50, lthr=165, sex="M")
+        assert result == pytest.approx(expected, abs=0.01)
+
+    def test_hrtss_no_heart_rate(self):
+        """hrTSS should raise ValueError when no heart rate."""
+        run = RunFactory().make(
+            {
+                "date": date(2024, 1, 1),
+                "duration": 2400,
+                "avg_heart_rate": None,
+            }
+        )
+        with pytest.raises(ValueError, match="Run must have an average heart rate"):
+            hrtss(run, max_hr=190, resting_hr=50, lthr=165, sex="M")
+
+    def test_hrtss_zero_threshold(self):
+        """When LTHR equals resting HR (threshold TRIMP is 0), hrTSS should be 0."""
+        run = RunFactory().make(
+            {
+                "date": date(2024, 1, 1),
+                "duration": 2400,
+                "avg_heart_rate": 150,
+            }
+        )
+        result = hrtss(run, max_hr=190, resting_hr=50, lthr=50, sex="M")
+        assert result == 0.0
+
+
+class TestHrtssByDay:
+    """Tests for the hrtss_by_day() function."""
 
     def test_single_run_day(self):
-        """Test TRIMP calculation for a single run on one day."""
+        """Test hrTSS calculation for a single run on one day."""
         runs = [
             RunFactory().make(
                 {
@@ -114,21 +191,22 @@ class TestTrimpByDay:
             )
         ]
 
-        result = trimp_by_day(
+        result = hrtss_by_day(
             runs=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 15),
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
         )
 
         assert len(result) == 1
         assert result[0].date == date(2024, 1, 15)
-        assert result[0].trimp == pytest.approx(72.1, abs=1.0)
+        assert result[0].hrtss > 0
 
     def test_multiple_runs_same_day(self):
-        """Test TRIMP calculation for multiple runs on the same day."""
+        """Test hrTSS calculation for multiple runs on the same day."""
         runs = [
             RunFactory().make(
                 {
@@ -148,22 +226,23 @@ class TestTrimpByDay:
             ),
         ]
 
-        result = trimp_by_day(
+        result = hrtss_by_day(
             runs=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 15),
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
         )
 
         assert len(result) == 1
         assert result[0].date == date(2024, 1, 15)
-        # Should be sum of both runs' TRIMP values
-        assert result[0].trimp > 0
+        # Should be sum of both runs' hrTSS values
+        assert result[0].hrtss > 0
 
     def test_multiple_days_with_gaps(self):
-        """Test TRIMP calculation across multiple days including days with no runs."""
+        """Test hrTSS calculation across multiple days including days with no runs."""
         runs = [
             RunFactory().make(
                 {
@@ -182,25 +261,26 @@ class TestTrimpByDay:
             ),
         ]
 
-        result = trimp_by_day(
+        result = hrtss_by_day(
             runs=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 17),
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
         )
 
         assert len(result) == 3  # 3 days total
         assert result[0].date == date(2024, 1, 15)
-        assert result[0].trimp > 0  # Has a run
+        assert result[0].hrtss > 0  # Has a run
         assert result[1].date == date(2024, 1, 16)
-        assert result[1].trimp == 0.0  # No runs
+        assert result[1].hrtss == 0.0  # No runs
         assert result[2].date == date(2024, 1, 17)
-        assert result[2].trimp > 0  # Has a run
+        assert result[2].hrtss > 0  # Has a run
 
     def test_runs_without_heart_rate_excluded(self):
-        """Test that runs without heart rate data are excluded from TRIMP calculation."""
+        """Test that runs without heart rate data are excluded from hrTSS calculation."""
         runs = [
             RunFactory().make(
                 {
@@ -219,37 +299,39 @@ class TestTrimpByDay:
             ),
         ]
 
-        result = trimp_by_day(
+        result = hrtss_by_day(
             runs=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 15),
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
         )
 
         assert len(result) == 1
         assert result[0].date == date(2024, 1, 15)
-        # Should only include TRIMP from the run with heart rate data
-        expected_trimp = trimp(runs[0], max_hr=190, resting_hr=50, sex="M")
-        assert result[0].trimp == pytest.approx(expected_trimp, abs=0.1)
+        # Should only include hrTSS from the run with heart rate data
+        expected = hrtss(runs[0], max_hr=190, resting_hr=50, lthr=165, sex="M")
+        assert result[0].hrtss == pytest.approx(expected, abs=0.1)
 
     def test_no_runs_in_range(self):
-        """Test TRIMP calculation when no runs exist in the date range."""
+        """Test hrTSS calculation when no runs exist in the date range."""
         runs = []
 
-        result = trimp_by_day(
+        result = hrtss_by_day(
             runs=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 17),
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
         )
 
         assert len(result) == 3  # 3 days in range
-        for day_trimp in result:
-            assert day_trimp.trimp == 0.0
+        for day_hrtss in result:
+            assert day_hrtss.hrtss == 0.0
 
     def test_runs_outside_date_range_excluded(self):
         """Test that runs outside the specified date range are excluded."""
@@ -279,23 +361,24 @@ class TestTrimpByDay:
             ),
         ]
 
-        result = trimp_by_day(
+        result = hrtss_by_day(
             runs=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 17),
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
         )
 
         assert len(result) == 3  # 3 days in range
         assert result[0].date == date(2024, 1, 15)
-        assert result[0].trimp > 0  # Only the run on Jan 15
-        assert result[1].trimp == 0.0  # No runs on Jan 16
-        assert result[2].trimp == 0.0  # No runs on Jan 17
+        assert result[0].hrtss > 0  # Only the run on Jan 15
+        assert result[1].hrtss == 0.0  # No runs on Jan 16
+        assert result[2].hrtss == 0.0  # No runs on Jan 17
 
     def test_start_date_before_any_runs(self):
-        """Test TRIMP calculation when start date is before any runs exist."""
+        """Test hrTSS calculation when start date is before any runs exist."""
         runs = [
             RunFactory().make(
                 {
@@ -306,21 +389,21 @@ class TestTrimpByDay:
             )
         ]
 
-        # Request TRIMP data starting from Jan 15 (before any runs)
-        result = trimp_by_day(
+        result = hrtss_by_day(
             runs=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 22),
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
         )
 
         assert len(result) == 8  # 8 days from Jan 15-22
         assert result[0].date == date(2024, 1, 15)
-        assert result[0].trimp == 0.0  # No runs on Jan 15
+        assert result[0].hrtss == 0.0  # No runs on Jan 15
         assert result[5].date == date(2024, 1, 20)
-        assert result[5].trimp > 0  # Has the run on Jan 20
+        assert result[5].hrtss > 0  # Has the run on Jan 20
 
 
 class TestExponentialTrainingLoad:
@@ -461,6 +544,7 @@ class TestTrainingStressBalance:
             runs=runs,
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
             start_date=date(2024, 1, 15),
             end_date=date(2024, 1, 17),
@@ -475,8 +559,8 @@ class TestTrainingStressBalance:
             assert day_load.training_load.atl >= 0
             # TSB = CTL - ATL, so it can be negative
             assert isinstance(day_load.training_load.tsb, float)
-            # Each day has a run, so TRIMP should be positive
-            assert day_load.training_load.trimp > 0
+            # Each day has a run, so hrTSS should be positive
+            assert day_load.training_load.hrtss > 0
 
     def test_training_stress_balance_no_heart_rate_runs_excluded(self):
         """Test that runs without heart rate are excluded from TSB calculation."""
@@ -501,6 +585,7 @@ class TestTrainingStressBalance:
             runs=runs,
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
             start_date=date(2024, 1, 15),
             end_date=date(2024, 1, 15),
@@ -517,6 +602,7 @@ class TestTrainingStressBalance:
             runs=[],
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
             start_date=date(2024, 1, 15),
             end_date=date(2024, 1, 17),
@@ -527,7 +613,7 @@ class TestTrainingStressBalance:
             assert day_load.training_load.ctl == 0.0
             assert day_load.training_load.atl == 0.0
             assert day_load.training_load.tsb == 0.0
-            assert day_load.training_load.trimp == 0.0
+            assert day_load.training_load.hrtss == 0.0
 
     def test_training_stress_balance_different_sex(self):
         """Test that male and female calculations produce different results."""
@@ -545,6 +631,7 @@ class TestTrainingStressBalance:
             runs=runs,
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
             start_date=date(2024, 1, 15),
             end_date=date(2024, 1, 15),
@@ -554,12 +641,13 @@ class TestTrainingStressBalance:
             runs=runs,
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="F",
             start_date=date(2024, 1, 15),
             end_date=date(2024, 1, 15),
         )
 
-        # Results should be different due to different TRIMP calculations
+        # Results should be different due to different hrTSS calculations
         assert result_male[0].training_load.atl != result_female[0].training_load.atl
         assert result_male[0].training_load.ctl != result_female[0].training_load.ctl
 
@@ -588,6 +676,7 @@ class TestTrainingStressBalance:
             runs=runs,
             max_hr=190,
             resting_hr=50,
+            lthr=165,
             sex="M",
             start_date=date(2024, 1, 15),  # Only want results from this date
             end_date=date(2024, 1, 15),
