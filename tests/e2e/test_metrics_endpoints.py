@@ -266,6 +266,7 @@ def test_training_load_metrics(viewer_client):
             "end": "2024-10-03",
             "max_hr": 190.0,
             "resting_hr": 50.0,
+            "lthr": 165.0,
             "sex": "M",
         },
     )
