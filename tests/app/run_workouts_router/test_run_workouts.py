@@ -508,3 +508,51 @@ class TestActivityFeed:
         assert workout["run_count"] == 2
         # Elapsed: from 8:00:00 to 8:15:00 + 900s = 8:30:00 = 1800s
         assert workout["elapsed_seconds"] == 1800.0
+
+    @patch("fitness.db.runs.get_run_details_in_date_range")
+    def test_filters_by_local_date_across_utc_midnight_boundary(
+        self,
+        mock_get_details: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Two runs sharing a UTC date but straddling midnight in the user's tz
+        must be placed on separate local dates.
+
+        Chicago is UTC-5 in April (CDT), so 05:00 UTC = 00:00 Chicago. These
+        two runs are only an hour apart but fall on different Chicago dates:
+
+        - 2026-04-10 04:30 UTC → 2026-04-09 23:30 America/Chicago (April 9)
+        - 2026-04-10 05:30 UTC → 2026-04-10 00:30 America/Chicago (April 10)
+
+        Both have UTC date = April 10, so filtering by UTC date alone would
+        either include both or neither. With user_timezone=America/Chicago
+        and a query window of April 9, only the first should appear.
+        """
+        run_chicago_april_9 = _make_run_detail(
+            "run_just_before_midnight_chicago",
+            datetime(2026, 4, 10, 4, 30, 0),
+        )
+        run_chicago_april_10 = _make_run_detail(
+            "run_just_after_midnight_chicago",
+            datetime(2026, 4, 10, 5, 30, 0),
+        )
+        mock_get_details.return_value = [
+            run_chicago_april_9,
+            run_chicago_april_10,
+        ]
+
+        response = viewer_client.get(
+            "/run-activity-feed",
+            params={
+                "start": "2026-04-09",
+                "end": "2026-04-09",
+                "user_timezone": "America/Chicago",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        ids = {item["item"]["id"] for item in data if item["type"] == "run"}
+        assert ids == {"run_just_before_midnight_chicago"}, (
+            f"Expected only the pre-midnight Chicago run, got {ids}"
+        )

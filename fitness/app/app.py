@@ -6,7 +6,8 @@ import os
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Literal, TypeVar
 
@@ -234,18 +235,33 @@ def read_activity_feed(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,
     sort_order: Literal["asc", "desc"] = "desc",
+    user_timezone: str | None = None,
     _user: User = Depends(require_viewer),
 ) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem]:
     """Get a unified activity feed of solo runs and run workouts.
 
     Runs that belong to a workout appear nested inside their workout entry
     rather than as separate items. Sorted by date.
+
+    When `user_timezone` is provided, `start`/`end` are interpreted as dates
+    in that timezone and the feed is filtered by each run's local date.
     """
     from fitness.db.runs import get_run_details_in_date_range, get_all_run_details
     from fitness.app.routers.run_workouts import build_activity_feed
 
     if start != DEFAULT_START or end != DEFAULT_END:
-        all_runs = get_run_details_in_date_range(start, end)
+        all_runs = get_run_details_in_date_range(
+            start, end, user_timezone=user_timezone
+        )
+        if user_timezone is not None:
+            tz = ZoneInfo(user_timezone)
+            all_runs = [
+                r
+                for r in all_runs
+                if start
+                <= r.datetime_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
+                <= end
+            ]
     else:
         all_runs = get_all_run_details()
 

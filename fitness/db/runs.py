@@ -231,11 +231,19 @@ def get_run_details_in_date_range(
     end_date: date,
     include_deleted: bool = False,
     synced: bool | None = None,
+    user_timezone: str | None = None,
 ) -> list[RunDetail]:
     """Get detailed runs with shoes and sync info within a date range.
 
     Joins `runs` to `shoes` and `synced_runs`.
+
+    When `user_timezone` is set, the SQL range is widened by ±1 day to cover
+    runs whose UTC date differs from their local date. Callers must do exact
+    local-date filtering in Python after this returns.
     """
+    if user_timezone is not None:
+        start_date = start_date - timedelta(days=1)
+        end_date = end_date + timedelta(days=1)
     with get_db_cursor() as cursor:
         conditions: list[sql.Composable] = [
             sql.SQL("DATE(r.datetime_utc) BETWEEN %s AND %s")
