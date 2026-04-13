@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from psycopg import sql
 
-from fitness.models.shoe import Shoe
+from fitness.models.shoe import Shoe, ShoeRecentUse
 from .connection import get_db_cursor, get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,44 @@ def delete_shoe_by_id(shoe_id: str) -> bool:
             (shoe_id,),
         )
         return cursor.rowcount > 0
+
+
+def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUse]:
+    """Return shoes paired with the datetime of their most recent non-deleted run.
+
+    Results are ordered by last_used_date DESC NULLS LAST. Soft-deleted shoes
+    are always excluded. Retired shoes are excluded unless include_retired is True.
+    Soft-deleted runs are ignored when determining the last-used datetime.
+    """
+    conditions: list[sql.Composable] = [sql.SQL("s.deleted_at IS NULL")]
+    if not include_retired:
+        conditions.append(sql.SQL("s.retired_at IS NULL"))
+    where_clause = sql.SQL("WHERE ") + sql.SQL(" AND ").join(conditions)
+
+    query = sql.SQL("""
+        SELECT id, name, retired_at, notes, retirement_notes, deleted_at, last_used_date
+        FROM (
+            SELECT DISTINCT ON (s.id)
+                s.id, s.name, s.retired_at, s.notes, s.retirement_notes, s.deleted_at,
+                r.datetime_utc AS last_used_date
+            FROM shoes s
+            LEFT JOIN runs r ON r.shoe_id = s.id AND r.deleted_at IS NULL
+            {where_clause}
+            ORDER BY s.id, r.datetime_utc DESC NULLS LAST
+        ) sub
+        ORDER BY last_used_date DESC NULLS LAST, name
+    """).format(where_clause=where_clause)
+
+    with get_db_cursor() as cursor:
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        return [
+            ShoeRecentUse(
+                shoe=_row_to_shoe(row[:6]),
+                last_used_date=row[6],
+            )
+            for row in rows
+        ]
 
 
 def _row_to_shoe(row) -> Shoe:
