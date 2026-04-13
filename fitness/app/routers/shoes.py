@@ -4,13 +4,14 @@ from fastapi import APIRouter, HTTPException, Depends
 
 from fitness.db.shoes import (
     get_shoes,
+    get_shoes_with_last_used,
     get_shoe_by_id,
     retire_shoe_by_id,
     unretire_shoe_by_id,
     merge_shoes,
     delete_shoe_by_id,
 )
-from fitness.models.shoe import Shoe
+from fitness.models.shoe import Shoe, ShoeRecentUse
 from fitness.models.user import User
 from fitness.app.models import UpdateShoeRequest, MergeShoesRequest
 from fitness.app.auth import require_viewer, require_editor
@@ -30,6 +31,20 @@ def read_shoes(
                 If None, return all shoes.
     """
     return get_shoes(retired=retired)
+
+
+@router.get("/recent", response_model=list[ShoeRecentUse])
+def read_recent_shoes(
+    include_retired: bool = False,
+    _user: User = Depends(require_viewer),
+) -> list[ShoeRecentUse]:
+    """Get shoes ordered by most-recently-used.
+
+    Returns all non-deleted shoes paired with the datetime of their most
+    recent run, sorted by last_used_date DESC NULLS LAST. Retired shoes are
+    excluded unless ``include_retired=true``.
+    """
+    return get_shoes_with_last_used(include_retired=include_retired)
 
 
 @router.patch("/{shoe_id}", response_model=dict[str, str])

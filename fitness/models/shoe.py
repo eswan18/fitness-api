@@ -97,3 +97,10 @@ class ShoeMileage(BaseModel):
 
     def __lt__(self, other: "ShoeMileage") -> bool:
         return self.mileage < other.mileage
+
+
+class ShoeRecentUse(BaseModel):
+    """Shoe with the datetime of its most recent run, if any."""
+
+    shoe: Shoe
+    last_used_date: Optional[datetime] = None
