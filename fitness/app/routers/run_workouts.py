@@ -9,7 +9,7 @@ from pydantic import BaseModel, field_validator
 
 from fitness.app.auth import require_viewer, require_editor
 from fitness.models.user import User
-from fitness.models.ride import Ride
+from fitness.models.ride_detail import RideDetail
 from fitness.models.run_detail import RunDetail
 from fitness.models.run_workout import RunWorkout, RunWorkoutDetail
 from fitness.db.synced_run_workouts import (
@@ -115,7 +115,7 @@ class ActivityFeedWorkoutItem(BaseModel):
 
 class ActivityFeedRideItem(BaseModel):
     type: Literal["ride"] = "ride"
-    item: Ride
+    item: RideDetail
 
 
 def _reject_if_workout_synced(workout_id: str) -> None:
@@ -236,7 +236,7 @@ async def remove_workout(
 
 def build_activity_feed(
     all_runs: list[RunDetail],
-    rides: list[Ride] | None = None,
+    rides: list[RideDetail] | None = None,
     sort_order: str = "desc",
 ) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem | ActivityFeedRideItem]:
     """Build a unified cardio activity feed from runs and rides.

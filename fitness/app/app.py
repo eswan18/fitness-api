@@ -28,6 +28,7 @@ from .routers import (
     metrics_router,
     shoe_router,
     ride_router,
+    ride_sync_router,
     run_router,
     sync_router,
     oauth_router,
@@ -122,6 +123,7 @@ app.include_router(metrics_router)
 app.include_router(shoe_router)
 app.include_router(run_router)
 app.include_router(ride_router)
+app.include_router(ride_sync_router)
 app.include_router(sync_router)
 app.include_router(oauth_router)
 app.include_router(strava_router)
@@ -233,6 +235,28 @@ def read_run_details_alt(
     )
 
 
+@app.get("/rides-details", response_model=list)
+def read_ride_details(
+    start: date = DEFAULT_START,
+    end: date = DEFAULT_END,
+    synced: bool | None = None,
+    _user: User = Depends(require_viewer),
+):
+    """Get detailed rides with sync info, sorted by datetime descending.
+
+    Optional `synced` filter mirrors `/runs-details`: True for synced rides,
+    False for unsynced (or never-synced) rides.
+    """
+    from fitness.db.rides import (
+        get_all_ride_details,
+        get_ride_details_in_date_range,
+    )
+
+    if start != DEFAULT_START or end != DEFAULT_END:
+        return get_ride_details_in_date_range(start, end, synced=synced)
+    return get_all_ride_details(synced=synced)
+
+
 @app.get("/cardio-activity-feed")
 def read_activity_feed(
     start: date = DEFAULT_START,
@@ -250,14 +274,16 @@ def read_activity_feed(
     in that timezone and the feed is filtered by each activity's local date.
     """
     from fitness.db.runs import get_run_details_in_date_range, get_all_run_details
-    from fitness.db.rides import get_rides_for_date_range, get_all_rides
+    from fitness.db.rides import get_ride_details_in_date_range, get_all_ride_details
     from fitness.app.routers.run_workouts import build_activity_feed
 
     if start != DEFAULT_START or end != DEFAULT_END:
         all_runs = get_run_details_in_date_range(
             start, end, user_timezone=user_timezone
         )
-        rides = get_rides_for_date_range(start, end, user_timezone=user_timezone)
+        rides = get_ride_details_in_date_range(
+            start, end, user_timezone=user_timezone
+        )
         if user_timezone is not None:
             tz = ZoneInfo(user_timezone)
             all_runs = [
@@ -276,7 +302,7 @@ def read_activity_feed(
             ]
     else:
         all_runs = get_all_run_details()
-        rides = get_all_rides()
+        rides = get_all_ride_details()
 
     return build_activity_feed(all_runs, rides=rides, sort_order=sort_order)
 

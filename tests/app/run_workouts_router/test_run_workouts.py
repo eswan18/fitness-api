@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from fitness.models.ride import Ride
+from fitness.models.ride_detail import RideDetail
 from fitness.models.run_workout import RunWorkout
 from fitness.models.run_detail import RunDetail
 
@@ -54,8 +54,8 @@ def _make_ride(
     type_: str = "Indoor Ride",
     duration: float = 3600.0,
     avg_heart_rate: float | None = 140.0,
-) -> Ride:
-    return Ride(
+) -> RideDetail:
+    return RideDetail(
         id=id,
         datetime_utc=datetime_utc or datetime(2024, 6, 1, 18, 0, 0),
         type=type_,  # type: ignore[arg-type]
@@ -399,12 +399,14 @@ class TestActivityFeed:
     def _stub_ride_db(self, monkeypatch):
         """Default rides to empty for every test in this class.
 
-        Individual tests can patch fitness.db.rides.get_all_rides or
-        get_rides_for_date_range to override.
+        Individual tests can patch the ride-detail queries to override.
         """
-        monkeypatch.setattr("fitness.db.rides.get_all_rides", lambda *a, **kw: [])
         monkeypatch.setattr(
-            "fitness.db.rides.get_rides_for_date_range", lambda *a, **kw: []
+            "fitness.db.rides.get_all_ride_details", lambda *a, **kw: []
+        )
+        monkeypatch.setattr(
+            "fitness.db.rides.get_ride_details_in_date_range",
+            lambda *a, **kw: [],
         )
 
     @patch("fitness.db.runs.get_all_run_details")
@@ -597,7 +599,7 @@ class TestActivityFeed:
         monkeypatch,
     ):
         monkeypatch.setattr(
-            "fitness.db.rides.get_all_rides",
+            "fitness.db.rides.get_all_ride_details",
             lambda *a, **kw: [
                 _make_ride(
                     "strava_ride_1",
@@ -627,7 +629,7 @@ class TestActivityFeed:
             _make_run_detail("run_morning", datetime(2024, 6, 1, 8, 0, 0)),
         ]
         monkeypatch.setattr(
-            "fitness.db.rides.get_all_rides",
+            "fitness.db.rides.get_all_ride_details",
             lambda *a, **kw: [
                 _make_ride("ride_evening", datetime(2024, 6, 1, 18, 0, 0)),
             ],
@@ -649,7 +651,7 @@ class TestActivityFeed:
         monkeypatch,
     ):
         monkeypatch.setattr(
-            "fitness.db.rides.get_all_rides",
+            "fitness.db.rides.get_all_ride_details",
             lambda *a, **kw: [
                 _make_ride(
                     "ride_no_hr",
