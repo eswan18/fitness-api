@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 
+from fitness.app.oauth_state import issue_state
 from fitness.db.oauth_credentials import OAuthCredentials
 
 
@@ -92,9 +93,11 @@ class TestStravaAuthorize:
             response.headers["location"]
             == "https://www.strava.com/oauth/authorize?client_id=123"
         )
-        mock_build.assert_called_once_with(
-            redirect_uri="https://api.example.com/oauth/strava/callback"
-        )
+        mock_build.assert_called_once()
+        kwargs = mock_build.call_args.kwargs
+        assert kwargs["redirect_uri"] == "https://api.example.com/oauth/strava/callback"
+        # A signed CSRF state must be passed to the OAuth provider.
+        assert kwargs["state"]
 
     def test_authorize_requires_editor(self, viewer_client: TestClient):
         """Test that authorize endpoint requires editor role."""
@@ -122,9 +125,10 @@ class TestStravaAuthorizeUrl:
         assert response.status_code == 200
         data = response.json()
         assert data["url"] == "https://www.strava.com/oauth/authorize?client_id=123"
-        mock_build.assert_called_once_with(
-            redirect_uri="https://api.example.com/oauth/strava/callback"
-        )
+        mock_build.assert_called_once()
+        kwargs = mock_build.call_args.kwargs
+        assert kwargs["redirect_uri"] == "https://api.example.com/oauth/strava/callback"
+        assert kwargs["state"]
 
     def test_authorize_url_requires_editor(self, viewer_client: TestClient):
         """Test that authorize-url endpoint requires editor role."""
@@ -147,6 +151,29 @@ class TestStravaCallback:
         assert response.status_code == 400
         assert "No code provided" in response.json()["detail"]
 
+    def test_callback_missing_state(self, client: TestClient):
+        """Callback must reject requests without a state token (CSRF protection)."""
+        response = client.get("/oauth/strava/callback?code=test_code")
+        assert response.status_code == 400
+        assert "Invalid OAuth state" in response.json()["detail"]
+
+    def test_callback_invalid_state(self, client: TestClient):
+        """Callback must reject a forged/garbage state token."""
+        response = client.get(
+            "/oauth/strava/callback?code=test_code&state=not-a-valid-jwt"
+        )
+        assert response.status_code == 400
+        assert "Invalid OAuth state" in response.json()["detail"]
+
+    def test_callback_state_for_wrong_provider(self, client: TestClient):
+        """A state issued for Google must not be accepted by the Strava callback."""
+        google_state = issue_state("google")
+        response = client.get(
+            f"/oauth/strava/callback?code=test_code&state={google_state}"
+        )
+        assert response.status_code == 400
+        assert "Invalid OAuth state" in response.json()["detail"]
+
     @patch("fitness.app.routers.oauth.upsert_credentials")
     def test_callback_success(self, mock_upsert, client: TestClient):
         """Test successful OAuth callback."""
@@ -161,6 +188,7 @@ class TestStravaCallback:
                 "expires_at_datetime": lambda self=None: future_date,
             },
         )()
+        state = issue_state("strava")
 
         with patch(
             "fitness.app.routers.oauth.strava.exchange_code_for_token",
@@ -176,7 +204,7 @@ class TestStravaCallback:
                         "https://dashboard.example.com",
                     ):
                         response = client.get(
-                            "/oauth/strava/callback?code=test_code",
+                            f"/oauth/strava/callback?code=test_code&state={state}",
                             follow_redirects=False,
                         )
 
@@ -282,9 +310,10 @@ class TestGoogleAuthorize:
             response.headers["location"]
             == "https://accounts.google.com/o/oauth2/v2/auth?client_id=123"
         )
-        mock_build.assert_called_once_with(
-            redirect_uri="https://api.example.com/oauth/google/callback"
-        )
+        mock_build.assert_called_once()
+        kwargs = mock_build.call_args.kwargs
+        assert kwargs["redirect_uri"] == "https://api.example.com/oauth/google/callback"
+        assert kwargs["state"]
 
     def test_authorize_requires_editor(self, viewer_client: TestClient):
         """Test that authorize endpoint requires editor role."""
@@ -314,9 +343,10 @@ class TestGoogleAuthorizeUrl:
         assert (
             data["url"] == "https://accounts.google.com/o/oauth2/v2/auth?client_id=123"
         )
-        mock_build.assert_called_once_with(
-            redirect_uri="https://api.example.com/oauth/google/callback"
-        )
+        mock_build.assert_called_once()
+        kwargs = mock_build.call_args.kwargs
+        assert kwargs["redirect_uri"] == "https://api.example.com/oauth/google/callback"
+        assert kwargs["state"]
 
     def test_authorize_url_requires_editor(self, viewer_client: TestClient):
         """Test that authorize-url endpoint requires editor role."""
@@ -347,6 +377,29 @@ class TestGoogleCallback:
         assert "Google OAuth authorization failed" in response.json()["detail"]
         assert "access_denied" in response.json()["detail"]
 
+    def test_callback_missing_state(self, client: TestClient):
+        """Callback must reject requests without a state token (CSRF protection)."""
+        response = client.get("/oauth/google/callback?code=test_code")
+        assert response.status_code == 400
+        assert "Invalid OAuth state" in response.json()["detail"]
+
+    def test_callback_invalid_state(self, client: TestClient):
+        """Callback must reject a forged/garbage state token."""
+        response = client.get(
+            "/oauth/google/callback?code=test_code&state=not-a-valid-jwt"
+        )
+        assert response.status_code == 400
+        assert "Invalid OAuth state" in response.json()["detail"]
+
+    def test_callback_state_for_wrong_provider(self, client: TestClient):
+        """A state issued for Strava must not be accepted by the Google callback."""
+        strava_state = issue_state("strava")
+        response = client.get(
+            f"/oauth/google/callback?code=test_code&state={strava_state}"
+        )
+        assert response.status_code == 400
+        assert "Invalid OAuth state" in response.json()["detail"]
+
     @patch("fitness.app.routers.oauth.upsert_credentials")
     def test_callback_success(self, mock_upsert, client: TestClient):
         """Test successful OAuth callback."""
@@ -361,6 +414,7 @@ class TestGoogleCallback:
                 "expires_at_datetime": lambda self=None: future_date,
             },
         )()
+        state = issue_state("google")
 
         with patch(
             "fitness.app.routers.oauth.google.auth.exchange_code_for_token",
@@ -380,7 +434,7 @@ class TestGoogleCallback:
                         "https://dashboard.example.com",
                     ):
                         response = client.get(
-                            "/oauth/google/callback?code=test_code",
+                            f"/oauth/google/callback?code=test_code&state={state}",
                             follow_redirects=False,
                         )
 
@@ -413,12 +467,15 @@ class TestGoogleCallback:
             },
         )()
 
+        state = issue_state("google")
         with patch(
             "fitness.app.routers.oauth.google.auth.exchange_code_for_token",
             new_callable=AsyncMock,
         ) as mock_exchange:
             mock_exchange.return_value = mock_token
-            response = client.get("/oauth/google/callback?code=test_code")
+            response = client.get(
+                f"/oauth/google/callback?code=test_code&state={state}"
+            )
 
         assert response.status_code == 502
         assert "refresh token" in response.json()["detail"].lower()
