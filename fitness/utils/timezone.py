@@ -70,15 +70,16 @@ def convert_activities_to_user_timezone(
     """
     Convert a mixed list of runs and rides to the user's local timezone.
 
-    Dispatches to the run- or ride-specific converter per element so each
-    activity is returned with its concrete `Localized*` type intact.
+    Dispatches per element so each activity is returned with its concrete
+    `Localized*` type intact. Preserves the input order.
     """
-    runs = [a for a in activities if isinstance(a, Run)]
-    rides = [a for a in activities if isinstance(a, Ride)]
-    return [
-        *convert_runs_to_user_timezone(runs, user_timezone),
-        *convert_rides_to_user_timezone(rides, user_timezone),
-    ]
+    result: list[LocalizedRun | LocalizedRide] = []
+    for a in activities:
+        if isinstance(a, Run):
+            result.extend(convert_runs_to_user_timezone([a], user_timezone))
+        else:
+            result.extend(convert_rides_to_user_timezone([a], user_timezone))
+    return result
 
 
 def filter_runs_by_local_date_range(

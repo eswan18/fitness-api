@@ -7,10 +7,7 @@ import zoneinfo
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from fitness.integrations.strava.models import (
-        StravaActivity,
-        StravaActivityType,
-    )
+    from fitness.integrations.strava.models import StravaActivity
 
 
 RideType = Literal["Outdoor Ride", "Indoor Ride"]

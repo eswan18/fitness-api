@@ -18,6 +18,7 @@ from fitness.db.runs import get_runs_for_date_range
 from fitness.models import Run
 from fitness.models.run import LocalizedRun
 from fitness.models.run_detail import RunDetail
+from fitness.models.ride_detail import RideDetail
 from fitness.app.routers.run_workouts import (
     ActivityFeedRideItem,
     ActivityFeedRunItem,
@@ -235,13 +236,13 @@ def read_run_details_alt(
     )
 
 
-@app.get("/rides-details", response_model=list)
+@app.get("/rides-details", response_model=list[RideDetail])
 def read_ride_details(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,
     synced: bool | None = None,
     _user: User = Depends(require_viewer),
-):
+) -> list[RideDetail]:
     """Get detailed rides with sync info, sorted by datetime descending.
 
     Optional `synced` filter mirrors `/runs-details`: True for synced rides,
