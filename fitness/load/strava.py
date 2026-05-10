@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 
 from fitness.integrations.strava.client import StravaClient
-from fitness.integrations.strava.models import StravaActivity, StravaActivityWithGear
+from fitness.integrations.strava.models import StravaActivity
 
 logger = logging.getLogger(__name__)
 

@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from fitness.integrations.strava.models import (
         StravaActivity,
         StravaActivityType,
-        StravaActivityWithGear,
     )
 
 
