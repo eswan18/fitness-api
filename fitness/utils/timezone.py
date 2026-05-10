@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from fitness.models import Run, LocalizedRun
+from fitness.models import Run, LocalizedRun, Ride, LocalizedRide
 
 
 def convert_runs_to_user_timezone(
@@ -15,7 +15,6 @@ def convert_runs_to_user_timezone(
     If user_timezone is None, returns LocalizedRun objects with UTC datetime as localized_datetime.
     """
     if user_timezone is None:
-        # No conversion needed - use UTC datetime as localized_datetime
         localized_runs = []
         for run in runs:
             localized_run = LocalizedRun(
@@ -37,6 +36,50 @@ def convert_runs_to_user_timezone(
     return [LocalizedRun.from_run(run, user_timezone) for run in runs]
 
 
+def convert_rides_to_user_timezone(
+    rides: list[Ride], user_timezone: str | None = None
+) -> list[LocalizedRide]:
+    """
+    Convert a list of rides to use the user's local timezone.
+
+    Mirrors convert_runs_to_user_timezone for the Ride model.
+    If user_timezone is None, returns LocalizedRide objects with UTC datetime as localized_datetime.
+    """
+    if user_timezone is None:
+        return [
+            LocalizedRide(
+                id=ride.id,
+                datetime_utc=ride.datetime_utc,
+                localized_datetime=ride.datetime_utc,
+                type=ride.type,
+                distance=ride.distance,
+                duration=ride.duration,
+                source=ride.source,
+                avg_heart_rate=ride.avg_heart_rate,
+                deleted_at=ride.deleted_at,
+            )
+            for ride in rides
+        ]
+    return [LocalizedRide.from_ride(ride, user_timezone) for ride in rides]
+
+
+def convert_activities_to_user_timezone(
+    activities: list[Run | Ride], user_timezone: str | None = None
+) -> list[LocalizedRun | LocalizedRide]:
+    """
+    Convert a mixed list of runs and rides to the user's local timezone.
+
+    Dispatches to the run- or ride-specific converter per element so each
+    activity is returned with its concrete `Localized*` type intact.
+    """
+    runs = [a for a in activities if isinstance(a, Run)]
+    rides = [a for a in activities if isinstance(a, Ride)]
+    return [
+        *convert_runs_to_user_timezone(runs, user_timezone),
+        *convert_rides_to_user_timezone(rides, user_timezone),
+    ]
+
+
 def filter_runs_by_local_date_range(
     runs: list[Run], start: date, end: date, user_timezone: str | None = None
 ) -> list[Run]:
@@ -46,10 +89,8 @@ def filter_runs_by_local_date_range(
     If user_timezone is None, uses UTC dates (existing behavior).
     """
     if user_timezone is None:
-        # Existing behavior - filter by UTC dates
         return [run for run in runs if start <= run.datetime_utc.date() <= end]
 
-    # Convert runs to user timezone and filter by local dates
     localized_runs = convert_runs_to_user_timezone(runs, user_timezone)
     return [
         localized_run

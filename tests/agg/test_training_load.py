@@ -1,5 +1,5 @@
 import pytest
-from datetime import date
+from datetime import date, timedelta
 from fitness.agg.training_load import (
     trimp,
     threshold_trimp,
@@ -10,6 +10,7 @@ from fitness.agg.training_load import (
     _calculate_atl_and_ctl,
 )
 from tests._factories.run import RunFactory
+from tests._factories.ride import RideFactory
 
 
 class TestTrimp:
@@ -63,7 +64,7 @@ class TestTrimp:
             }
         )
 
-        with pytest.raises(ValueError, match="Run must have an average heart rate"):
+        with pytest.raises(ValueError, match="Activity must have an average heart rate"):
             trimp(run, max_hr=190, resting_hr=50, sex="M")
 
     def test_trimp_hr_clamping(self):
@@ -160,7 +161,7 @@ class TestHrtss:
                 "avg_heart_rate": None,
             }
         )
-        with pytest.raises(ValueError, match="Run must have an average heart rate"):
+        with pytest.raises(ValueError, match="Activity must have an average heart rate"):
             hrtss(run, max_hr=190, resting_hr=50, lthr=165, sex="M")
 
     def test_hrtss_zero_threshold(self):
@@ -192,7 +193,7 @@ class TestHrtssByDay:
         ]
 
         result = hrtss_by_day(
-            runs=runs,
+            activities=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 15),
             max_hr=190,
@@ -227,7 +228,7 @@ class TestHrtssByDay:
         ]
 
         result = hrtss_by_day(
-            runs=runs,
+            activities=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 15),
             max_hr=190,
@@ -262,7 +263,7 @@ class TestHrtssByDay:
         ]
 
         result = hrtss_by_day(
-            runs=runs,
+            activities=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 17),
             max_hr=190,
@@ -300,7 +301,7 @@ class TestHrtssByDay:
         ]
 
         result = hrtss_by_day(
-            runs=runs,
+            activities=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 15),
             max_hr=190,
@@ -320,7 +321,7 @@ class TestHrtssByDay:
         runs = []
 
         result = hrtss_by_day(
-            runs=runs,
+            activities=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 17),
             max_hr=190,
@@ -362,7 +363,7 @@ class TestHrtssByDay:
         ]
 
         result = hrtss_by_day(
-            runs=runs,
+            activities=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 17),
             max_hr=190,
@@ -390,7 +391,7 @@ class TestHrtssByDay:
         ]
 
         result = hrtss_by_day(
-            runs=runs,
+            activities=runs,
             start=date(2024, 1, 15),
             end=date(2024, 1, 22),
             max_hr=190,
@@ -541,7 +542,7 @@ class TestTrainingStressBalance:
         ]
 
         result = training_stress_balance(
-            runs=runs,
+            activities=runs,
             max_hr=190,
             resting_hr=50,
             lthr=165,
@@ -582,7 +583,7 @@ class TestTrainingStressBalance:
         ]
 
         result = training_stress_balance(
-            runs=runs,
+            activities=runs,
             max_hr=190,
             resting_hr=50,
             lthr=165,
@@ -599,7 +600,7 @@ class TestTrainingStressBalance:
     def test_training_stress_balance_empty_runs(self):
         """Test TSB calculation with no runs."""
         result = training_stress_balance(
-            runs=[],
+            activities=[],
             max_hr=190,
             resting_hr=50,
             lthr=165,
@@ -628,7 +629,7 @@ class TestTrainingStressBalance:
         ]
 
         result_male = training_stress_balance(
-            runs=runs,
+            activities=runs,
             max_hr=190,
             resting_hr=50,
             lthr=165,
@@ -638,7 +639,7 @@ class TestTrainingStressBalance:
         )
 
         result_female = training_stress_balance(
-            runs=runs,
+            activities=runs,
             max_hr=190,
             resting_hr=50,
             lthr=165,
@@ -673,7 +674,7 @@ class TestTrainingStressBalance:
         ]
 
         result = training_stress_balance(
-            runs=runs,
+            activities=runs,
             max_hr=190,
             resting_hr=50,
             lthr=165,
@@ -687,3 +688,149 @@ class TestTrainingStressBalance:
         # The earlier run should have affected the CTL/ATL values
         assert result[0].training_load.ctl > 0
         assert result[0].training_load.atl > 0
+
+
+class TestMixedRunsAndRides:
+    """Tests confirming runs and rides combine into a single fatigue series."""
+
+    def test_hrtss_by_day_combines_run_and_ride_same_day(self):
+        """A run and a ride on the same day should sum into one daily hrTSS value."""
+        run = RunFactory().make(
+            {"date": date(2024, 6, 1), "duration": 1800, "avg_heart_rate": 150}
+        )
+        ride = RideFactory().make(
+            {"date": date(2024, 6, 1), "duration": 2700, "avg_heart_rate": 140}
+        )
+
+        result = hrtss_by_day(
+            activities=[run, ride],
+            start=date(2024, 6, 1),
+            end=date(2024, 6, 1),
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+        )
+
+        run_only = hrtss_by_day(
+            activities=[run],
+            start=date(2024, 6, 1),
+            end=date(2024, 6, 1),
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+        )
+        ride_only = hrtss_by_day(
+            activities=[ride],
+            start=date(2024, 6, 1),
+            end=date(2024, 6, 1),
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+        )
+
+        assert len(result) == 1
+        assert result[0].hrtss == pytest.approx(
+            run_only[0].hrtss + ride_only[0].hrtss, abs=1e-6
+        )
+
+    def test_hrtss_by_day_ride_without_hr_excluded(self):
+        """Rides missing avg_heart_rate must be skipped without raising."""
+        ride_with_hr = RideFactory().make(
+            {"date": date(2024, 6, 1), "duration": 2700, "avg_heart_rate": 140}
+        )
+        ride_without_hr = RideFactory().make(
+            {
+                "id": "test_ride_2",
+                "date": date(2024, 6, 1),
+                "duration": 1800,
+                "avg_heart_rate": None,
+            }
+        )
+
+        result = hrtss_by_day(
+            activities=[ride_with_hr, ride_without_hr],
+            start=date(2024, 6, 1),
+            end=date(2024, 6, 1),
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+        )
+
+        only_with_hr = hrtss_by_day(
+            activities=[ride_with_hr],
+            start=date(2024, 6, 1),
+            end=date(2024, 6, 1),
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+        )
+        assert result[0].hrtss == pytest.approx(only_with_hr[0].hrtss, abs=1e-6)
+
+    def test_training_stress_balance_runs_only_unchanged(self):
+        """Calling with runs-only must produce the same numbers as before PR2."""
+        runs = [
+            RunFactory().make(
+                {"date": date(2024, 1, 15), "duration": 3000, "avg_heart_rate": 150}
+            ),
+            RunFactory().make(
+                {"date": date(2024, 1, 16), "duration": 2400, "avg_heart_rate": 145}
+            ),
+        ]
+        result = training_stress_balance(
+            activities=runs,
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+            start_date=date(2024, 1, 16),
+            end_date=date(2024, 1, 16),
+        )
+        assert len(result) == 1
+        # Adding a no-HR ride must not perturb the answer.
+        no_hr_ride = RideFactory().make(
+            {"date": date(2024, 1, 16), "duration": 1800, "avg_heart_rate": None}
+        )
+        result_with_no_hr_ride = training_stress_balance(
+            activities=[*runs, no_hr_ride],
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+            start_date=date(2024, 1, 16),
+            end_date=date(2024, 1, 16),
+        )
+        assert result_with_no_hr_ride[0].training_load.hrtss == pytest.approx(
+            result[0].training_load.hrtss, abs=1e-6
+        )
+
+    def test_training_stress_balance_ride_only_series(self):
+        """Rides alone should produce a non-zero fatigue series."""
+        rides = [
+            RideFactory().make(
+                {
+                    "id": f"ride_{i}",
+                    "date": date(2024, 6, 1) + timedelta(days=i),
+                    "duration": 3600,
+                    "avg_heart_rate": 145,
+                }
+            )
+            for i in range(5)
+        ]
+        result = training_stress_balance(
+            activities=rides,
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+            start_date=date(2024, 6, 5),
+            end_date=date(2024, 6, 5),
+        )
+        assert len(result) == 1
+        assert result[0].training_load.atl > 0
+        assert result[0].training_load.ctl > 0
+        assert result[0].training_load.hrtss > 0

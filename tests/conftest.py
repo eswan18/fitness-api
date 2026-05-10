@@ -1,7 +1,13 @@
 import pytest
 from fitness.app import env_loader  # noqa: F401
 
-from ._factories import RunFactory, StravaActivityWithGearFactory, MmfActivityFactory
+from ._factories import (
+    RunFactory,
+    RideFactory,
+    StravaActivityWithGearFactory,
+    StravaRideActivityFactory,
+    MmfActivityFactory,
+)
 
 
 class AccidentalDatabaseAccessError(Exception):
@@ -47,8 +53,18 @@ def run_factory() -> RunFactory:
 
 
 @pytest.fixture(scope="session")
+def ride_factory() -> RideFactory:
+    return RideFactory()
+
+
+@pytest.fixture(scope="session")
 def strava_activity_with_gear_factory() -> StravaActivityWithGearFactory:
     return StravaActivityWithGearFactory()
+
+
+@pytest.fixture(scope="session")
+def strava_ride_activity_factory() -> StravaRideActivityFactory:
+    return StravaRideActivityFactory()
 
 
 @pytest.fixture(scope="session")

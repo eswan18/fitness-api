@@ -11,6 +11,7 @@ from fitness.agg import (
     training_stress_balance,
 )
 from fitness.db.runs import get_runs_for_date_range, get_all_runs
+from fitness.db.rides import get_rides_for_date_range, get_all_rides
 from fitness.db.shoes import get_shoes
 from fitness.agg.training_load import hrtss_by_day
 from fitness.app.constants import DEFAULT_START, DEFAULT_END
@@ -131,12 +132,12 @@ def read_training_load_by_day(
 ) -> list[DayTrainingLoad]:
     """Get training load by day.
 
-    Computes CTL/ATL/TSB over the specified range using hrTSS (heart-rate-enabled runs).
-    Needs full history for ATL/CTL convergence.
+    Computes CTL/ATL/TSB over the specified range using hrTSS from
+    HR-bearing runs and rides combined. Needs full history for ATL/CTL convergence.
     """
-    runs = get_all_runs()
+    activities = [*get_all_runs(), *get_all_rides()]
     return training_stress_balance(
-        runs=runs,
+        activities=activities,
         max_hr=max_hr,
         resting_hr=resting_hr,
         lthr=lthr,
@@ -160,8 +161,14 @@ def read_hrtss_by_day(
 ) -> list[dict]:
     """Get hrTSS values by day.
 
-    Returns a list of dicts with keys {"date", "hrtss"} for each day.
+    Returns a list of dicts with keys {"date", "hrtss"} for each day. Combines
+    hrTSS contributions from both runs and rides on each day.
     """
-    runs = get_runs_for_date_range(start, end, user_timezone)
-    day_hrtss = hrtss_by_day(runs, start, end, max_hr, resting_hr, lthr, sex, user_timezone)
+    activities = [
+        *get_runs_for_date_range(start, end, user_timezone),
+        *get_rides_for_date_range(start, end, user_timezone),
+    ]
+    day_hrtss = hrtss_by_day(
+        activities, start, end, max_hr, resting_hr, lthr, sex, user_timezone
+    )
     return [{"date": dt.date, "hrtss": dt.hrtss} for dt in day_hrtss]

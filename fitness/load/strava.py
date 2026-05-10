@@ -3,9 +3,47 @@ from datetime import datetime
 from typing import Optional
 
 from fitness.integrations.strava.client import StravaClient
-from fitness.integrations.strava.models import StravaActivityWithGear
+from fitness.integrations.strava.models import StravaActivity, StravaActivityWithGear
 
 logger = logging.getLogger(__name__)
+
+
+def load_strava_rides(
+    client: StravaClient, after: Optional[datetime] = None
+) -> list[StravaActivity]:
+    """Fetch outdoor (`Ride`) and indoor (`VirtualRide`) cycling activities.
+
+    Unlike runs, rides are not joined with gear in v1 (no bike tracking yet),
+    so this returns raw `StravaActivity` instances.
+
+    Args:
+        client: The Strava API client.
+        after: Only fetch activities after this datetime (for incremental sync).
+
+    Returns:
+        List of Strava cycling activities.
+    """
+    if after:
+        logger.info(
+            f"Starting Strava ride load (incremental, after {after.isoformat()})"
+        )
+    else:
+        logger.info("Starting Strava ride load (full sync)")
+
+    try:
+        activities = client.get_activities(after=after)
+        logger.info(f"Retrieved {len(activities)} total activities from Strava")
+        rides = [a for a in activities if a.type in ("Ride", "VirtualRide")]
+        logger.info(
+            f"Filtered to {len(rides)} rides (excluded {len(activities) - len(rides)} non-ride activities)"
+        )
+        return rides
+    except Exception as e:
+        logger.error(
+            f"Failed to load Strava rides: {type(e).__name__}: {str(e)}",
+            exc_info=True,
+        )
+        raise
 
 
 def load_strava_runs(

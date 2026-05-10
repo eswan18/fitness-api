@@ -60,7 +60,7 @@ def get_trmnl_summary(
 
     # Calculate training load series for the last 60 days
     training_load_data = training_stress_balance(
-        runs=runs,
+        activities=runs,
         max_hr=max_hr,
         resting_hr=resting_hr,
         lthr=lthr,
