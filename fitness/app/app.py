@@ -231,7 +231,7 @@ def read_run_details_alt(
     )
 
 
-@app.get("/run-activity-feed")
+@app.get("/cardio-activity-feed")
 def read_activity_feed(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,

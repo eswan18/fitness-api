@@ -1,4 +1,4 @@
-"""Test the /run-workouts and /run-activity-feed endpoints."""
+"""Test the /run-workouts and /cardio-activity-feed endpoints."""
 
 from datetime import datetime
 from unittest.mock import patch, MagicMock
@@ -393,7 +393,7 @@ class TestSyncedWorkoutRejection:
 
 
 class TestActivityFeed:
-    """Test GET /run-activity-feed."""
+    """Test GET /cardio-activity-feed."""
 
     @pytest.fixture(autouse=True)
     def _stub_ride_db(self, monkeypatch):
@@ -418,7 +418,7 @@ class TestActivityFeed:
             _make_run_detail("run_2", datetime(2024, 6, 2, 8, 0, 0)),
         ]
 
-        response = viewer_client.get("/run-activity-feed")
+        response = viewer_client.get("/cardio-activity-feed")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
@@ -449,7 +449,7 @@ class TestActivityFeed:
         ]
         mock_get_workouts.return_value = {"rw_1": _make_workout(id="rw_1")}
 
-        response = viewer_client.get("/run-activity-feed")
+        response = viewer_client.get("/cardio-activity-feed")
         assert response.status_code == 200
         data = response.json()
         # Should have 2 items: 1 solo run + 1 workout
@@ -474,7 +474,7 @@ class TestActivityFeed:
             _make_run_detail("run_2", datetime(2024, 6, 3, 8, 0, 0)),
         ]
 
-        response = viewer_client.get("/run-activity-feed?sort_order=desc")
+        response = viewer_client.get("/cardio-activity-feed?sort_order=desc")
         assert response.status_code == 200
         data = response.json()
         assert data[0]["item"]["id"] == "run_2"
@@ -491,7 +491,7 @@ class TestActivityFeed:
             _make_run_detail("run_2", datetime(2024, 6, 3, 8, 0, 0)),
         ]
 
-        response = viewer_client.get("/run-activity-feed?sort_order=asc")
+        response = viewer_client.get("/cardio-activity-feed?sort_order=asc")
         assert response.status_code == 200
         data = response.json()
         assert data[0]["item"]["id"] == "run_1"
@@ -528,7 +528,7 @@ class TestActivityFeed:
         ]
         mock_get_workouts.return_value = {"rw_1": _make_workout(id="rw_1")}
 
-        response = viewer_client.get("/run-activity-feed")
+        response = viewer_client.get("/cardio-activity-feed")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
@@ -574,7 +574,7 @@ class TestActivityFeed:
         ]
 
         response = viewer_client.get(
-            "/run-activity-feed",
+            "/cardio-activity-feed",
             params={
                 "start": "2026-04-09",
                 "end": "2026-04-09",
@@ -607,7 +607,7 @@ class TestActivityFeed:
             ],
         )
 
-        response = viewer_client.get("/run-activity-feed")
+        response = viewer_client.get("/cardio-activity-feed")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
@@ -633,7 +633,7 @@ class TestActivityFeed:
             ],
         )
 
-        response = viewer_client.get("/run-activity-feed?sort_order=desc")
+        response = viewer_client.get("/cardio-activity-feed?sort_order=desc")
         assert response.status_code == 200
         data = response.json()
         assert [item["item"]["id"] for item in data] == [
@@ -659,7 +659,7 @@ class TestActivityFeed:
             ],
         )
 
-        response = viewer_client.get("/run-activity-feed")
+        response = viewer_client.get("/cardio-activity-feed")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
