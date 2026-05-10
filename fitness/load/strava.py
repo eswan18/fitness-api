@@ -48,7 +48,7 @@ def load_strava_rides(
 
 def load_strava_runs(
     client: StravaClient, after: Optional[datetime] = None
-) -> list[StravaActivityWithGear]:
+) -> list[StravaActivity]:
     """Fetch runs from Strava along with the gear used in them.
 
     Args:
@@ -98,16 +98,28 @@ def load_strava_runs(
             gear = []
 
         gear_by_id = {g.id: g for g in gear}
-        runs_w_gear = [
+        runs_w_gear: list[StravaActivity] = [
             run.with_gear(gear=gear_by_id[run.gear_id])
             for run in runs
             if run.gear_id is not None and run.gear_id in gear_by_id
         ]
+        runs_without_gear: list[StravaActivity] = [
+            run for run in runs if run.gear_id is None
+        ]
+        for run in runs:
+            if run.gear_id is not None and run.gear_id not in gear_by_id:
+                logger.warning(
+                    f"Run {run.id} has gear_id {run.gear_id!r} but gear details "
+                    "were not returned by Strava; importing without shoe info"
+                )
+                runs_without_gear.append(run)
 
+        all_runs = runs_w_gear + runs_without_gear
         logger.info(
-            f"Successfully loaded {len(runs_w_gear)} Strava runs with gear information"
+            f"Successfully loaded {len(all_runs)} Strava runs "
+            f"({len(runs_w_gear)} with gear, {len(runs_without_gear)} without)"
         )
-        return runs_w_gear
+        return all_runs
 
     except Exception as e:
         logger.error(
