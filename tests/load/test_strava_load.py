@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fitness.integrations.strava.models import StravaActivity, StravaAthlete, StravaGear
+from fitness.integrations.strava.models import StravaActivity, StravaAthlete, StravaGear, StravaActivityWithGear
 from fitness.load.strava import load_strava_runs
 
 
@@ -108,7 +108,38 @@ def test_strava_load(make_sample_strava_activity, make_sample_strava_gear, monke
     mock_client.get_gear.return_value = [gear1, gear2]
     runs = load_strava_runs(mock_client)
     assert len(runs) == 2
+    assert isinstance(runs[0], StravaActivityWithGear)
     assert runs[0].gear.nickname == "Brooks Shoes"
+    assert isinstance(runs[1], StravaActivityWithGear)
     assert runs[1].gear.nickname == "Nike Shoes"
 
     mock_client.get_gear.assert_called_once_with({"1", "2"})
+
+
+def test_strava_load_includes_runs_without_gear(
+    make_sample_strava_activity, make_sample_strava_gear
+):
+    """Runs without shoes assigned in Strava should still be imported."""
+    mock_client = MagicMock()
+
+    run_with_gear = make_sample_strava_activity()
+    run_with_gear.type = "Run"
+    run_with_gear.gear_id = "1"
+
+    run_without_gear = make_sample_strava_activity()
+    run_without_gear.type = "Run"
+    run_without_gear.gear_id = None
+
+    mock_client.get_activities.return_value = [run_with_gear, run_without_gear]
+
+    gear1 = make_sample_strava_gear()
+    gear1.id = "1"
+    gear1.nickname = "Brooks Shoes"
+    mock_client.get_gear.return_value = [gear1]
+
+    runs = load_strava_runs(mock_client)
+
+    assert len(runs) == 2
+    # The gearless run should be a plain StravaActivity (no .gear attribute)
+    gearless = next(r for r in runs if not isinstance(r, StravaActivityWithGear))
+    assert gearless.id == run_without_gear.id
