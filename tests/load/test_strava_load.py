@@ -112,3 +112,28 @@ def test_strava_load(make_sample_strava_activity, make_sample_strava_gear, monke
     assert runs[1].gear.nickname == "Nike Shoes"
 
     mock_client.get_gear.assert_called_once_with({"1", "2"})
+
+
+def test_strava_load_runs_without_gear(make_sample_strava_activity, make_sample_strava_gear):
+    """Runs with no gear assigned should still be returned (not silently dropped)."""
+    mock_client = MagicMock()
+    run_with_gear = make_sample_strava_activity()
+    run_with_gear.type = "Run"
+    run_with_gear.gear_id = "1"
+    run_without_gear = make_sample_strava_activity()
+    run_without_gear.type = "Run"
+    run_without_gear.gear_id = None
+    mock_client.get_activities.return_value = [run_with_gear, run_without_gear]
+
+    gear1 = make_sample_strava_gear()
+    gear1.id = "1"
+    gear1.nickname = "Brooks Shoes"
+    mock_client.get_gear.return_value = [gear1]
+
+    runs = load_strava_runs(mock_client)
+    assert len(runs) == 2
+    assert runs[0].gear is not None
+    assert runs[0].gear.nickname == "Brooks Shoes"
+    assert runs[0].shoes() == "Brooks Shoes"
+    assert runs[1].gear is None
+    assert runs[1].shoes() is None
