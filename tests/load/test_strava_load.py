@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fitness.integrations.strava.models import StravaActivity, StravaAthlete, StravaGear
+from fitness.integrations.strava.models import StravaActivity, StravaAthlete, StravaGear, StravaActivityWithGear
 from fitness.load.strava import load_strava_runs
 
 
@@ -108,7 +108,9 @@ def test_strava_load(make_sample_strava_activity, make_sample_strava_gear, monke
     mock_client.get_gear.return_value = [gear1, gear2]
     runs = load_strava_runs(mock_client)
     assert len(runs) == 2
+    assert isinstance(runs[0], StravaActivityWithGear)
     assert runs[0].gear.nickname == "Brooks Shoes"
+    assert isinstance(runs[1], StravaActivityWithGear)
     assert runs[1].gear.nickname == "Nike Shoes"
 
     mock_client.get_gear.assert_called_once_with({"1", "2"})
@@ -139,7 +141,5 @@ def test_strava_load_includes_runs_without_gear(
 
     assert len(runs) == 2
     # The gearless run should be a plain StravaActivity (no .gear attribute)
-    from fitness.integrations.strava.models import StravaActivityWithGear
-
     gearless = next(r for r in runs if not isinstance(r, StravaActivityWithGear))
     assert gearless.id == run_without_gear.id
