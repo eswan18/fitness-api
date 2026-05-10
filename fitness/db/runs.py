@@ -139,17 +139,21 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
                 for i in range(0, len(runs), chunk_size):
                     chunk = runs[i : i + chunk_size]
 
-                    # Prepare run data for insertion
-                    run_data = []
-                    history_data = []
-
+                    chunk_inserted = 0
                     for run in chunk:
                         shoe_id = (
                             all_shoes.get(run.shoe_name) if run.shoe_name else None
                         )
 
-                        # Add to runs table data
-                        run_data.append(
+                        # ON CONFLICT DO NOTHING ensures a previously-imported
+                        # run (including soft-deleted ones) is silently skipped
+                        # rather than failing the whole batch on a PK conflict.
+                        cursor.execute(
+                            """
+                            INSERT INTO runs (id, datetime_utc, type, distance, duration, source, avg_heart_rate, shoe_id, deleted_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (id) DO NOTHING
+                            """,
                             (
                                 run.id,
                                 run.datetime_utc,
@@ -160,51 +164,39 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
                                 run.avg_heart_rate,
                                 shoe_id,
                                 run.deleted_at,
-                            )
+                            ),
                         )
 
-                        # Add to history table data (original entry)
-                        history_data.append(
-                            (
-                                run.id,  # run_id
-                                1,  # version_number
-                                "original",  # change_type
-                                run.datetime_utc,
-                                run.type,
-                                run.distance,
-                                run.duration,
-                                run.source,
-                                run.avg_heart_rate,
-                                shoe_id,
-                                "system",  # changed_by
-                                "Initial import",  # change_reason
+                        # Only write the history row when the run was actually
+                        # inserted, to keep history rows in lockstep with runs.
+                        if cursor.rowcount == 1:
+                            chunk_inserted += 1
+                            cursor.execute(
+                                """
+                                INSERT INTO runs_history (
+                                    run_id, version_number, change_type, datetime_utc, type,
+                                    distance, duration, source, avg_heart_rate, shoe_id,
+                                    changed_by, change_reason
+                                )
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                """,
+                                (
+                                    run.id,
+                                    1,  # version_number
+                                    "original",  # change_type
+                                    run.datetime_utc,
+                                    run.type,
+                                    run.distance,
+                                    run.duration,
+                                    run.source,
+                                    run.avg_heart_rate,
+                                    shoe_id,
+                                    "system",  # changed_by
+                                    "Initial import",  # change_reason
+                                ),
                             )
-                        )
 
-                    # Insert runs
-                    cursor.executemany(
-                        """
-                        INSERT INTO runs (id, datetime_utc, type, distance, duration, source, avg_heart_rate, shoe_id, deleted_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        run_data,
-                    )
-
-                    chunk_inserted = cursor.rowcount
                     total_inserted += chunk_inserted
-
-                    # Insert corresponding history entries
-                    cursor.executemany(
-                        """
-                        INSERT INTO runs_history (
-                            run_id, version_number, change_type, datetime_utc, type, 
-                            distance, duration, source, avg_heart_rate, shoe_id,
-                            changed_by, change_reason
-                        )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        history_data,
-                    )
 
                     logger.info(
                         f"Inserted {chunk_inserted} runs with history in chunk {i // chunk_size + 1} (runs {i + 1}-{min(i + chunk_size, len(runs))})"
@@ -217,9 +209,14 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
 
 
 def get_existing_run_ids() -> set[str]:
-    """Get all existing run IDs from the database."""
+    """Get all existing run IDs from the database, including soft-deleted ones.
+
+    Soft-deleted IDs are included so that re-imports from external providers
+    (e.g. Strava) skip runs the user has explicitly deleted, rather than
+    attempting to re-insert and hitting a primary-key conflict.
+    """
     with get_db_cursor() as cursor:
-        cursor.execute("SELECT id FROM runs WHERE deleted_at IS NULL")
+        cursor.execute("SELECT id FROM runs")
         rows = cursor.fetchall()
         existing_ids = {row[0] for row in rows}
         logger.info(f"Found {len(existing_ids)} existing run IDs in database")

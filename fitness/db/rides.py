@@ -141,6 +141,7 @@ def bulk_create_rides(rides: list[Ride], chunk_size: int = 20) -> int:
                         """
                         INSERT INTO rides (id, datetime_utc, type, distance, duration, source, avg_heart_rate, deleted_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (id) DO NOTHING
                         """,
                         ride_data,
                     )
@@ -300,9 +301,14 @@ def update_ride(ride_id: str, updates: dict) -> Ride:
 
 
 def get_existing_ride_ids() -> set[str]:
-    """Get all existing (non-deleted) ride IDs from the database."""
+    """Get all existing ride IDs from the database, including soft-deleted ones.
+
+    Soft-deleted IDs are included so that re-imports from external providers
+    (e.g. Strava) skip rides the user has explicitly deleted, rather than
+    attempting to re-insert and hitting a primary-key conflict.
+    """
     with get_db_cursor() as cursor:
-        cursor.execute("SELECT id FROM rides WHERE deleted_at IS NULL")
+        cursor.execute("SELECT id FROM rides")
         rows = cursor.fetchall()
         existing_ids = {row[0] for row in rows}
         logger.info(f"Found {len(existing_ids)} existing ride IDs in database")
