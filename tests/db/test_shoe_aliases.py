@@ -39,8 +39,9 @@ def test_merge_shoes_executes_all_statements():
             merge_shoe_name="Nike Zoom Fly 4",
         )
 
-    # Should have executed: update runs, update runs_history, insert alias, soft-delete shoe
-    assert mock_cursor.execute.call_count == 4
+    # Should have executed: update runs, update runs_history, cascade aliases,
+    # insert alias, soft-delete shoe
+    assert mock_cursor.execute.call_count == 5
 
 
 def test_bulk_create_runs_resolves_aliases():

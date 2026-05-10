@@ -514,3 +514,84 @@ def test_shoe_merge_workflow(viewer_client, editor_client):
     reimported = get_run_by_id("merge_test_3")
     assert reimported is not None
     assert reimported.shoe_id == shoe_a_id
+
+
+@pytest.mark.e2e
+def test_shoe_transitive_merge_workflow(viewer_client, editor_client):
+    """Aliases must follow the chain when a previously-merged-into shoe is itself merged.
+
+    Scenario: merge B -> A, then merge A -> C. A re-imported run with the original
+    "B" name must resolve to C (the final kept shoe), not the soft-deleted A.
+    """
+    runs = [
+        Run(
+            id="transitive_merge_1",
+            datetime_utc=datetime(2024, 7, 1, 10, 0, 0),
+            type="Outdoor Run",
+            distance=5.0,
+            duration=2400.0,
+            source="Strava",
+        ),
+        Run(
+            id="transitive_merge_2",
+            datetime_utc=datetime(2024, 7, 2, 10, 0, 0),
+            type="Outdoor Run",
+            distance=6.0,
+            duration=2800.0,
+            source="MapMyFitness",
+        ),
+        Run(
+            id="transitive_merge_3",
+            datetime_utc=datetime(2024, 7, 3, 10, 0, 0),
+            type="Outdoor Run",
+            distance=7.0,
+            duration=3000.0,
+            source="Strava",
+        ),
+    ]
+    runs[0]._shoe_name = "Transitive Shoe A"
+    runs[1]._shoe_name = "Transitive Shoe B"
+    runs[2]._shoe_name = "Transitive Shoe C"
+
+    inserted = bulk_create_runs(runs)
+    assert inserted == 3
+
+    shoe_a_id = generate_shoe_id("Transitive Shoe A")
+    shoe_b_id = generate_shoe_id("Transitive Shoe B")
+    shoe_c_id = generate_shoe_id("Transitive Shoe C")
+
+    # First merge: B -> A. Creates alias "Transitive Shoe B" -> A.
+    res = editor_client.post(
+        "/shoes/merge",
+        json={"keep_shoe_id": shoe_a_id, "merge_shoe_id": shoe_b_id},
+    )
+    assert res.status_code == 200
+
+    # Second merge: A -> C. The "Transitive Shoe B" alias must follow to C.
+    res = editor_client.post(
+        "/shoes/merge",
+        json={"keep_shoe_id": shoe_c_id, "merge_shoe_id": shoe_a_id},
+    )
+    assert res.status_code == 200
+
+    # Re-import a run under the original "B" name (simulating a fresh sync).
+    new_run = Run(
+        id="transitive_merge_4",
+        datetime_utc=datetime(2024, 7, 4, 10, 0, 0),
+        type="Outdoor Run",
+        distance=4.0,
+        duration=2000.0,
+        source="MapMyFitness",
+    )
+    new_run._shoe_name = "Transitive Shoe B"
+    inserted = bulk_create_runs([new_run])
+    assert inserted == 1
+
+    from fitness.db.runs import get_run_by_id
+
+    reimported = get_run_by_id("transitive_merge_4")
+    assert reimported is not None
+    assert reimported.shoe_id == shoe_c_id, (
+        f"Re-imported run with previously-merged name should resolve to final kept "
+        f"shoe ({shoe_c_id}), not the intermediate soft-deleted shoe ({reimported.shoe_id})"
+    )
