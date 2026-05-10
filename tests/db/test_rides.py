@@ -47,13 +47,15 @@ class TestBulkCreateRides:
         mock_cursor.executemany.assert_called_once()
         call_args = mock_cursor.executemany.call_args
         assert "INSERT INTO rides" in call_args[0][0]
+        # Defends against PK conflicts on previously-imported (incl. soft-deleted) rides.
+        assert "ON CONFLICT (id) DO NOTHING" in call_args[0][0]
         # No history table interaction (rides have no history table in v1)
         assert "rides_history" not in call_args[0][0]
 
 
 class TestGetExistingRideIds:
     @patch("fitness.db.rides.get_db_cursor")
-    def test_returns_set_of_ids_excluding_deleted(self, mock_get_cursor):
+    def test_returns_all_ids_including_soft_deleted(self, mock_get_cursor):
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = [("strava_1",), ("strava_2",)]
         mock_get_cursor.return_value.__enter__.return_value = mock_cursor
@@ -61,8 +63,10 @@ class TestGetExistingRideIds:
         result = get_existing_ride_ids()
 
         assert result == {"strava_1", "strava_2"}
+        # Soft-deleted rides must appear here so re-imports skip them
+        # instead of attempting an insert that hits a PK conflict.
         executed_sql = mock_cursor.execute.call_args[0][0]
-        assert "deleted_at IS NULL" in executed_sql
+        assert "deleted_at" not in executed_sql
 
 
 class TestGetRidesForDateRange:
