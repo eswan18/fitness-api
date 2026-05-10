@@ -16,11 +16,23 @@ if TYPE_CHECKING:
 RideType = Literal["Outdoor Ride", "Indoor Ride"]
 RideSource = Literal["Strava"]
 
-# Map Strava activity types to our ride types.
-StravaRideMap: dict["StravaActivityType", RideType] = {
-    "Ride": "Outdoor Ride",
-    "VirtualRide": "Indoor Ride",
-}
+
+def _classify_strava_ride(strava_activity: "StravaActivity") -> RideType:
+    """Map a Strava cycling activity to our RideType.
+
+    Strava's `VirtualRide` is set automatically by virtual cycling apps
+    (Zwift, MyWhoosh, TrainerRoad, etc.) — it is not a user-selectable
+    type in Strava's UI. For a regular indoor trainer ride uploaded
+    directly to Strava, the convention is `type="Ride"` with the
+    `trainer` flag set to `true`. So both shapes map to "Indoor Ride".
+    """
+    if strava_activity.type == "VirtualRide":
+        return "Indoor Ride"
+    if strava_activity.type == "Ride":
+        return "Indoor Ride" if strava_activity.trainer else "Outdoor Ride"
+    raise ValueError(
+        f"Unsupported Strava activity type for Ride: {strava_activity.type!r}"
+    )
 
 
 class Ride(BaseModel):
@@ -64,7 +76,7 @@ class Ride(BaseModel):
         return cls(
             id=f"strava_{strava_activity.id}",
             datetime_utc=strava_activity.start_date.replace(tzinfo=None),
-            type=StravaRideMap[strava_activity.type],
+            type=_classify_strava_ride(strava_activity),
             distance=strava_activity.distance * 0.000621371,  # meters -> miles
             duration=strava_activity.elapsed_time,
             avg_heart_rate=strava_activity.average_heartrate,
