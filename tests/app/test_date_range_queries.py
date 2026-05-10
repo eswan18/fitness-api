@@ -114,9 +114,11 @@ def test_rolling_mileage_includes_lookback_window(
 
 def test_training_load_uses_all_runs(monkeypatch, viewer_client: TestClient):
     """Training load needs full history for ATL/CTL convergence, not date-filtered."""
-    mock_all = MagicMock(return_value=[])
+    mock_all_runs = MagicMock(return_value=[])
+    mock_all_rides = MagicMock(return_value=[])
     mock_date_range = MagicMock(return_value=[])
-    monkeypatch.setattr("fitness.app.routers.metrics.get_all_runs", mock_all)
+    monkeypatch.setattr("fitness.app.routers.metrics.get_all_runs", mock_all_runs)
+    monkeypatch.setattr("fitness.app.routers.metrics.get_all_rides", mock_all_rides)
     monkeypatch.setattr(
         "fitness.app.routers.metrics.get_runs_for_date_range", mock_date_range
     )
@@ -133,5 +135,6 @@ def test_training_load_uses_all_runs(monkeypatch, viewer_client: TestClient):
         },
     )
 
-    mock_all.assert_called_once()
+    mock_all_runs.assert_called_once()
+    mock_all_rides.assert_called_once()
     mock_date_range.assert_not_called()

@@ -9,10 +9,11 @@ from fitness.app.auth import require_editor
 from fitness.models.user import User
 from fitness.models.responses import DataImportResponse
 from fitness.integrations.strava.client import StravaClient
-from fitness.models import Run
+from fitness.models import Run, Ride
 from fitness.db.runs import get_existing_run_ids, bulk_create_runs
+from fitness.db.rides import get_existing_ride_ids, bulk_create_rides
 from fitness.db.sync_metadata import get_last_sync_time, update_last_sync_time
-from fitness.load.strava import load_strava_runs
+from fitness.load.strava import load_strava_runs, load_strava_rides
 
 logger = logging.getLogger(__name__)
 
@@ -54,23 +55,33 @@ async def sync_strava_data(
     # Record sync start time before fetching
     sync_time = datetime.now(timezone.utc)
 
-    # Get Strava runs from the API (with optional after filter)
+    # Runs ingestion
     strava_runs = [
         Run.from_strava(run) for run in load_strava_runs(strava_client, after=after)
     ]
-
-    # Get the IDs of all existing runs in the db.
     existing_run_ids = get_existing_run_ids()
-
-    # Filter to only new runs (double-check even with incremental sync)
     new_runs = [run for run in strava_runs if run.id not in existing_run_ids]
-
     if new_runs:
-        inserted_count = bulk_create_runs(new_runs)
-        logger.info(f"Inserted {inserted_count} new runs into the database")
+        inserted_runs = bulk_create_runs(new_runs)
+        logger.info(f"Inserted {inserted_runs} new runs into the database")
     else:
-        inserted_count = 0
+        inserted_runs = 0
         logger.info("No new runs to insert")
+
+    # Rides ingestion
+    strava_rides = [
+        Ride.from_strava(ride) for ride in load_strava_rides(strava_client, after=after)
+    ]
+    existing_ride_ids = get_existing_ride_ids()
+    new_rides = [ride for ride in strava_rides if ride.id not in existing_ride_ids]
+    if new_rides:
+        inserted_rides = bulk_create_rides(new_rides)
+        logger.info(f"Inserted {inserted_rides} new rides into the database")
+    else:
+        inserted_rides = 0
+        logger.info("No new rides to insert")
+
+    inserted_count = inserted_runs + inserted_rides
 
     # Update last sync time on successful completion
     update_last_sync_time(PROVIDER_NAME, sync_time)
@@ -78,8 +89,13 @@ async def sync_strava_data(
     sync_type = "full" if full_sync or after is None else "incremental"
     return DataImportResponse(
         inserted_count=inserted_count,
+        inserted_runs=inserted_runs,
+        inserted_rides=inserted_rides,
         updated_at=sync_time,
-        message=f"Inserted {inserted_count} new runs ({sync_type} sync)",
+        message=(
+            f"Inserted {inserted_runs} new runs and {inserted_rides} new rides "
+            f"({sync_type} sync)"
+        ),
     )
 
 

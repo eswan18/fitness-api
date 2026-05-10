@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any
 
 import httpx
 from fitness.models.run import Run
+from fitness.models.ride import Ride
 from fitness.models.lift import Lift
 from fitness.models.run_workout import RunWorkout
 from fitness.db.oauth_credentials import get_credentials, update_access_token
@@ -309,6 +310,74 @@ class GoogleCalendarClient:
                 f"error_data={error_data}, response_text={error_text[:500]}"
             )
             return None
+
+    def create_ride_event(self, ride: Ride) -> Optional[str]:
+        """Create a calendar event for a cycling activity.
+
+        Title format mirrors the user's preference:
+            - "Indoor Bike Ride"
+            - "Outdoor Bike Ride"
+
+        The description carries duration, distance (when meaningful), and HR.
+        """
+        if ride.type == "Indoor Ride":
+            event_title = "Indoor Bike Ride"
+        else:
+            event_title = "Outdoor Bike Ride"
+
+        # Build a short description summarizing the ride.
+        duration_seconds_total = int(ride.duration) if ride.duration else 0
+        if duration_seconds_total < 0:
+            duration_seconds_total = 0
+        duration_minutes = duration_seconds_total // 60
+        duration_seconds = duration_seconds_total % 60
+        description_lines = [
+            f"Duration: {duration_minutes}:{duration_seconds:02d}",
+        ]
+        if ride.type == "Outdoor Ride" and ride.distance:
+            description_lines.append(f"Distance: {ride.distance:.2f} mi")
+        if ride.avg_heart_rate is not None:
+            description_lines.append(f"Avg HR: {ride.avg_heart_rate:.0f} bpm")
+        description_lines.append("")
+        description_lines.append(f"Synced from fitness app — Ride ID: {ride.id}")
+
+        # Convert stored UTC-naive datetime to timezone-aware UTC.
+        start_dt_utc = ride.datetime_utc.replace(tzinfo=timezone.utc)
+        end_dt_utc = start_dt_utc + timedelta(seconds=duration_seconds_total)
+
+        event_data = {
+            "summary": event_title,
+            "description": "\n".join(description_lines),
+            "start": {"dateTime": start_dt_utc.isoformat()},
+            "end": {"dateTime": end_dt_utc.isoformat()},
+        }
+
+        url = f"{self.base_url}/calendars/{self.calendar_id}/events"
+        response = self._make_request("POST", url, json=event_data)
+
+        if response and 200 <= response.status_code < 300:
+            event = response.json()
+            event_id = event.get("id")
+            logger.info(
+                f"Successfully created calendar event: ride_id={ride.id}, "
+                f"event_id={event_id}, calendar_id={self.calendar_id}"
+            )
+            return event_id
+
+        status_code = response.status_code if response else "N/A"
+        error_text = response.text if response else "No response received"
+        error_data = None
+        if response:
+            try:
+                error_data = response.json()
+            except Exception:
+                pass
+        logger.error(
+            f"Failed to create calendar event: ride_id={ride.id}, "
+            f"calendar_id={self.calendar_id}, status_code={status_code}, "
+            f"error_data={error_data}, response_text={error_text[:500]}"
+        )
+        return None
 
     def create_lift_event(self, lift: Lift) -> Optional[str]:
         """Create a calendar event for a weightlifting workout.

@@ -9,6 +9,7 @@ from pydantic import BaseModel, field_validator
 
 from fitness.app.auth import require_viewer, require_editor
 from fitness.models.user import User
+from fitness.models.ride_detail import RideDetail
 from fitness.models.run_detail import RunDetail
 from fitness.models.run_workout import RunWorkout, RunWorkoutDetail
 from fitness.db.synced_run_workouts import (
@@ -110,6 +111,11 @@ class ActivityFeedRunItem(BaseModel):
 class ActivityFeedWorkoutItem(BaseModel):
     type: Literal["run_workout"] = "run_workout"
     item: RunWorkoutDetail
+
+
+class ActivityFeedRideItem(BaseModel):
+    type: Literal["ride"] = "ride"
+    item: RideDetail
 
 
 def _reject_if_workout_synced(workout_id: str) -> None:
@@ -230,12 +236,14 @@ async def remove_workout(
 
 def build_activity_feed(
     all_runs: list[RunDetail],
+    rides: list[RideDetail] | None = None,
     sort_order: str = "desc",
-) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem]:
-    """Build a unified activity feed from a list of run details.
+) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem | ActivityFeedRideItem]:
+    """Build a unified cardio activity feed from runs and rides.
 
-    Partitions runs into solo runs and workout-grouped runs, computes
-    workout aggregates, and returns a sorted feed.
+    Partitions runs into solo runs and workout-grouped runs, computes workout
+    aggregates, appends rides as solo items (rides are not grouped), and
+    returns the combined feed sorted by datetime.
     """
     # Partition into solo runs and workout-grouped runs
     solo_runs: list[RunDetail] = []
@@ -247,7 +255,9 @@ def build_activity_feed(
             solo_runs.append(run)
 
     # Build feed items
-    feed: list[ActivityFeedRunItem | ActivityFeedWorkoutItem] = []
+    feed: list[
+        ActivityFeedRunItem | ActivityFeedWorkoutItem | ActivityFeedRideItem
+    ] = []
 
     # Add solo runs
     for run in solo_runs:
@@ -276,13 +286,17 @@ def build_activity_feed(
                 detail.google_event_id = sync_record.google_event_id
             feed.append(ActivityFeedWorkoutItem(item=detail))
 
+    # Add rides (always solo — no ride workouts in v1)
+    for ride in rides or []:
+        feed.append(ActivityFeedRideItem(item=ride))
+
     # Sort by effective datetime
     def sort_key(
-        item: ActivityFeedRunItem | ActivityFeedWorkoutItem,
+        item: ActivityFeedRunItem | ActivityFeedWorkoutItem | ActivityFeedRideItem,
     ) -> datetime:
-        if isinstance(item, ActivityFeedRunItem):
-            return item.item.datetime_utc
-        return item.item.start_datetime_utc
+        if isinstance(item, ActivityFeedWorkoutItem):
+            return item.item.start_datetime_utc
+        return item.item.datetime_utc
 
     reverse = sort_order == "desc"
     feed.sort(key=sort_key, reverse=reverse)

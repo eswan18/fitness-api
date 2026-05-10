@@ -18,7 +18,9 @@ from fitness.db.runs import get_runs_for_date_range
 from fitness.models import Run
 from fitness.models.run import LocalizedRun
 from fitness.models.run_detail import RunDetail
+from fitness.models.ride_detail import RideDetail
 from fitness.app.routers.run_workouts import (
+    ActivityFeedRideItem,
     ActivityFeedRunItem,
     ActivityFeedWorkoutItem,
 )
@@ -26,6 +28,8 @@ from .constants import DEFAULT_START, DEFAULT_END
 from .routers import (
     metrics_router,
     shoe_router,
+    ride_router,
+    ride_sync_router,
     run_router,
     sync_router,
     oauth_router,
@@ -119,6 +123,8 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(metrics_router)
 app.include_router(shoe_router)
 app.include_router(run_router)
+app.include_router(ride_router)
+app.include_router(ride_sync_router)
 app.include_router(sync_router)
 app.include_router(oauth_router)
 app.include_router(strava_router)
@@ -230,27 +236,53 @@ def read_run_details_alt(
     )
 
 
-@app.get("/run-activity-feed")
+@app.get("/rides-details", response_model=list[RideDetail])
+def read_ride_details(
+    start: date = DEFAULT_START,
+    end: date = DEFAULT_END,
+    synced: bool | None = None,
+    _user: User = Depends(require_viewer),
+) -> list[RideDetail]:
+    """Get detailed rides with sync info, sorted by datetime descending.
+
+    Optional `synced` filter mirrors `/runs-details`: True for synced rides,
+    False for unsynced (or never-synced) rides.
+    """
+    from fitness.db.rides import (
+        get_all_ride_details,
+        get_ride_details_in_date_range,
+    )
+
+    if start != DEFAULT_START or end != DEFAULT_END:
+        return get_ride_details_in_date_range(start, end, synced=synced)
+    return get_all_ride_details(synced=synced)
+
+
+@app.get("/cardio-activity-feed")
 def read_activity_feed(
     start: date = DEFAULT_START,
     end: date = DEFAULT_END,
     sort_order: Literal["asc", "desc"] = "desc",
     user_timezone: str | None = None,
     _user: User = Depends(require_viewer),
-) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem]:
-    """Get a unified activity feed of solo runs and run workouts.
+) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem | ActivityFeedRideItem]:
+    """Get a unified cardio activity feed of solo runs, run workouts, and rides.
 
     Runs that belong to a workout appear nested inside their workout entry
-    rather than as separate items. Sorted by date.
+    rather than as separate items. Rides are always solo items. Sorted by date.
 
     When `user_timezone` is provided, `start`/`end` are interpreted as dates
-    in that timezone and the feed is filtered by each run's local date.
+    in that timezone and the feed is filtered by each activity's local date.
     """
     from fitness.db.runs import get_run_details_in_date_range, get_all_run_details
+    from fitness.db.rides import get_ride_details_in_date_range, get_all_ride_details
     from fitness.app.routers.run_workouts import build_activity_feed
 
     if start != DEFAULT_START or end != DEFAULT_END:
         all_runs = get_run_details_in_date_range(
+            start, end, user_timezone=user_timezone
+        )
+        rides = get_ride_details_in_date_range(
             start, end, user_timezone=user_timezone
         )
         if user_timezone is not None:
@@ -262,10 +294,18 @@ def read_activity_feed(
                 <= r.datetime_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
                 <= end
             ]
+            rides = [
+                r
+                for r in rides
+                if start
+                <= r.datetime_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
+                <= end
+            ]
     else:
         all_runs = get_all_run_details()
+        rides = get_all_ride_details()
 
-    return build_activity_feed(all_runs, sort_order=sort_order)
+    return build_activity_feed(all_runs, rides=rides, sort_order=sort_order)
 
 
 def sort_runs_generic(

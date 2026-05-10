@@ -1,10 +1,11 @@
 from datetime import date, timedelta
 import math
 from collections import defaultdict
+from collections.abc import Sequence
 from typing import NamedTuple
 
-from fitness.models import Run, DayTrainingLoad, TrainingLoad, Sex
-from fitness.utils.timezone import convert_runs_to_user_timezone
+from fitness.models import Run, Ride, DayTrainingLoad, TrainingLoad, Sex
+from fitness.utils.timezone import convert_activities_to_user_timezone
 
 
 class DayHrtss(NamedTuple):
@@ -16,9 +17,9 @@ ATL_LOOKBACK = 7
 CTL_LOOKBACK = 42
 
 
-def trimp(run: Run, max_hr: float, resting_hr: float, sex: Sex) -> float:
+def trimp(activity: Run | Ride, max_hr: float, resting_hr: float, sex: Sex) -> float:
     """
-    Calculate the Banister TRaining IMPulse score for a run.
+    Calculate the Banister TRaining IMPulse score for a HR-bearing activity.
 
     TRIMP = Duration (minutes) x HR_Relative x Y
     where HR_Relative is the relative heart rate:
@@ -27,9 +28,11 @@ def trimp(run: Run, max_hr: float, resting_hr: float, sex: Sex) -> float:
         - For men: Y = 0.64 * e^(1.92 x HR_Relative)
         - For women: Y = 0.86 * e^(1.67 x HR_Relative)
     """
-    if run.avg_heart_rate is None:
-        raise ValueError("Run must have an average heart rate to calculate TRIMP.")
-    hr_relative = (run.avg_heart_rate - resting_hr) / (max_hr - resting_hr)
+    if activity.avg_heart_rate is None:
+        raise ValueError(
+            "Activity must have an average heart rate to calculate TRIMP."
+        )
+    hr_relative = (activity.avg_heart_rate - resting_hr) / (max_hr - resting_hr)
     # Clamp hr_relative to the range [0, 1]
     hr_relative = max(0.0, min(1.0, hr_relative))
     match sex:
@@ -37,7 +40,7 @@ def trimp(run: Run, max_hr: float, resting_hr: float, sex: Sex) -> float:
             y = 0.64 * math.exp(1.92 * hr_relative)
         case "F":
             y = 0.86 * math.exp(1.67 * hr_relative)
-    duration_minutes = run.duration / 60
+    duration_minutes = activity.duration / 60
     return duration_minutes * hr_relative * y
 
 
@@ -56,14 +59,16 @@ def threshold_trimp(max_hr: float, resting_hr: float, lthr: float, sex: Sex) -> 
     return 60.0 * hr_relative * y
 
 
-def hrtss(run: Run, max_hr: float, resting_hr: float, lthr: float, sex: Sex) -> float:
-    """Calculate Heart Rate Training Stress Score for a run.
+def hrtss(
+    activity: Run | Ride, max_hr: float, resting_hr: float, lthr: float, sex: Sex
+) -> float:
+    """Calculate Heart Rate Training Stress Score for an activity.
 
     hrTSS = (activity_TRIMP / threshold_TRIMP) * 100
 
-    A 60-minute run at LTHR produces hrTSS ≈ 100.
+    A 60-minute activity at LTHR produces hrTSS ≈ 100.
     """
-    activity_trimp = trimp(run, max_hr, resting_hr, sex)
+    activity_trimp = trimp(activity, max_hr, resting_hr, sex)
     thr_trimp = threshold_trimp(max_hr, resting_hr, lthr, sex)
     if thr_trimp == 0:
         return 0.0
@@ -95,7 +100,7 @@ def _calculate_atl_and_ctl(
 
 
 def training_stress_balance(
-    runs: list[Run],
+    activities: Sequence[Run | Ride],
     max_hr: float,
     resting_hr: float,
     lthr: float,
@@ -111,7 +116,8 @@ def training_stress_balance(
     that 1 hour at LTHR = 100).
 
     Args:
-        runs: List of runs (with UTC dates)
+        activities: List of HR-bearing activities (runs and/or rides) with UTC dates.
+            Activities without an `avg_heart_rate` are skipped.
         max_hr: Maximum heart rate
         resting_hr: Resting heart rate
         lthr: Lactate threshold heart rate
@@ -120,17 +126,14 @@ def training_stress_balance(
         end_date: End date in user's timezone
         user_timezone: User's timezone (e.g., "America/Chicago"). If None, uses UTC dates.
     """
-    # Filter runs to only those with a valid average heart rate.
-    hr_runs = [run for run in runs if run.avg_heart_rate is not None]
-
-    # Convert runs to user timezone if specified
-    user_tz_runs = convert_runs_to_user_timezone(hr_runs, user_timezone)
+    hr_activities = [a for a in activities if a.avg_heart_rate is not None]
+    user_tz_activities = convert_activities_to_user_timezone(
+        hr_activities, user_timezone
+    )
 
     hrtss_by_date: list[tuple[date, float]] = []
 
-    # Handle empty runs case
-    if not user_tz_runs:
-        # Return zero values for each day in the requested range
+    if not user_tz_activities:
         current_date = start_date
         while current_date <= end_date:
             hrtss_by_date.append((current_date, 0.0))
@@ -145,17 +148,17 @@ def training_stress_balance(
             for (d, c, a, t, h) in zip(dates, ctl, atl, tsb, hrtss_values)
         ]
 
-    # Always start calculations from the beginning of running data, because these metrics converge over time.
+    # Always start calculations from the earliest activity, because these metrics converge over time.
     # If we start at the start date, metrics will be inaccurately close to zero.
-    first_run_date = min(localized_run.local_date for localized_run in user_tz_runs)
-    for i in range((end_date - first_run_date).days + 1):
-        current_date = first_run_date + timedelta(days=i)
-        runs_for_day = [
-            localized_run
-            for localized_run in user_tz_runs
-            if localized_run.local_date == current_date
+    first_activity_date = min(a.local_date for a in user_tz_activities)
+    for i in range((end_date - first_activity_date).days + 1):
+        current_date = first_activity_date + timedelta(days=i)
+        activities_for_day = [
+            a for a in user_tz_activities if a.local_date == current_date
         ]
-        day_hrtss_values = [hrtss(run, max_hr, resting_hr, lthr, sex) for run in runs_for_day]
+        day_hrtss_values = [
+            hrtss(a, max_hr, resting_hr, lthr, sex) for a in activities_for_day
+        ]
         hrtss_by_date.append((current_date, sum(day_hrtss_values, start=0.0)))
     atl, ctl = _calculate_atl_and_ctl([h for _, h in hrtss_by_date])
     tsb = [ctl_value - atl_value for ctl_value, atl_value in zip(ctl, atl)]
@@ -169,7 +172,7 @@ def training_stress_balance(
 
 
 def hrtss_by_day(
-    runs: list[Run],
+    activities: Sequence[Run | Ride],
     start: date,
     end: date,
     max_hr: float,
@@ -182,7 +185,8 @@ def hrtss_by_day(
     Calculate hrTSS values for each day in the date range.
 
     Args:
-        runs: List of runs (with UTC dates)
+        activities: List of activities (runs and/or rides) with UTC dates.
+            Activities without `avg_heart_rate` are skipped.
         start: Start date in user's timezone
         end: End date in user's timezone
         max_hr: Maximum heart rate
@@ -191,28 +195,23 @@ def hrtss_by_day(
         sex: Sex ("M" or "F")
         user_timezone: User's timezone (e.g., "America/Chicago"). If None, uses UTC dates.
     """
-    # Filter runs to only those with heart rate data
-    runs_with_hr = [r for r in runs if r.avg_heart_rate is not None]
+    activities_with_hr = [a for a in activities if a.avg_heart_rate is not None]
+    user_tz_activities = convert_activities_to_user_timezone(
+        activities_with_hr, user_timezone
+    )
 
-    # Convert runs to user timezone if specified
-    user_tz_runs = convert_runs_to_user_timezone(runs_with_hr, user_timezone)
+    activities_by_date = defaultdict(list)
+    for a in user_tz_activities:
+        if start <= a.local_date <= end:
+            activities_by_date[a.local_date].append(a)
 
-    # Group runs by local date
-    runs_by_date = defaultdict(list)
-    for localized_run in user_tz_runs:
-        if start <= localized_run.local_date <= end:
-            runs_by_date[localized_run.local_date].append(localized_run)
-
-    # Calculate hrTSS for each day
     day_hrtss_list = []
     current_date = start
     while current_date <= end:
-        day_runs = runs_by_date[current_date]
+        day_activities = activities_by_date[current_date]
         daily_hrtss = 0.0
-
-        for run in day_runs:
-            daily_hrtss += hrtss(run, max_hr, resting_hr, lthr, sex)
-
+        for a in day_activities:
+            daily_hrtss += hrtss(a, max_hr, resting_hr, lthr, sex)
         day_hrtss_list.append(DayHrtss(date=current_date, hrtss=daily_hrtss))
         current_date += timedelta(days=1)
 

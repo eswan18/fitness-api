@@ -25,6 +25,11 @@ class TestAuthenticationEndpoints:
             )
             m.setattr("fitness.app.routers.strava.get_existing_run_ids", lambda: [])
             m.setattr(
+                "fitness.app.routers.strava.load_strava_rides",
+                lambda client, after=None: [],
+            )
+            m.setattr("fitness.app.routers.strava.get_existing_ride_ids", lambda: [])
+            m.setattr(
                 "fitness.app.routers.strava.get_last_sync_time", lambda provider: None
             )
             m.setattr(

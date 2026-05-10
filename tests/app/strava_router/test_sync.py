@@ -5,7 +5,9 @@ from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
 from fitness.models.run import Run
+from fitness.models.ride import Ride
 from tests._factories.strava_activity_with_gear import StravaActivityWithGearFactory
+from tests._factories.strava_ride_activity import StravaRideActivityFactory
 
 
 class TestSyncStravaData:
@@ -13,6 +15,9 @@ class TestSyncStravaData:
 
     @patch("fitness.app.routers.strava.update_last_sync_time")
     @patch("fitness.app.routers.strava.get_last_sync_time")
+    @patch("fitness.app.routers.strava.bulk_create_rides")
+    @patch("fitness.app.routers.strava.get_existing_ride_ids")
+    @patch("fitness.app.routers.strava.load_strava_rides")
     @patch("fitness.app.routers.strava.bulk_create_runs")
     @patch("fitness.app.routers.strava.get_existing_run_ids")
     @patch("fitness.app.routers.strava.load_strava_runs")
@@ -21,6 +26,9 @@ class TestSyncStravaData:
         mock_load_strava_runs: MagicMock,
         mock_get_existing_run_ids: MagicMock,
         mock_bulk_create_runs: MagicMock,
+        mock_load_strava_rides: MagicMock,
+        mock_get_existing_ride_ids: MagicMock,
+        mock_bulk_create_rides: MagicMock,
         mock_get_last_sync_time: MagicMock,
         mock_update_last_sync_time: MagicMock,
         auth_client: TestClient,
@@ -40,6 +48,10 @@ class TestSyncStravaData:
 
         # Mock bulk_create_runs to return the count of inserted runs
         mock_bulk_create_runs.return_value = 2
+
+        # No rides in this test
+        mock_load_strava_rides.return_value = []
+        mock_get_existing_ride_ids.return_value = set()
 
         # Mock sync metadata - no previous sync
         mock_get_last_sync_time.return_value = None
@@ -78,6 +90,9 @@ class TestSyncStravaData:
 
     @patch("fitness.app.routers.strava.update_last_sync_time")
     @patch("fitness.app.routers.strava.get_last_sync_time")
+    @patch("fitness.app.routers.strava.bulk_create_rides")
+    @patch("fitness.app.routers.strava.get_existing_ride_ids")
+    @patch("fitness.app.routers.strava.load_strava_rides")
     @patch("fitness.app.routers.strava.bulk_create_runs")
     @patch("fitness.app.routers.strava.get_existing_run_ids")
     @patch("fitness.app.routers.strava.load_strava_runs")
@@ -86,6 +101,9 @@ class TestSyncStravaData:
         mock_load_strava_runs: MagicMock,
         mock_get_existing_run_ids: MagicMock,
         mock_bulk_create_runs: MagicMock,
+        mock_load_strava_rides: MagicMock,
+        mock_get_existing_ride_ids: MagicMock,
+        mock_bulk_create_rides: MagicMock,
         mock_get_last_sync_time: MagicMock,
         mock_update_last_sync_time: MagicMock,
         auth_client: TestClient,
@@ -100,6 +118,10 @@ class TestSyncStravaData:
 
         # Mock get_existing_run_ids to return both runs as existing
         mock_get_existing_run_ids.return_value = {"strava_100", "strava_200"}
+
+        # No rides in this test
+        mock_load_strava_rides.return_value = []
+        mock_get_existing_ride_ids.return_value = set()
 
         # Mock sync metadata - no previous sync
         mock_get_last_sync_time.return_value = None
@@ -125,6 +147,9 @@ class TestSyncStravaData:
 
     @patch("fitness.app.routers.strava.update_last_sync_time")
     @patch("fitness.app.routers.strava.get_last_sync_time")
+    @patch("fitness.app.routers.strava.bulk_create_rides")
+    @patch("fitness.app.routers.strava.get_existing_ride_ids")
+    @patch("fitness.app.routers.strava.load_strava_rides")
     @patch("fitness.app.routers.strava.bulk_create_runs")
     @patch("fitness.app.routers.strava.get_existing_run_ids")
     @patch("fitness.app.routers.strava.load_strava_runs")
@@ -133,6 +158,9 @@ class TestSyncStravaData:
         mock_load_strava_runs: MagicMock,
         mock_get_existing_run_ids: MagicMock,
         mock_bulk_create_runs: MagicMock,
+        mock_load_strava_rides: MagicMock,
+        mock_get_existing_ride_ids: MagicMock,
+        mock_bulk_create_rides: MagicMock,
         mock_get_last_sync_time: MagicMock,
         mock_update_last_sync_time: MagicMock,
         auth_client: TestClient,
@@ -142,6 +170,8 @@ class TestSyncStravaData:
         mock_get_last_sync_time.return_value = last_sync
         mock_load_strava_runs.return_value = []
         mock_get_existing_run_ids.return_value = set()
+        mock_load_strava_rides.return_value = []
+        mock_get_existing_ride_ids.return_value = set()
 
         response = auth_client.post("/strava/sync")
 
@@ -156,6 +186,9 @@ class TestSyncStravaData:
 
     @patch("fitness.app.routers.strava.update_last_sync_time")
     @patch("fitness.app.routers.strava.get_last_sync_time")
+    @patch("fitness.app.routers.strava.bulk_create_rides")
+    @patch("fitness.app.routers.strava.get_existing_ride_ids")
+    @patch("fitness.app.routers.strava.load_strava_rides")
     @patch("fitness.app.routers.strava.bulk_create_runs")
     @patch("fitness.app.routers.strava.get_existing_run_ids")
     @patch("fitness.app.routers.strava.load_strava_runs")
@@ -164,6 +197,9 @@ class TestSyncStravaData:
         mock_load_strava_runs: MagicMock,
         mock_get_existing_run_ids: MagicMock,
         mock_bulk_create_runs: MagicMock,
+        mock_load_strava_rides: MagicMock,
+        mock_get_existing_ride_ids: MagicMock,
+        mock_bulk_create_rides: MagicMock,
         mock_get_last_sync_time: MagicMock,
         mock_update_last_sync_time: MagicMock,
         auth_client: TestClient,
@@ -173,6 +209,8 @@ class TestSyncStravaData:
         mock_get_last_sync_time.return_value = last_sync
         mock_load_strava_runs.return_value = []
         mock_get_existing_run_ids.return_value = set()
+        mock_load_strava_rides.return_value = []
+        mock_get_existing_ride_ids.return_value = set()
 
         response = auth_client.post("/strava/sync?full_sync=true")
 
@@ -187,3 +225,93 @@ class TestSyncStravaData:
 
         # get_last_sync_time should NOT be called when full_sync=true
         mock_get_last_sync_time.assert_not_called()
+
+    @patch("fitness.app.routers.strava.update_last_sync_time")
+    @patch("fitness.app.routers.strava.get_last_sync_time")
+    @patch("fitness.app.routers.strava.bulk_create_rides")
+    @patch("fitness.app.routers.strava.get_existing_ride_ids")
+    @patch("fitness.app.routers.strava.load_strava_rides")
+    @patch("fitness.app.routers.strava.bulk_create_runs")
+    @patch("fitness.app.routers.strava.get_existing_run_ids")
+    @patch("fitness.app.routers.strava.load_strava_runs")
+    def test_sync_inserts_runs_and_rides_together(
+        self,
+        mock_load_strava_runs: MagicMock,
+        mock_get_existing_run_ids: MagicMock,
+        mock_bulk_create_runs: MagicMock,
+        mock_load_strava_rides: MagicMock,
+        mock_get_existing_ride_ids: MagicMock,
+        mock_bulk_create_rides: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
+        auth_client: TestClient,
+    ):
+        """Sync should ingest runs and rides in the same call."""
+        run_factory = StravaActivityWithGearFactory()
+        ride_factory = StravaRideActivityFactory()
+
+        mock_load_strava_runs.return_value = [run_factory.make({"id": 100})]
+        mock_get_existing_run_ids.return_value = set()
+        mock_bulk_create_runs.return_value = 1
+
+        mock_load_strava_rides.return_value = [
+            ride_factory.make({"id": 500}),
+            ride_factory.make({"id": 600, "type": "VirtualRide", "trainer": True}),
+        ]
+        mock_get_existing_ride_ids.return_value = set()
+        mock_bulk_create_rides.return_value = 2
+
+        mock_get_last_sync_time.return_value = None
+
+        response = auth_client.post("/strava/sync")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["inserted_count"] == 3  # 1 run + 2 rides
+        assert data["inserted_runs"] == 1
+        assert data["inserted_rides"] == 2
+
+        # Both bulk creators were called with the right model types
+        run_arg = mock_bulk_create_runs.call_args[0][0]
+        ride_arg = mock_bulk_create_rides.call_args[0][0]
+        assert all(isinstance(r, Run) for r in run_arg)
+        assert all(isinstance(r, Ride) for r in ride_arg)
+        assert {r.type for r in ride_arg} == {"Outdoor Ride", "Indoor Ride"}
+
+    @patch("fitness.app.routers.strava.update_last_sync_time")
+    @patch("fitness.app.routers.strava.get_last_sync_time")
+    @patch("fitness.app.routers.strava.bulk_create_rides")
+    @patch("fitness.app.routers.strava.get_existing_ride_ids")
+    @patch("fitness.app.routers.strava.load_strava_rides")
+    @patch("fitness.app.routers.strava.bulk_create_runs")
+    @patch("fitness.app.routers.strava.get_existing_run_ids")
+    @patch("fitness.app.routers.strava.load_strava_runs")
+    def test_sync_dedupes_existing_rides(
+        self,
+        mock_load_strava_runs: MagicMock,
+        mock_get_existing_run_ids: MagicMock,
+        mock_bulk_create_runs: MagicMock,
+        mock_load_strava_rides: MagicMock,
+        mock_get_existing_ride_ids: MagicMock,
+        mock_bulk_create_rides: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
+        auth_client: TestClient,
+    ):
+        """Existing ride IDs should be filtered out before bulk insert."""
+        ride_factory = StravaRideActivityFactory()
+        mock_load_strava_runs.return_value = []
+        mock_get_existing_run_ids.return_value = set()
+        mock_load_strava_rides.return_value = [
+            ride_factory.make({"id": 700}),
+            ride_factory.make({"id": 800}),
+        ]
+        mock_get_existing_ride_ids.return_value = {"strava_700"}
+        mock_bulk_create_rides.return_value = 1
+        mock_get_last_sync_time.return_value = None
+
+        response = auth_client.post("/strava/sync")
+
+        assert response.status_code == 200
+        new_rides = mock_bulk_create_rides.call_args[0][0]
+        assert {r.id for r in new_rides} == {"strava_800"}

@@ -13,7 +13,15 @@ class StravaAthlete(BaseModel):
 
 
 StravaActivityType = Literal[
-    "Workout", "Ride", "Walk", "Run", "Indoor Run", "Yoga", "WeightTraining", "Hike"
+    "Workout",
+    "Ride",
+    "VirtualRide",
+    "Walk",
+    "Run",
+    "Indoor Run",
+    "Yoga",
+    "WeightTraining",
+    "Hike",
 ]
 
 
