@@ -261,6 +261,13 @@ def merge_shoes(keep_shoe_id: str, merge_shoe_id: str, merge_shoe_name: str) -> 
                     "UPDATE runs_history SET shoe_id = %s WHERE shoe_id = %s",
                     (keep_shoe_id, merge_shoe_id),
                 )
+                # Cascade existing aliases that pointed at the merged shoe forward
+                # to the kept shoe, so transitive merges (B->A then A->C) don't
+                # leave aliases stranded on a soft-deleted intermediate.
+                cursor.execute(
+                    "UPDATE shoe_aliases SET shoe_id = %s WHERE shoe_id = %s",
+                    (keep_shoe_id, merge_shoe_id),
+                )
                 # Create alias (upsert in case this name was already aliased)
                 cursor.execute(
                     "INSERT INTO shoe_aliases (alias_name, shoe_id) VALUES (%s, %s) "
