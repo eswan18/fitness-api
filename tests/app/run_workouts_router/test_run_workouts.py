@@ -3,8 +3,10 @@
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
 
+from fitness.models.ride import Ride
 from fitness.models.run_workout import RunWorkout
 from fitness.models.run_detail import RunDetail
 
@@ -43,6 +45,24 @@ def _make_workout(
         notes=notes,
         created_at=datetime(2024, 6, 1, 10, 0, 0),
         updated_at=datetime(2024, 6, 1, 10, 0, 0),
+    )
+
+
+def _make_ride(
+    id: str = "ride_1",
+    datetime_utc: datetime | None = None,
+    type_: str = "Indoor Ride",
+    duration: float = 3600.0,
+    avg_heart_rate: float | None = 140.0,
+) -> Ride:
+    return Ride(
+        id=id,
+        datetime_utc=datetime_utc or datetime(2024, 6, 1, 18, 0, 0),
+        type=type_,  # type: ignore[arg-type]
+        distance=0.0,
+        duration=duration,
+        source="Strava",
+        avg_heart_rate=avg_heart_rate,
     )
 
 
@@ -375,6 +395,18 @@ class TestSyncedWorkoutRejection:
 class TestActivityFeed:
     """Test GET /run-activity-feed."""
 
+    @pytest.fixture(autouse=True)
+    def _stub_ride_db(self, monkeypatch):
+        """Default rides to empty for every test in this class.
+
+        Individual tests can patch fitness.db.rides.get_all_rides or
+        get_rides_for_date_range to override.
+        """
+        monkeypatch.setattr("fitness.db.rides.get_all_rides", lambda *a, **kw: [])
+        monkeypatch.setattr(
+            "fitness.db.rides.get_rides_for_date_range", lambda *a, **kw: []
+        )
+
     @patch("fitness.db.runs.get_all_run_details")
     def test_solo_runs_only(
         self,
@@ -556,3 +588,79 @@ class TestActivityFeed:
         assert ids == {"run_just_before_midnight_chicago"}, (
             f"Expected only the pre-midnight Chicago run, got {ids}"
         )
+
+    @patch("fitness.db.runs.get_all_run_details", return_value=[])
+    def test_ride_appears_as_ride_variant(
+        self,
+        _mock_get_details: MagicMock,
+        viewer_client: TestClient,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(
+            "fitness.db.rides.get_all_rides",
+            lambda *a, **kw: [
+                _make_ride(
+                    "strava_ride_1",
+                    datetime(2024, 6, 1, 18, 0, 0),
+                    type_="Indoor Ride",
+                )
+            ],
+        )
+
+        response = viewer_client.get("/run-activity-feed")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["type"] == "ride"
+        assert data[0]["item"]["id"] == "strava_ride_1"
+        assert data[0]["item"]["type"] == "Indoor Ride"
+
+    @patch("fitness.db.runs.get_all_run_details")
+    def test_ride_and_run_interleave_by_datetime_desc(
+        self,
+        mock_get_details: MagicMock,
+        viewer_client: TestClient,
+        monkeypatch,
+    ):
+        # Run at 08:00, ride at 18:00, both on the same day.
+        mock_get_details.return_value = [
+            _make_run_detail("run_morning", datetime(2024, 6, 1, 8, 0, 0)),
+        ]
+        monkeypatch.setattr(
+            "fitness.db.rides.get_all_rides",
+            lambda *a, **kw: [
+                _make_ride("ride_evening", datetime(2024, 6, 1, 18, 0, 0)),
+            ],
+        )
+
+        response = viewer_client.get("/run-activity-feed?sort_order=desc")
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["item"]["id"] for item in data] == [
+            "ride_evening",
+            "run_morning",
+        ]
+
+    @patch("fitness.db.runs.get_all_run_details", return_value=[])
+    def test_ride_without_hr_still_returned(
+        self,
+        _mock_get_details: MagicMock,
+        viewer_client: TestClient,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(
+            "fitness.db.rides.get_all_rides",
+            lambda *a, **kw: [
+                _make_ride(
+                    "ride_no_hr",
+                    datetime(2024, 6, 1, 18, 0, 0),
+                    avg_heart_rate=None,
+                ),
+            ],
+        )
+
+        response = viewer_client.get("/run-activity-feed")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["item"]["avg_heart_rate"] is None

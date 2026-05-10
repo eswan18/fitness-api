@@ -19,6 +19,7 @@ from fitness.models import Run
 from fitness.models.run import LocalizedRun
 from fitness.models.run_detail import RunDetail
 from fitness.app.routers.run_workouts import (
+    ActivityFeedRideItem,
     ActivityFeedRunItem,
     ActivityFeedWorkoutItem,
 )
@@ -237,22 +238,24 @@ def read_activity_feed(
     sort_order: Literal["asc", "desc"] = "desc",
     user_timezone: str | None = None,
     _user: User = Depends(require_viewer),
-) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem]:
-    """Get a unified activity feed of solo runs and run workouts.
+) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem | ActivityFeedRideItem]:
+    """Get a unified cardio activity feed of solo runs, run workouts, and rides.
 
     Runs that belong to a workout appear nested inside their workout entry
-    rather than as separate items. Sorted by date.
+    rather than as separate items. Rides are always solo items. Sorted by date.
 
     When `user_timezone` is provided, `start`/`end` are interpreted as dates
-    in that timezone and the feed is filtered by each run's local date.
+    in that timezone and the feed is filtered by each activity's local date.
     """
     from fitness.db.runs import get_run_details_in_date_range, get_all_run_details
+    from fitness.db.rides import get_rides_for_date_range, get_all_rides
     from fitness.app.routers.run_workouts import build_activity_feed
 
     if start != DEFAULT_START or end != DEFAULT_END:
         all_runs = get_run_details_in_date_range(
             start, end, user_timezone=user_timezone
         )
+        rides = get_rides_for_date_range(start, end, user_timezone=user_timezone)
         if user_timezone is not None:
             tz = ZoneInfo(user_timezone)
             all_runs = [
@@ -262,10 +265,18 @@ def read_activity_feed(
                 <= r.datetime_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
                 <= end
             ]
+            rides = [
+                r
+                for r in rides
+                if start
+                <= r.datetime_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
+                <= end
+            ]
     else:
         all_runs = get_all_run_details()
+        rides = get_all_rides()
 
-    return build_activity_feed(all_runs, sort_order=sort_order)
+    return build_activity_feed(all_runs, rides=rides, sort_order=sort_order)
 
 
 def sort_runs_generic(
