@@ -26,6 +26,7 @@ def test_run_from_strava(
     assert run.distance == pytest.approx(5)
     assert run.duration == 1800
     assert run.avg_heart_rate == 150.0
+    assert activity.gear is not None
     assert run.shoe_name == activity.gear.nickname
     assert run.source == "Strava"
     assert run.id.startswith("strava_")  # Should be deterministic Strava ID

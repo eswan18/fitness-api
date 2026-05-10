@@ -76,6 +76,10 @@ class StravaActivity(BaseModel):
     upload_id_str: str | None = None
     average_watts: float | None = None
 
+    def without_gear(self) -> StravaActivityWithGear:
+        """Return a StravaActivityWithGear with no gear (gear=None)."""
+        return StravaActivityWithGear(**self.model_dump())
+
     def with_gear(self, gear: StravaGear) -> StravaActivityWithGear:
         """Return a new StravaActivityWithGear with the given gear."""
         return StravaActivityWithGear(
@@ -166,12 +170,14 @@ class StravaToken(BaseModel):
 
 
 class StravaActivityWithGear(StravaActivity):
-    """A merged Strava activity and gear."""
+    """A Strava activity with optional gear metadata."""
 
-    gear: StravaGear
+    gear: StravaGear | None = None
 
     def shoes(self) -> str | None:
         """Get the shoes used for this activity."""
+        if self.gear is None:
+            return None
         return normalize_shoe_name(self.gear.nickname)
 
     def distance_miles(self) -> float:
