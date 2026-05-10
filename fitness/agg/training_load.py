@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 import math
 from collections import defaultdict
+from collections.abc import Sequence
 from typing import NamedTuple
 
 from fitness.models import Run, Ride, DayTrainingLoad, TrainingLoad, Sex
@@ -99,7 +100,7 @@ def _calculate_atl_and_ctl(
 
 
 def training_stress_balance(
-    activities: list[Run | Ride],
+    activities: Sequence[Run | Ride],
     max_hr: float,
     resting_hr: float,
     lthr: float,
@@ -171,7 +172,7 @@ def training_stress_balance(
 
 
 def hrtss_by_day(
-    activities: list[Run | Ride],
+    activities: Sequence[Run | Ride],
     start: date,
     end: date,
     max_hr: float,

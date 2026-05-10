@@ -1,5 +1,6 @@
 """Timezone utility functions for converting between UTC and user timezones."""
 
+from collections.abc import Sequence
 from datetime import date
 
 from fitness.models import Run, LocalizedRun, Ride, LocalizedRide
@@ -64,7 +65,7 @@ def convert_rides_to_user_timezone(
 
 
 def convert_activities_to_user_timezone(
-    activities: list[Run | Ride], user_timezone: str | None = None
+    activities: Sequence[Run | Ride], user_timezone: str | None = None
 ) -> list[LocalizedRun | LocalizedRide]:
     """
     Convert a mixed list of runs and rides to the user's local timezone.
