@@ -109,6 +109,69 @@ def bulk_create_rides(rides: list[Ride], chunk_size: int = 20) -> int:
     return total_inserted
 
 
+def get_ride_by_id(ride_id: str, include_deleted: bool = False) -> Ride | None:
+    """Get a single ride by its ID."""
+    with get_db_cursor() as cursor:
+        deleted_filter = (
+            sql.SQL("") if include_deleted else sql.SQL(" AND deleted_at IS NULL")
+        )
+        query = sql.SQL("""
+            SELECT id, datetime_utc, type, distance, duration, source, avg_heart_rate, deleted_at
+            FROM rides
+            WHERE id = %s{deleted_filter}
+        """).format(deleted_filter=deleted_filter)
+        cursor.execute(query, (ride_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return _row_to_ride(row)
+
+
+_UPDATABLE_RIDE_FIELDS: tuple[str, ...] = (
+    "datetime_utc",
+    "type",
+    "distance",
+    "duration",
+    "avg_heart_rate",
+)
+
+
+def update_ride(ride_id: str, updates: dict) -> Ride:
+    """Apply field-level updates to a ride and return the updated row.
+
+    Raises ValueError if the ride is not found or no valid fields are provided.
+    Only fields in `_UPDATABLE_RIDE_FIELDS` are honored.
+    """
+    if not updates:
+        raise ValueError("No updates provided")
+
+    set_fields = [f for f in _UPDATABLE_RIDE_FIELDS if f in updates]
+    if not set_fields:
+        raise ValueError("No updatable fields provided")
+
+    set_assignments = sql.SQL(", ").join(
+        sql.SQL("{} = {}").format(sql.Identifier(f), sql.Placeholder())
+        for f in set_fields
+    )
+    query = sql.SQL(
+        "UPDATE rides SET {set_assignments}, updated_at = CURRENT_TIMESTAMP "
+        "WHERE id = {id} AND deleted_at IS NULL"
+    ).format(set_assignments=set_assignments, id=sql.Placeholder())
+    params = [updates[f] for f in set_fields] + [ride_id]
+
+    with get_db_connection() as conn:
+        with conn.transaction():
+            with conn.cursor() as cursor:
+                cursor.execute(query, params)
+                if cursor.rowcount == 0:
+                    raise ValueError(f"Ride {ride_id} not found")
+
+    updated = get_ride_by_id(ride_id)
+    if updated is None:  # Should be unreachable given rowcount check above.
+        raise ValueError(f"Ride {ride_id} not found after update")
+    return updated
+
+
 def get_existing_ride_ids() -> set[str]:
     """Get all existing (non-deleted) ride IDs from the database."""
     with get_db_cursor() as cursor:

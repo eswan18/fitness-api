@@ -27,6 +27,7 @@ from .constants import DEFAULT_START, DEFAULT_END
 from .routers import (
     metrics_router,
     shoe_router,
+    ride_router,
     run_router,
     sync_router,
     oauth_router,
@@ -120,6 +121,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(metrics_router)
 app.include_router(shoe_router)
 app.include_router(run_router)
+app.include_router(ride_router)
 app.include_router(sync_router)
 app.include_router(oauth_router)
 app.include_router(strava_router)
