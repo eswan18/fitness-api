@@ -106,9 +106,63 @@ def test_strava_load(make_sample_strava_activity, make_sample_strava_gear, monke
     gear2.id = "2"
     gear2.nickname = "Nike Shoes"
     mock_client.get_gear.return_value = [gear1, gear2]
-    runs = load_strava_runs(mock_client)
-    assert len(runs) == 2
-    assert runs[0].gear.nickname == "Brooks Shoes"
-    assert runs[1].gear.nickname == "Nike Shoes"
+    result = load_strava_runs(mock_client)
+    assert len(result.runs) == 2
+    assert result.runs[0].gear.nickname == "Brooks Shoes"
+    assert result.runs[1].gear.nickname == "Nike Shoes"
+    assert result.skipped == []
 
     mock_client.get_gear.assert_called_once_with({"1", "2"})
+
+
+def test_skips_runs_without_gear_id(make_sample_strava_activity, make_sample_strava_gear):
+    """Runs with no gear_id are excluded and reported as 'no_gear_assigned'."""
+    mock_client = MagicMock()
+    shod = make_sample_strava_activity()
+    shod.type = "Run"
+    shod.gear_id = "1"
+    shod.name = "Morning run"
+    barefoot = make_sample_strava_activity()
+    barefoot.type = "Run"
+    barefoot.gear_id = None
+    barefoot.name = "Treadmill, forgot to set shoes"
+    mock_client.get_activities.return_value = [shod, barefoot]
+
+    gear1 = make_sample_strava_gear()
+    gear1.id = "1"
+    mock_client.get_gear.return_value = [gear1]
+
+    result = load_strava_runs(mock_client)
+
+    assert [r.gear.id for r in result.runs] == ["1"]
+    assert len(result.skipped) == 1
+    skipped = result.skipped[0]
+    assert skipped.id == str(barefoot.id)
+    assert skipped.name == "Treadmill, forgot to set shoes"
+    assert skipped.reason == "no_gear_assigned"
+
+
+def test_skips_runs_when_gear_fetch_misses(make_sample_strava_activity, make_sample_strava_gear):
+    """Runs whose gear_id isn't returned by the gear fetch are reported as 'gear_fetch_failed'."""
+    mock_client = MagicMock()
+    shod = make_sample_strava_activity()
+    shod.type = "Run"
+    shod.gear_id = "1"
+    orphan = make_sample_strava_activity()
+    orphan.type = "Run"
+    orphan.gear_id = "deleted-gear"
+    orphan.name = "Run with deleted gear"
+    mock_client.get_activities.return_value = [shod, orphan]
+
+    gear1 = make_sample_strava_gear()
+    gear1.id = "1"
+    # Note: only gear "1" is returned; "deleted-gear" is missing from the response.
+    mock_client.get_gear.return_value = [gear1]
+
+    result = load_strava_runs(mock_client)
+
+    assert [r.gear.id for r in result.runs] == ["1"]
+    assert len(result.skipped) == 1
+    skipped = result.skipped[0]
+    assert skipped.id == str(orphan.id)
+    assert skipped.reason == "gear_fetch_failed"

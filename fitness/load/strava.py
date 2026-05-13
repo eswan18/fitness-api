@@ -1,11 +1,27 @@
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
 from fitness.integrations.strava.client import StravaClient
 from fitness.integrations.strava.models import StravaActivity, StravaActivityWithGear
+from fitness.models.responses import SkippedRun
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class StravaRunLoadResult:
+    """Output of `load_strava_runs`: imported runs and per-run skip reasons.
+
+    A Strava run is only imported when it has usable gear (shoes) attached.
+    Runs missing gear are surfaced via `skipped` so the caller can return
+    them to the user for follow-up (assign shoes in Strava and re-sync with
+    `full_sync=true`, since incremental sync filters by activity start time).
+    """
+
+    runs: list[StravaActivityWithGear]
+    skipped: list[SkippedRun] = field(default_factory=list)
 
 
 def load_strava_rides(
@@ -48,15 +64,16 @@ def load_strava_rides(
 
 def load_strava_runs(
     client: StravaClient, after: Optional[datetime] = None
-) -> list[StravaActivityWithGear]:
+) -> StravaRunLoadResult:
     """Fetch runs from Strava along with the gear used in them.
+
+    Runs without usable gear are excluded from the imported list and reported
+    via `StravaRunLoadResult.skipped` so the caller can show them to the user.
+    See `StravaRunLoadResult` for re-import semantics.
 
     Args:
         client: The Strava API client.
         after: Only fetch activities after this datetime (for incremental sync).
-
-    Returns:
-        List of Strava activities with gear information.
     """
     if after:
         logger.info(
@@ -98,16 +115,41 @@ def load_strava_runs(
             gear = []
 
         gear_by_id = {g.id: g for g in gear}
-        runs_w_gear = [
-            run.with_gear(gear=gear_by_id[run.gear_id])
-            for run in runs
-            if run.gear_id is not None and run.gear_id in gear_by_id
-        ]
+
+        runs_w_gear: list[StravaActivityWithGear] = []
+        skipped: list[SkippedRun] = []
+        for run in runs:
+            if run.gear_id is None:
+                # User-actionable: assign shoes in Strava and re-sync.
+                logger.info(
+                    f"Skipping Strava run {run.id} ({run.name!r}): no gear assigned"
+                )
+                skipped.append(
+                    SkippedRun(
+                        id=str(run.id), name=run.name, reason="no_gear_assigned"
+                    )
+                )
+                continue
+            if run.gear_id not in gear_by_id:
+                # Strava-side anomaly: gear referenced but the gear fetch
+                # didn't return it (deleted, permission change, partial response).
+                logger.warning(
+                    f"Skipping Strava run {run.id} ({run.name!r}): "
+                    f"gear_id={run.gear_id} not returned by gear fetch"
+                )
+                skipped.append(
+                    SkippedRun(
+                        id=str(run.id), name=run.name, reason="gear_fetch_failed"
+                    )
+                )
+                continue
+            runs_w_gear.append(run.with_gear(gear=gear_by_id[run.gear_id]))
 
         logger.info(
-            f"Successfully loaded {len(runs_w_gear)} Strava runs with gear information"
+            f"Successfully loaded {len(runs_w_gear)} Strava runs with gear "
+            f"information ({len(skipped)} skipped for missing gear)"
         )
-        return runs_w_gear
+        return StravaRunLoadResult(runs=runs_w_gear, skipped=skipped)
 
     except Exception as e:
         logger.error(
