@@ -49,6 +49,11 @@ spec:
                 secretKeyRef:
                   name: fitness-api-prod-secrets
                   key: HEVY_API_KEY
+            - name: OAUTH_STATE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fitness-api-prod-secrets
+                  key: OAUTH_STATE_SECRET
       volumes:
         - name: secrets-store
           csi:
