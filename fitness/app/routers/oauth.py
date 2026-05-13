@@ -13,6 +13,7 @@ from fitness.db.oauth_credentials import (
 )
 from fitness.models.user import User
 from fitness.app.auth import require_viewer, require_editor
+from fitness.app.oauth_state import InvalidOAuthState, issue_state, verify_state
 from fitness.integrations import strava
 from fitness.integrations import google
 
@@ -49,7 +50,8 @@ def strava_oauth_authorize(user: User = Depends(require_editor)) -> RedirectResp
     Requires editor role as this connects an external data source.
     """
     url = strava.build_oauth_authorize_url(
-        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/strava/callback"
+        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/strava/callback",
+        state=issue_state("strava"),
     )
     return RedirectResponse(url)
 
@@ -64,7 +66,8 @@ def strava_oauth_authorize_url(
     Requires editor role as this connects an external data source.
     """
     url = strava.build_oauth_authorize_url(
-        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/strava/callback"
+        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/strava/callback",
+        state=issue_state("strava"),
     )
     return OAuthAuthorizeUrl(url=url)
 
@@ -79,6 +82,11 @@ async def strava_oauth_callback(
             status_code=400,
             detail="No code provided",
         )
+    try:
+        verify_state(state, "strava")
+    except InvalidOAuthState as e:
+        logger.warning(f"Strava OAuth callback rejected: {e}")
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
     token = await strava.exchange_code_for_token(code)
     # Store the token in the db.
     upsert_credentials(
@@ -114,7 +122,8 @@ def google_oauth_authorize(user: User = Depends(require_editor)) -> RedirectResp
     Requires editor role as this connects an external data source.
     """
     url = google.auth.build_oauth_authorize_url(
-        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/google/callback"
+        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/google/callback",
+        state=issue_state("google"),
     )
     return RedirectResponse(url)
 
@@ -129,7 +138,8 @@ def google_oauth_authorize_url(
     Requires editor role as this connects an external data source.
     """
     url = google.auth.build_oauth_authorize_url(
-        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/google/callback"
+        redirect_uri=f"{PUBLIC_API_BASE_URL}/oauth/google/callback",
+        state=issue_state("google"),
     )
     return OAuthAuthorizeUrl(url=url)
 
@@ -151,6 +161,12 @@ async def google_oauth_callback(
             status_code=400,
             detail="No code provided",
         )
+
+    try:
+        verify_state(state, "google")
+    except InvalidOAuthState as e:
+        logger.warning(f"Google OAuth callback rejected: {e}")
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
 
     token = await google.auth.exchange_code_for_token(code)
 

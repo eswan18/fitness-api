@@ -98,6 +98,7 @@ See `.env.dev.example` for a template. 🔑 = secret, do not commit.
 | `PUBLIC_API_BASE_URL` | Public URL of this API (used in OAuth redirects) |
 | `PUBLIC_DASHBOARD_BASE_URL` | Public URL of the frontend dashboard |
 | `TRMNL_API_KEY` 🔑 | API key for TRMNL device authentication |
+| `OAUTH_STATE_SECRET` 🔑 | Secret for signing OAuth `state` CSRF tokens |
 
 ### Strava integration
 

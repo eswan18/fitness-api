@@ -21,6 +21,7 @@ REQUIRED_ENV_VARS = [
     "JWT_ISSUER",
     "JWT_AUDIENCE",
     "TRMNL_API_KEY",
+    "OAUTH_STATE_SECRET",
 ]
 
 
