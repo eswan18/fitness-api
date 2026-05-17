@@ -81,9 +81,9 @@ def get_runs_for_date_range(
     in Python after timezone conversion.
     """
     if user_timezone is not None:
-        return get_runs_in_date_range(
-            start - timedelta(days=1), end + timedelta(days=1)
-        )
+        widened_start = start - timedelta(days=1) if start > date.min else start
+        widened_end = end + timedelta(days=1) if end < date.max else end
+        return get_runs_in_date_range(widened_start, widened_end)
     return get_runs_in_date_range(start, end)
 
 
@@ -239,8 +239,10 @@ def get_run_details_in_date_range(
     local-date filtering in Python after this returns.
     """
     if user_timezone is not None:
-        start_date = start_date - timedelta(days=1)
-        end_date = end_date + timedelta(days=1)
+        if start_date > date.min:
+            start_date = start_date - timedelta(days=1)
+        if end_date < date.max:
+            end_date = end_date + timedelta(days=1)
     with get_db_cursor() as cursor:
         conditions: list[sql.Composable] = [
             sql.SQL("DATE(r.datetime_utc) BETWEEN %s AND %s")

@@ -91,6 +91,24 @@ def test_mileage_total_no_buffer_without_timezone(
     mock.assert_called_once_with(date(2025, 6, 1), date(2025, 6, 30), None)
 
 
+def test_mileage_total_no_upper_bound_when_end_omitted(
+    monkeypatch, viewer_client: TestClient
+):
+    """When `end` is omitted, the upper bound must be date.max — not a value
+    frozen at module-import time. Otherwise runs newer than the pod's start
+    date are silently filtered out of "all time" totals (the bug fixed here).
+    """
+    mock = MagicMock(return_value=[])
+    monkeypatch.setattr("fitness.app.routers.metrics.get_runs_for_date_range", mock)
+
+    viewer_client.get(
+        "/metrics/mileage/total",
+        params={"user_timezone": "America/Chicago"},
+    )
+
+    mock.assert_called_once_with(date(2016, 1, 1), date.max, "America/Chicago")
+
+
 def test_rolling_mileage_includes_lookback_window(
     monkeypatch, viewer_client: TestClient
 ):
