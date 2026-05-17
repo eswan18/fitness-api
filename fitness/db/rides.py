@@ -105,9 +105,9 @@ def get_rides_for_date_range(
     exact filtering in Python after timezone conversion.
     """
     if user_timezone is not None:
-        return get_rides_in_date_range(
-            start - timedelta(days=1), end + timedelta(days=1)
-        )
+        widened_start = start - timedelta(days=1) if start > date.min else start
+        widened_end = end + timedelta(days=1) if end < date.max else end
+        return get_rides_in_date_range(widened_start, widened_end)
     return get_rides_in_date_range(start, end)
 
 
@@ -168,8 +168,10 @@ def get_ride_details_in_date_range(
     must do exact local-date filtering after this returns.
     """
     if user_timezone is not None:
-        start_date = start_date - timedelta(days=1)
-        end_date = end_date + timedelta(days=1)
+        if start_date > date.min:
+            start_date = start_date - timedelta(days=1)
+        if end_date < date.max:
+            end_date = end_date + timedelta(days=1)
 
     conditions: list[sql.Composable] = [
         sql.SQL("DATE(r.datetime_utc) BETWEEN %s AND %s")
