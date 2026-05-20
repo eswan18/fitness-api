@@ -99,14 +99,11 @@ def load_strava_runs(
 
         gear_by_id = {g.id: g for g in gear}
         runs_w_gear = [
-            run.with_gear(gear=gear_by_id[run.gear_id])
+            run.with_gear(gear=gear_by_id.get(run.gear_id) if run.gear_id else None)
             for run in runs
-            if run.gear_id is not None and run.gear_id in gear_by_id
         ]
 
-        logger.info(
-            f"Successfully loaded {len(runs_w_gear)} Strava runs with gear information"
-        )
+        logger.info(f"Successfully loaded {len(runs_w_gear)} Strava runs")
         return runs_w_gear
 
     except Exception as e:
