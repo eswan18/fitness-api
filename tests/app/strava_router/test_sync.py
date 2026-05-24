@@ -4,10 +4,17 @@ from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
+from fitness.load.strava import StravaRunLoadResult
+from fitness.models.responses import SkippedRun
 from fitness.models.run import Run
 from fitness.models.ride import Ride
 from tests._factories.strava_activity_with_gear import StravaActivityWithGearFactory
 from tests._factories.strava_ride_activity import StravaRideActivityFactory
+
+
+def _runs(*activities) -> StravaRunLoadResult:
+    """Shorthand to wrap a list of StravaActivityWithGear in a load result."""
+    return StravaRunLoadResult(runs=list(activities), skipped=[])
 
 
 class TestSyncStravaData:
@@ -41,7 +48,9 @@ class TestSyncStravaData:
         strava_run_3 = factory.make({"id": 300, "name": "Weekend Run"})
 
         # Mock load_strava_runs to return these 3 activities
-        mock_load_strava_runs.return_value = [strava_run_1, strava_run_2, strava_run_3]
+        mock_load_strava_runs.return_value = _runs(
+            strava_run_1, strava_run_2, strava_run_3
+        )
 
         # Mock get_existing_run_ids to return one existing run (strava_200)
         mock_get_existing_run_ids.return_value = {"strava_200"}
@@ -114,7 +123,7 @@ class TestSyncStravaData:
         strava_run_2 = factory.make({"id": 200, "name": "Evening Run"})
 
         # Mock load_strava_runs to return 2 activities
-        mock_load_strava_runs.return_value = [strava_run_1, strava_run_2]
+        mock_load_strava_runs.return_value = _runs(strava_run_1, strava_run_2)
 
         # Mock get_existing_run_ids to return both runs as existing
         mock_get_existing_run_ids.return_value = {"strava_100", "strava_200"}
@@ -168,7 +177,7 @@ class TestSyncStravaData:
         """Test that incremental sync passes the last sync time to load_strava_runs."""
         last_sync = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
         mock_get_last_sync_time.return_value = last_sync
-        mock_load_strava_runs.return_value = []
+        mock_load_strava_runs.return_value = _runs()
         mock_get_existing_run_ids.return_value = set()
         mock_load_strava_rides.return_value = []
         mock_get_existing_ride_ids.return_value = set()
@@ -207,7 +216,7 @@ class TestSyncStravaData:
         """Test that full_sync=true ignores the last sync time."""
         last_sync = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
         mock_get_last_sync_time.return_value = last_sync
-        mock_load_strava_runs.return_value = []
+        mock_load_strava_runs.return_value = _runs()
         mock_get_existing_run_ids.return_value = set()
         mock_load_strava_rides.return_value = []
         mock_get_existing_ride_ids.return_value = set()
@@ -250,7 +259,7 @@ class TestSyncStravaData:
         run_factory = StravaActivityWithGearFactory()
         ride_factory = StravaRideActivityFactory()
 
-        mock_load_strava_runs.return_value = [run_factory.make({"id": 100})]
+        mock_load_strava_runs.return_value = _runs(run_factory.make({"id": 100}))
         mock_get_existing_run_ids.return_value = set()
         mock_bulk_create_runs.return_value = 1
 
@@ -300,7 +309,7 @@ class TestSyncStravaData:
     ):
         """Existing ride IDs should be filtered out before bulk insert."""
         ride_factory = StravaRideActivityFactory()
-        mock_load_strava_runs.return_value = []
+        mock_load_strava_runs.return_value = _runs()
         mock_get_existing_run_ids.return_value = set()
         mock_load_strava_rides.return_value = [
             ride_factory.make({"id": 700}),
@@ -315,3 +324,49 @@ class TestSyncStravaData:
         assert response.status_code == 200
         new_rides = mock_bulk_create_rides.call_args[0][0]
         assert {r.id for r in new_rides} == {"strava_800"}
+
+    @patch("fitness.app.routers.strava.update_last_sync_time")
+    @patch("fitness.app.routers.strava.get_last_sync_time")
+    @patch("fitness.app.routers.strava.bulk_create_rides")
+    @patch("fitness.app.routers.strava.get_existing_ride_ids")
+    @patch("fitness.app.routers.strava.load_strava_rides")
+    @patch("fitness.app.routers.strava.bulk_create_runs")
+    @patch("fitness.app.routers.strava.get_existing_run_ids")
+    @patch("fitness.app.routers.strava.load_strava_runs")
+    def test_sync_surfaces_skipped_runs_in_response(
+        self,
+        mock_load_strava_runs: MagicMock,
+        mock_get_existing_run_ids: MagicMock,
+        mock_bulk_create_runs: MagicMock,
+        mock_load_strava_rides: MagicMock,
+        mock_get_existing_ride_ids: MagicMock,
+        mock_bulk_create_rides: MagicMock,
+        mock_get_last_sync_time: MagicMock,
+        mock_update_last_sync_time: MagicMock,
+        auth_client: TestClient,
+    ):
+        """Runs the loader couldn't import (missing shoes) must reach the API response."""
+        run_factory = StravaActivityWithGearFactory()
+        mock_load_strava_runs.return_value = StravaRunLoadResult(
+            runs=[run_factory.make({"id": 100})],
+            skipped=[
+                SkippedRun(id="999", name="Treadmill, no shoes", reason="no_gear_assigned"),
+                SkippedRun(id="1001", name="Run with deleted gear", reason="gear_fetch_failed"),
+            ],
+        )
+        mock_get_existing_run_ids.return_value = set()
+        mock_bulk_create_runs.return_value = 1
+        mock_load_strava_rides.return_value = []
+        mock_get_existing_ride_ids.return_value = set()
+        mock_get_last_sync_time.return_value = None
+
+        response = auth_client.post("/strava/sync")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["inserted_runs"] == 1
+        assert len(data["skipped_runs"]) == 2
+        skipped_by_id = {s["id"]: s for s in data["skipped_runs"]}
+        assert skipped_by_id["999"]["reason"] == "no_gear_assigned"
+        assert skipped_by_id["1001"]["reason"] == "gear_fetch_failed"
+        assert "2 runs skipped" in data["message"]
