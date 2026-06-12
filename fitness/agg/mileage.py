@@ -1,11 +1,27 @@
 from collections import deque
 from datetime import timedelta, date
+from typing import Literal
 
 from fitness.models import Run
 from fitness.utils.timezone import (
     filter_runs_by_local_date_range,
     convert_runs_to_user_timezone,
 )
+
+WeekStart = Literal["monday", "sunday"]
+
+
+def week_anchor(day: date, week_start: WeekStart = "monday") -> date:
+    """
+    Return the first day of the week containing `day`.
+
+    Args:
+        day: Any date.
+        week_start: Which day weeks begin on ("monday" or "sunday").
+    """
+    # Python's weekday() is 0 for Monday; shift by one for Sunday-start weeks.
+    offset = 0 if week_start == "monday" else 1
+    return day - timedelta(days=(day.weekday() + offset) % 7)
 
 
 def total_mileage(
@@ -55,6 +71,49 @@ def miles_by_day(
         user_timezone: User's timezone (e.g., "America/Chicago"). If None, uses UTC dates.
     """
     return rolling_sum(runs, start, end, window=1, user_timezone=user_timezone)
+
+
+def miles_by_week(
+    runs: list[Run],
+    start: date,
+    end: date,
+    week_start: WeekStart = "monday",
+    user_timezone: str | None = None,
+) -> list[tuple[date, float]]:
+    """
+    Calculate the total mileage for each week in the range [start, end].
+
+    Returns one (week_start_date, mileage) tuple for every week that overlaps
+    [start, end], zero-filled for weeks with no runs. Runs are bucketed by
+    which week contains them, so a run before `start` (or after `end`) still
+    counts toward the first (or last) week's total if it falls inside that
+    week — callers should fetch runs for the full week-aligned range.
+
+    Args:
+        runs: List of runs (with UTC dates)
+        start: Start date in user's timezone
+        end: End date in user's timezone
+        week_start: Which day weeks begin on ("monday" or "sunday").
+        user_timezone: User's timezone (e.g., "America/Chicago"). If None, uses UTC dates.
+    """
+    user_tz_runs = convert_runs_to_user_timezone(runs, user_timezone)
+
+    first_week = week_anchor(start, week_start)
+    last_week = week_anchor(end, week_start)
+
+    miles_per_week: dict[date, float] = {}
+    week = first_week
+    while week <= last_week:
+        miles_per_week[week] = 0.0
+        week += timedelta(days=7)
+
+    for localized_run in user_tz_runs:
+        anchor = week_anchor(localized_run.local_date, week_start)
+        if anchor in miles_per_week:
+            miles_per_week[anchor] += localized_run.distance
+
+    # Round to dodge floating-point accumulation errors, as in rolling_sum.
+    return [(week, round(miles, 4)) for week, miles in sorted(miles_per_week.items())]
 
 
 def rolling_sum(

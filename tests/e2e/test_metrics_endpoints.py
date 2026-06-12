@@ -84,6 +84,36 @@ def test_mileage_metrics(viewer_client):
     assert isinstance(rolling_mileage, list)
     assert len(rolling_mileage) > 0
 
+    # Test mileage by week. 2024-07-01 is a Monday, so all three runs
+    # (July 1-3) fall in a single Monday-start week.
+    res = viewer_client.get(
+        "/metrics/mileage/by-week", params={"start": "2024-07-01", "end": "2024-07-03"}
+    )
+    assert res.status_code == 200
+    weekly_mileage = res.json()
+    assert isinstance(weekly_mileage, list)
+    assert len(weekly_mileage) == 1
+    assert weekly_mileage[0]["week_start"] == "2024-07-01"
+    assert weekly_mileage[0]["mileage"] >= 10.0  # Our test runs total 10 miles
+
+    # A range spanning two weeks returns zero-filled entries for both.
+    res = viewer_client.get(
+        "/metrics/mileage/by-week", params={"start": "2024-07-01", "end": "2024-07-08"}
+    )
+    assert res.status_code == 200
+    weekly_mileage = res.json()
+    week_starts = [entry["week_start"] for entry in weekly_mileage]
+    assert week_starts == ["2024-07-01", "2024-07-08"]
+
+    # Sunday-start weeks split the same runs at the Sunday boundary.
+    res = viewer_client.get(
+        "/metrics/mileage/by-week",
+        params={"start": "2024-07-01", "end": "2024-07-03", "week_start": "sunday"},
+    )
+    assert res.status_code == 200
+    weekly_mileage = res.json()
+    assert weekly_mileage[0]["week_start"] == "2024-06-30"
+
 
 @pytest.mark.e2e
 def test_seconds_metrics(viewer_client):

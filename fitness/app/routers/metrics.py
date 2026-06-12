@@ -5,11 +5,14 @@ from fastapi import APIRouter, Depends
 from fitness.agg import (
     mileage_by_shoes,
     miles_by_day,
+    miles_by_week,
     total_mileage,
     rolling_sum,
     total_seconds,
     training_stress_balance,
+    week_anchor,
 )
+from fitness.agg.mileage import WeekStart
 from fitness.db.runs import get_runs_for_date_range, get_all_runs
 from fitness.db.rides import get_rides_for_date_range, get_all_rides
 from fitness.db.shoes import get_shoes
@@ -19,6 +22,7 @@ from fitness.app.auth import require_viewer
 from fitness.models import Sex, DayTrainingLoad, ShoeMileage, User
 from fitness.app.models import (
     DayMileage,
+    WeekMileage,
 )
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
@@ -75,6 +79,41 @@ def read_mileage_by_day(
     tuples: list[tuple[date, float]] = miles_by_day(runs, start, end, user_timezone)
     results = [DayMileage(date=day, mileage=miles) for (day, miles) in tuples]
     return results
+
+
+@router.get("/mileage/by-week", response_model=list[WeekMileage])
+def read_mileage_by_week(
+    start: date = DEFAULT_START,
+    end: date = DEFAULT_END,
+    week_start: WeekStart = "monday",
+    user_timezone: str | None = None,
+    _user: User = Depends(require_viewer),
+) -> list[WeekMileage]:
+    """Get mileage by week.
+
+    Returns one WeekMileage entry (zero-filled) for every week that overlaps
+    [start, end]. Edge weeks are full weekly totals: runs in the same week as
+    `start`/`end` are counted even if they fall outside [start, end].
+
+    Args:
+        start: Inclusive start date for filtering (local to `user_timezone` if provided).
+        end: Inclusive end date for filtering (local to `user_timezone` if provided).
+        week_start: Which day weeks begin on ("monday" or "sunday").
+        user_timezone: IANA timezone for local-date bucketing. If None, use UTC dates.
+    """
+    # Expand the fetch range to full week boundaries so the first and last
+    # weeks have complete totals. Guard against overflow past date.max.
+    aligned_start = week_anchor(start, week_start)
+    last_week = week_anchor(end, week_start)
+    if last_week <= date.max - timedelta(days=6):
+        aligned_end = last_week + timedelta(days=6)
+    else:
+        aligned_end = date.max
+    runs = get_runs_for_date_range(aligned_start, aligned_end, user_timezone)
+    tuples: list[tuple[date, float]] = miles_by_week(
+        runs, start, end, week_start, user_timezone
+    )
+    return [WeekMileage(week_start=week, mileage=miles) for (week, miles) in tuples]
 
 
 @router.get("/mileage/rolling-by-day", response_model=list[DayMileage])

@@ -42,6 +42,20 @@ class DayMileage(BaseModel):
         return self.date < other.date
 
 
+class WeekMileage(BaseModel):
+    """Mileage aggregated for a single week.
+
+    `week_start` is the first day of the week (Monday or Sunday depending on
+    the requested week convention).
+    """
+
+    week_start: date
+    mileage: float
+
+    def __lt__(self, other: Self) -> bool:
+        return self.week_start < other.week_start
+
+
 class RetireShoeRequest(BaseModel):
     """Request model to retire a shoe on a specific date."""
 
