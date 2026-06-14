@@ -28,6 +28,19 @@ from fitness.app.models import (
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
+def _clamp_end_to_today(end: date) -> date:
+    """Clamp an open-ended or future `end` to today for per-day/week enumeration.
+
+    DEFAULT_END is date.max, so an omitted `end` would otherwise make the
+    by-day/by-week/rolling endpoints enumerate one bucket per day/week out to the
+    year 9999 — a multi-million-row response, and an OverflowError outright in
+    the weekly case. Mileage can't exist in the future, so today is the correct
+    upper bound. (Filter-only endpoints like /total are unaffected and keep
+    date.max.)
+    """
+    return min(end, date.today())
+
+
 @router.get("/seconds/total", response_model=float)
 def read_total_seconds(
     start: date = DEFAULT_START,
@@ -75,6 +88,7 @@ def read_mileage_by_day(
 
     Returns a list of DayMileage entries for each day in [start, end].
     """
+    end = _clamp_end_to_today(end)
     runs = get_runs_for_date_range(start, end, user_timezone)
     tuples: list[tuple[date, float]] = miles_by_day(runs, start, end, user_timezone)
     results = [DayMileage(date=day, mileage=miles) for (day, miles) in tuples]
@@ -101,14 +115,11 @@ def read_mileage_by_week(
         week_start: Which day weeks begin on ("monday" or "sunday").
         user_timezone: IANA timezone for local-date bucketing. If None, use UTC dates.
     """
+    end = _clamp_end_to_today(end)
     # Expand the fetch range to full week boundaries so the first and last
-    # weeks have complete totals. Guard against overflow past date.max.
+    # weeks have complete totals.
     aligned_start = week_anchor(start, week_start)
-    last_week = week_anchor(end, week_start)
-    if last_week <= date.max - timedelta(days=6):
-        aligned_end = last_week + timedelta(days=6)
-    else:
-        aligned_end = date.max
+    aligned_end = week_anchor(end, week_start) + timedelta(days=6)
     runs = get_runs_for_date_range(aligned_start, aligned_end, user_timezone)
     tuples: list[tuple[date, float]] = miles_by_week(
         runs, start, end, week_start, user_timezone
@@ -129,6 +140,7 @@ def read_rolling_mileage_by_day(
     Args:
         window: Number of days in the rolling window (>= 1).
     """
+    end = _clamp_end_to_today(end)
     # Expand start by (window-1) days for the rolling lookback
     lookback_start = start - timedelta(days=window - 1)
     runs = get_runs_for_date_range(lookback_start, end, user_timezone)
