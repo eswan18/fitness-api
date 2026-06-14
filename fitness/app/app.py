@@ -13,6 +13,7 @@ from typing import Literal, TypeVar
 
 from fastapi import FastAPI, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from fitness.db.runs import get_runs_for_date_range
 from fitness.models import Run
@@ -136,6 +137,11 @@ app.include_router(exercise_templates_router)
 app.include_router(lift_sync_router)
 app.include_router(run_workouts_router)
 app.include_router(run_workout_sync_router)
+# Compress larger JSON responses (the per-day/week metrics lists compress ~5-10x).
+# Added before CORS so CORSMiddleware stays the outermost layer — it still handles
+# preflight and sets Access-Control headers on every (now-compressed) response.
+# Responses under minimum_size are left untouched.
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # type: ignore[arg-type]
 app.add_middleware(
     CORSMiddleware,  # type: ignore[arg-type]
     allow_origins=[
