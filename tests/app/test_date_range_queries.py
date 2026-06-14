@@ -165,3 +165,53 @@ def test_training_load_fetches_bounded_warmup_window(
     mock_rides_range.assert_called_once_with(expected_start, date(2025, 6, 30), None)
     # Must not fall back to scanning all-time history.
     mock_all_runs.assert_not_called()
+
+
+# -- Open-ended `end` (DEFAULT_END is date.max) must clamp to today, since the
+#    per-day/week endpoints enumerate one bucket per day/week. --
+
+
+def test_mileage_by_week_clamps_unbounded_end_to_today(
+    monkeypatch, viewer_client: TestClient
+):
+    """Without an explicit `end`, by-week must clamp to today rather than
+    enumerating weeks out to year 9999 (previously a 500 OverflowError)."""
+    mock = MagicMock(return_value=[])
+    monkeypatch.setattr("fitness.app.routers.metrics.get_runs_for_date_range", mock)
+
+    res = viewer_client.get("/metrics/mileage/by-week")  # no start/end -> defaults
+
+    assert res.status_code == 200
+    weeks = res.json()
+    # Bounded to real weeks, not ~414k buckets reaching the year 9999.
+    assert len(weeks) < 10000
+    if weeks:
+        assert date.fromisoformat(weeks[-1]["week_start"]) <= date.today()
+    # The fetch upper bound is derived from today, not date.max.
+    assert mock.call_args[0][1] <= date.today() + timedelta(days=6)
+
+
+def test_mileage_by_day_clamps_unbounded_end_to_today(
+    monkeypatch, viewer_client: TestClient
+):
+    """by-day must clamp an open-ended `end` to today, not enumerate ~2.9M days."""
+    mock = MagicMock(return_value=[])
+    monkeypatch.setattr("fitness.app.routers.metrics.get_runs_for_date_range", mock)
+
+    res = viewer_client.get("/metrics/mileage/by-day")
+
+    assert res.status_code == 200
+    assert mock.call_args[0][1] == date.today()
+
+
+def test_rolling_mileage_clamps_unbounded_end_to_today(
+    monkeypatch, viewer_client: TestClient
+):
+    """rolling-by-day must clamp an open-ended `end` to today."""
+    mock = MagicMock(return_value=[])
+    monkeypatch.setattr("fitness.app.routers.metrics.get_runs_for_date_range", mock)
+
+    res = viewer_client.get("/metrics/mileage/rolling-by-day")
+
+    assert res.status_code == 200
+    assert mock.call_args[0][1] == date.today()
