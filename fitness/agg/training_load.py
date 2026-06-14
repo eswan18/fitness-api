@@ -16,6 +16,14 @@ class DayHrtss(NamedTuple):
 ATL_LOOKBACK = 7
 CTL_LOOKBACK = 42
 
+# Days of activity history to feed the model *before* the requested start date,
+# so CTL/ATL have converged by the time the displayed range begins. CTL's
+# 42-day time constant means the influence of older data decays as
+# e^(-days/42); at 730 days the residual error is ~1e-4 hrTSS, i.e. results are
+# indistinguishable from using all-time history, while the query cost stays
+# bounded as total history grows.
+CONVERGENCE_WARMUP_DAYS = 730
+
 
 def trimp(activity: Run | Ride, max_hr: float, resting_hr: float, sex: Sex) -> float:
     """

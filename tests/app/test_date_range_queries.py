@@ -130,16 +130,23 @@ def test_rolling_mileage_includes_lookback_window(
     mock.assert_called_once_with(expected_start, date(2025, 6, 30), "America/Chicago")
 
 
-def test_training_load_uses_all_runs(monkeypatch, viewer_client: TestClient):
-    """Training load needs full history for ATL/CTL convergence, not date-filtered."""
+def test_training_load_fetches_bounded_warmup_window(
+    monkeypatch, viewer_client: TestClient
+):
+    """Training load fetches a bounded warm-up window before `start` (enough for
+    CTL/ATL convergence), not all-time history."""
+    from fitness.agg.training_load import CONVERGENCE_WARMUP_DAYS
+
+    mock_runs_range = MagicMock(return_value=[])
+    mock_rides_range = MagicMock(return_value=[])
     mock_all_runs = MagicMock(return_value=[])
-    mock_all_rides = MagicMock(return_value=[])
-    mock_date_range = MagicMock(return_value=[])
-    monkeypatch.setattr("fitness.app.routers.metrics.get_all_runs", mock_all_runs)
-    monkeypatch.setattr("fitness.app.routers.metrics.get_all_rides", mock_all_rides)
     monkeypatch.setattr(
-        "fitness.app.routers.metrics.get_runs_for_date_range", mock_date_range
+        "fitness.app.routers.metrics.get_runs_for_date_range", mock_runs_range
     )
+    monkeypatch.setattr(
+        "fitness.app.routers.metrics.get_rides_for_date_range", mock_rides_range
+    )
+    monkeypatch.setattr("fitness.app.routers.metrics.get_all_runs", mock_all_runs)
 
     viewer_client.get(
         "/metrics/training-load/by-day",
@@ -153,6 +160,8 @@ def test_training_load_uses_all_runs(monkeypatch, viewer_client: TestClient):
         },
     )
 
-    mock_all_runs.assert_called_once()
-    mock_all_rides.assert_called_once()
-    mock_date_range.assert_not_called()
+    expected_start = date(2025, 6, 1) - timedelta(days=CONVERGENCE_WARMUP_DAYS)
+    mock_runs_range.assert_called_once_with(expected_start, date(2025, 6, 30), None)
+    mock_rides_range.assert_called_once_with(expected_start, date(2025, 6, 30), None)
+    # Must not fall back to scanning all-time history.
+    mock_all_runs.assert_not_called()

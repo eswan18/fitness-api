@@ -14,9 +14,9 @@ from fitness.agg import (
 )
 from fitness.agg.mileage import WeekStart
 from fitness.db.runs import get_runs_for_date_range, get_all_runs
-from fitness.db.rides import get_rides_for_date_range, get_all_rides
+from fitness.db.rides import get_rides_for_date_range
 from fitness.db.shoes import get_shoes
-from fitness.agg.training_load import hrtss_by_day
+from fitness.agg.training_load import hrtss_by_day, CONVERGENCE_WARMUP_DAYS
 from fitness.app.constants import DEFAULT_START, DEFAULT_END
 from fitness.app.auth import require_viewer
 from fitness.models import Sex, DayTrainingLoad, ShoeMileage, User
@@ -171,10 +171,22 @@ def read_training_load_by_day(
 ) -> list[DayTrainingLoad]:
     """Get training load by day.
 
-    Computes CTL/ATL/TSB over the specified range using hrTSS from
-    HR-bearing runs and rides combined. Needs full history for ATL/CTL convergence.
+    Computes CTL/ATL/TSB over the requested range using hrTSS from HR-bearing
+    runs and rides combined. Fetches CONVERGENCE_WARMUP_DAYS of extra history
+    before `start` so ATL/CTL have converged by the start of the displayed
+    range, without scanning all-time history (cost stays bounded as history grows).
     """
-    activities = [*get_all_runs(), *get_all_rides()]
+    # Cap the warm-up lead-in fetched before `start`. The displayed range itself
+    # is always fully covered; only the convergence warm-up is bounded. Guard
+    # against date underflow for very early start dates.
+    if start > date.min + timedelta(days=CONVERGENCE_WARMUP_DAYS):
+        fetch_start = start - timedelta(days=CONVERGENCE_WARMUP_DAYS)
+    else:
+        fetch_start = date.min
+    activities = [
+        *get_runs_for_date_range(fetch_start, end, user_timezone),
+        *get_rides_for_date_range(fetch_start, end, user_timezone),
+    ]
     return training_stress_balance(
         activities=activities,
         max_hr=max_hr,
