@@ -151,15 +151,23 @@ def training_stress_balance(
     # Always start calculations from the earliest activity, because these metrics converge over time.
     # If we start at the start date, metrics will be inaccurately close to zero.
     first_activity_date = min(a.local_date for a in user_tz_activities)
+
+    # Sum each activity's hrTSS into its local-date bucket in a single pass, so
+    # building the daily series below is O(days) rather than O(days x activities).
+    # (Mirrors the bucketing already used by hrtss_by_day.) Activities after
+    # end_date never enter the series, so don't bother scoring them.
+    hrtss_by_local_date: dict[date, float] = defaultdict(float)
+    for a in user_tz_activities:
+        if a.local_date <= end_date:
+            hrtss_by_local_date[a.local_date] += hrtss(
+                a, max_hr, resting_hr, lthr, sex
+            )
+
     for i in range((end_date - first_activity_date).days + 1):
         current_date = first_activity_date + timedelta(days=i)
-        activities_for_day = [
-            a for a in user_tz_activities if a.local_date == current_date
-        ]
-        day_hrtss_values = [
-            hrtss(a, max_hr, resting_hr, lthr, sex) for a in activities_for_day
-        ]
-        hrtss_by_date.append((current_date, sum(day_hrtss_values, start=0.0)))
+        hrtss_by_date.append(
+            (current_date, hrtss_by_local_date.get(current_date, 0.0))
+        )
     atl, ctl = _calculate_atl_and_ctl([h for _, h in hrtss_by_date])
     tsb = [ctl_value - atl_value for ctl_value, atl_value in zip(ctl, atl)]
     dates = [dt for dt, _ in hrtss_by_date]

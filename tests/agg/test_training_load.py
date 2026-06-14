@@ -689,6 +689,61 @@ class TestTrainingStressBalance:
         assert result[0].training_load.ctl > 0
         assert result[0].training_load.atl > 0
 
+    def test_training_stress_balance_sums_multiple_activities_same_day(self):
+        """Two activities on one day must sum into that day's hrTSS.
+
+        Pins the single-pass date bucketing: a two-run day's hrTSS equals the
+        sum of each run scored on its own for that day.
+        """
+        run_a = RunFactory().make(
+            {
+                "id": "run_a",
+                "date": date(2024, 3, 10),
+                "duration": 1800,
+                "avg_heart_rate": 150,
+            }
+        )
+        run_b = RunFactory().make(
+            {
+                "id": "run_b",
+                "date": date(2024, 3, 10),
+                "duration": 2700,
+                "avg_heart_rate": 140,
+            }
+        )
+        combined = training_stress_balance(
+            activities=[run_a, run_b],
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+            start_date=date(2024, 3, 10),
+            end_date=date(2024, 3, 10),
+        )
+        a_only = training_stress_balance(
+            activities=[run_a],
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+            start_date=date(2024, 3, 10),
+            end_date=date(2024, 3, 10),
+        )
+        b_only = training_stress_balance(
+            activities=[run_b],
+            max_hr=190,
+            resting_hr=50,
+            lthr=165,
+            sex="M",
+            start_date=date(2024, 3, 10),
+            end_date=date(2024, 3, 10),
+        )
+
+        assert len(combined) == 1
+        assert combined[0].training_load.hrtss == pytest.approx(
+            a_only[0].training_load.hrtss + b_only[0].training_load.hrtss, abs=1e-9
+        )
+
 
 class TestMixedRunsAndRides:
     """Tests confirming runs and rides combine into a single fatigue series."""
