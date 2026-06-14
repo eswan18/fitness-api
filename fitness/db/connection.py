@@ -29,7 +29,18 @@ def get_sqlalchemy_database_url() -> str:
 def init_pool() -> None:
     """Create the connection pool. Call once at app startup."""
     global _pool
-    _pool = ConnectionPool(get_database_url(), min_size=2, max_size=10)
+    _pool = ConnectionPool(
+        get_database_url(),
+        min_size=2,
+        max_size=10,
+        # Validate each connection as it's handed out of the pool. Neon closes
+        # idle connections server-side (idle timeout / compute autosuspend), and
+        # the pool can't see that a pooled connection has died until it's used.
+        # Without this check the pool serves a dead connection and the first query
+        # fails with "SSL connection has been closed unexpectedly". check_connection
+        # probes the connection on checkout and transparently recycles it if dead.
+        check=ConnectionPool.check_connection,
+    )
 
 
 def close_pool() -> None:
@@ -68,6 +79,13 @@ def get_db_cursor() -> Iterator[psycopg.Cursor]:
                 # Commit the transaction on successful completion
                 conn.commit()
             except Exception:
-                # Rollback on error (though psycopg does this automatically)
-                conn.rollback()
+                # Roll back on error, but guard the rollback itself: if the
+                # connection is already dead (e.g. closed by Neon mid-request),
+                # conn.rollback() raises its own OperationalError. Letting that
+                # propagate would mask the original exception and bury the real
+                # failure in the traceback. Re-raise the original error instead.
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 raise
