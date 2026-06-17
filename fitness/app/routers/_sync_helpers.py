@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from fastapi import HTTPException, status
 
-from fitness.models.sync import SyncResponse
+from fitness.models.sync import SyncResponse, SyncStatus
 from fitness.integrations.google.calendar_client import GoogleCalendarClient
 
 logger = logging.getLogger(__name__)
@@ -21,9 +21,10 @@ def perform_sync(
     entity_type: str,
     existing_sync: Any,
     create_calendar_event: Callable[[GoogleCalendarClient], str | None],
-    create_sync_record: Callable[[str, str], Any],
+    create_sync_record: Callable[[str, SyncStatus], Any],
     update_sync_record: Callable[[str], Any],
-    record_failure: Callable[[str | None, str], None],
+    # Return value is discarded; `object` lets callers pass record-returning callables.
+    record_failure: Callable[[str | None, str], object],
 ) -> SyncResponse:
     """Sync an entity to Google Calendar.
 

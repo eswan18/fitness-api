@@ -58,7 +58,7 @@ def _make_ride(
     return RideDetail(
         id=id,
         datetime_utc=datetime_utc or datetime(2024, 6, 1, 18, 0, 0),
-        type=type_,  # type: ignore[arg-type]
+        type=type_,  # ty: ignore[invalid-argument-type]
         distance=0.0,
         duration=duration,
         source="Strava",
