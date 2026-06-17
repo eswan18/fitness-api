@@ -85,7 +85,7 @@ def test_ride_rejects_invalid_type():
         Ride(
             id="strava_1",
             datetime_utc=datetime(2024, 1, 1),
-            type="Outdoor Run",  # type: ignore[arg-type]
+            type="Outdoor Run",  # ty: ignore[invalid-argument-type]
             distance=10.0,
             duration=1800,
             source="Strava",

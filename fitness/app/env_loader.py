@@ -7,7 +7,7 @@ and secrets instead.
 
 import os
 import sys
-from typing import Literal
+from typing import Literal, cast
 from dotenv import load_dotenv
 
 EnvironmentName = Literal["dev", "staging", "prod"]
@@ -61,5 +61,5 @@ def get_current_environment() -> EnvironmentName:
     """Get the current environment (dev, staging, or prod)."""
     env = os.getenv("ENV", "dev")
     if env in ("dev", "staging", "prod"):
-        return env  # type: ignore[return-value]
+        return cast(EnvironmentName, env)
     raise ValueError(f"Invalid ENV value: {env}. Must be 'dev', 'staging', or 'prod'.")

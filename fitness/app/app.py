@@ -4,7 +4,7 @@ from .env_loader import get_current_environment
 
 import os
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
@@ -197,7 +197,7 @@ def read_all_runs(
         filtered_runs = [
             run for run in localized_runs if start <= run.local_date <= end
         ]
-        return sort_runs_generic(filtered_runs, sort_by, sort_order)  # type: ignore[invalid-argument-type]
+        return sort_runs_generic(filtered_runs, sort_by, sort_order)
 
 
 @app.get("/runs/details", response_model=list[RunDetail])
@@ -315,7 +315,7 @@ def read_activity_feed(
 
 
 def sort_runs_generic(
-    runs: list[T], sort_by: RunSortBy, sort_order: SortOrder
+    runs: Sequence[T], sort_by: RunSortBy, sort_order: SortOrder
 ) -> list[T]:
     """Sort runs by the specified field and order.
 

@@ -86,8 +86,8 @@ def _mock_oauth(db_url: str) -> Iterator[None]:
             return _create_test_user(role="editor")
         return _create_test_user(role="viewer")
 
-    oauth.validate_jwt_token = mock_validate  # type: ignore[assignment]
-    oauth.get_or_create_user = mock_get_or_create_user  # type: ignore[assignment]
+    oauth.validate_jwt_token = mock_validate  # ty: ignore[invalid-assignment]
+    oauth.get_or_create_user = mock_get_or_create_user  # ty: ignore[invalid-assignment]
 
     yield
 
