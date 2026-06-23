@@ -1,5 +1,6 @@
 from .metrics import router as metrics_router
 from .shoes import router as shoe_router
+from .shoe_notes import router as shoe_notes_router
 from .ride import router as ride_router
 from .ride_sync import router as ride_sync_router
 from .run import router as run_router
@@ -18,6 +19,7 @@ from .run_workout_sync import router as run_workout_sync_router
 __all__ = [
     "metrics_router",
     "shoe_router",
+    "shoe_notes_router",
     "oauth_router",
     "ride_router",
     "ride_sync_router",

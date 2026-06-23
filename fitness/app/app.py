@@ -29,6 +29,7 @@ from .constants import DEFAULT_START, DEFAULT_END
 from .routers import (
     metrics_router,
     shoe_router,
+    shoe_notes_router,
     ride_router,
     ride_sync_router,
     run_router,
@@ -123,6 +124,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(lifespan=lifespan)
 app.include_router(metrics_router)
 app.include_router(shoe_router)
+app.include_router(shoe_notes_router)
 app.include_router(run_router)
 app.include_router(ride_router)
 app.include_router(ride_sync_router)
