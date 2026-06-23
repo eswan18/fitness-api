@@ -8,7 +8,8 @@ and secrets instead.
 import os
 import sys
 from typing import Literal, cast
-from dotenv import load_dotenv
+
+from fitness.config.env_files import load_dotenv_for_current_env
 
 EnvironmentName = Literal["dev", "staging", "prod"]
 
@@ -44,14 +45,9 @@ def validate_required_env_vars() -> None:
         sys.exit(1)
 
 
-# Load env vars before any app code runs.
-# Always attempt to load a .env file for the current environment.
-# In K8s, no .env file exists so load_dotenv is a no-op; env vars come from
-# configmaps and secrets instead.
-env = os.getenv("ENV", "dev")
-if env not in ("dev", "staging", "prod"):
-    raise ValueError(f"Invalid ENV value: {env}. Must be 'dev', 'staging', or 'prod'.")
-load_dotenv(f".env.{env}", verbose=True)
+# Load env vars before any app code runs. In K8s no .env file exists so this is
+# a no-op; env vars come from configmaps and secrets instead.
+load_dotenv_for_current_env()
 
 # Validate required env vars after loading.
 validate_required_env_vars()

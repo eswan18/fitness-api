@@ -11,10 +11,10 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 from datetime import datetime
 
+from fitness.config.env_files import load_dotenv_for_current_env
 from fitness.auth.tokens import generate_token, hash_token, token_prefix
 from fitness.db.api_tokens import (
     create_api_token,
@@ -24,15 +24,13 @@ from fitness.db.api_tokens import (
 
 
 def _load_env() -> None:
-    """Load DATABASE_URL from a local .env.{ENV} file if present.
+    """Load ``.env.{ENV}`` the same way the app does (``ENV=prod`` -> ``.env.prod``).
 
-    In K8s/prod the env vars are already set, so this is a no-op there. Unlike
-    the app's env_loader we do not require the full app env — only the DB URL.
+    Uses the app's shared loader, but unlike the app's ``env_loader`` we do not
+    require the full app environment — only ``DATABASE_URL``, which the DB layer
+    reads when a command runs.
     """
-    from dotenv import load_dotenv
-
-    env = os.getenv("ENV", "dev")
-    load_dotenv(f".env.{env}")
+    load_dotenv_for_current_env()
 
 
 def _cmd_mint(args: argparse.Namespace) -> int:
