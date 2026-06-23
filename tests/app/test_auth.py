@@ -3,6 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from fitness.load.strava import StravaRunLoadResult
 from tests.app.conftest import TEST_API_KEY
 
 
@@ -21,7 +22,7 @@ class TestAuthenticationEndpoints:
         with monkeypatch.context() as m:
             m.setattr(
                 "fitness.app.routers.strava.load_strava_runs",
-                lambda client, after=None: [],
+                lambda client, after=None: StravaRunLoadResult(runs=[], skipped=[]),
             )
             m.setattr("fitness.app.routers.strava.get_existing_run_ids", lambda: [])
             m.setattr(

@@ -27,7 +27,9 @@ async def sync_strava_data(
     full_sync: bool = Query(
         False,
         description="Force a full sync instead of incremental. "
-        "Use this to re-fetch all data from the beginning.",
+        "Use this to re-fetch all data from the beginning, including runs "
+        "previously skipped for missing gear after you've assigned shoes "
+        "in Strava.",
     ),
     user: User = Depends(require_editor),
     strava_client: StravaClient = Depends(strava_client),
@@ -37,9 +39,12 @@ async def sync_strava_data(
     By default, performs an incremental sync fetching only activities created
     after the last successful sync. Use `full_sync=true` to fetch all data.
 
-    Requires authentication with editor role.
+    Runs without shoes assigned in Strava are reported in `skipped_runs` rather
+    than imported. After assigning shoes in Strava, re-sync with
+    `?full_sync=true`; incremental sync filters by activity start time and
+    will not re-fetch the older run.
 
-    Returns a summary of the sync operation including count of new runs inserted.
+    Requires authentication with editor role.
     """
     # Determine sync start time for incremental sync
     after = None
@@ -56,9 +61,8 @@ async def sync_strava_data(
     sync_time = datetime.now(timezone.utc)
 
     # Runs ingestion
-    strava_runs = [
-        Run.from_strava(run) for run in load_strava_runs(strava_client, after=after)
-    ]
+    runs_load = load_strava_runs(strava_client, after=after)
+    strava_runs = [Run.from_strava(run) for run in runs_load.runs]
     existing_run_ids = get_existing_run_ids()
     new_runs = [run for run in strava_runs if run.id not in existing_run_ids]
     if new_runs:
@@ -87,14 +91,20 @@ async def sync_strava_data(
     update_last_sync_time(PROVIDER_NAME, sync_time)
 
     sync_type = "full" if full_sync or after is None else "incremental"
+    skipped_msg = (
+        f"; {len(runs_load.skipped)} runs skipped (missing shoes)"
+        if runs_load.skipped
+        else ""
+    )
     return DataImportResponse(
         inserted_count=inserted_count,
         inserted_runs=inserted_runs,
         inserted_rides=inserted_rides,
         updated_at=sync_time,
+        skipped_runs=runs_load.skipped,
         message=(
             f"Inserted {inserted_runs} new runs and {inserted_rides} new rides "
-            f"({sync_type} sync)"
+            f"({sync_type} sync){skipped_msg}"
         ),
     )
 
