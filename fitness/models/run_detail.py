@@ -22,6 +22,7 @@ class RunDetail(BaseModel):
     shoe_id: Optional[str] = None
     shoes: Optional[str] = None
     shoe_retirement_notes: Optional[str] = None
+    notes: Optional[str] = None  # User-authored markdown note on the run
     deleted_at: Optional[datetime] = None
     version: Optional[int] = None
     run_workout_id: Optional[str] = None

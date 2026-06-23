@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
 
-from fitness.db.runs import get_run_by_id
+from fitness.db.runs import get_run_by_id, update_run_notes
 from fitness.db.runs_history import (
     update_run_with_history,
     get_run_history,
@@ -196,6 +196,38 @@ def update_run(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error occurred while updating run",
         ) from e
+
+
+class RunNotesUpdateRequest(BaseModel):
+    """Request model for setting a run's freeform markdown note."""
+
+    notes: str | None = Field(
+        None, description="Markdown note; null or empty clears it"
+    )
+
+
+@router.patch("/{run_id}/notes", response_model=Run)
+def update_run_note(
+    run_id: str,
+    request: RunNotesUpdateRequest,
+    _user: User = Depends(require_editor),
+) -> Run:
+    """Set or clear a run's freeform markdown note.
+
+    Unlike metric edits (`PATCH /runs/{id}`), this is a lightweight single-field
+    update: it is NOT version/history-tracked and IS allowed on calendar-synced
+    runs (a note doesn't affect the synced event).
+    """
+    _get_run_or_404(run_id)
+    notes = (request.notes or "").strip() or None
+    update_run_notes(run_id, notes)
+    updated = get_run_by_id(run_id)
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run with ID {run_id} not found",
+        )
+    return updated
 
 
 @router.get("/{run_id}/history", response_model=list[RunHistoryResponse])

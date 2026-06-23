@@ -35,7 +35,7 @@ def get_all_runs(include_deleted: bool = False) -> list[Run]:
     with get_db_cursor() as cursor:
         deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" WHERE r.deleted_at IS NULL")
         query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
+            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name, r.notes
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             {deleted_filter}
@@ -58,7 +58,7 @@ def get_runs_in_date_range(
             deleted_filter = sql.SQL(" AND r.deleted_at IS NULL")
         query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source,
-                   r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
+                   r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name, r.notes
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             WHERE DATE(r.datetime_utc) BETWEEN %s AND %s{deleted_filter}
@@ -255,7 +255,7 @@ def get_run_details_in_date_range(
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
                    COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
                    sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
-                   r.run_workout_id
+                   r.run_workout_id, r.notes
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             LEFT JOIN synced_runs sr ON sr.run_id = r.id
@@ -283,7 +283,7 @@ def get_all_run_details(
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
                    COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
                    sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
-                   r.run_workout_id
+                   r.run_workout_id, r.notes
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             LEFT JOIN synced_runs sr ON sr.run_id = r.id
@@ -305,7 +305,7 @@ def get_run_details_by_ids(run_ids: list[str]) -> list[RunDetail]:
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
                    COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
                    sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
-                   r.run_workout_id
+                   r.run_workout_id, r.notes
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             LEFT JOIN synced_runs sr ON sr.run_id = r.id
@@ -327,7 +327,7 @@ def get_run_by_id(run_id: str, include_deleted: bool = False) -> Run | None:
     with get_db_cursor() as cursor:
         deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" AND r.deleted_at IS NULL")
         query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name
+            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name, r.notes
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             WHERE r.id = %s{deleted_filter}
@@ -337,6 +337,26 @@ def get_run_by_id(run_id: str, include_deleted: bool = False) -> Run | None:
         if not row:
             return None
         return _row_to_run(row)
+
+
+def update_run_notes(run_id: str, notes: str | None) -> bool:
+    """Set (or clear) a run's freeform markdown note.
+
+    A lightweight, single-field update with no version bump or history record
+    (unlike metric edits via ``update_run_with_history``). The note is never
+    touched by re-imports (``bulk_create_runs`` skips existing rows), so it
+    survives Strava/MMF re-syncs. Returns True if a non-deleted run matched.
+    """
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE runs
+            SET notes = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND deleted_at IS NULL
+            """,
+            (notes, run_id),
+        )
+        return cursor.rowcount > 0
 
 
 def _row_to_run(row) -> Run:
@@ -352,6 +372,7 @@ def _row_to_run(row) -> Run:
         shoe_id,
         deleted_at,
         shoe_name,
+        notes,
     ) = row
     run = Run(
         id=run_id,
@@ -362,6 +383,7 @@ def _row_to_run(row) -> Run:
         source=source,
         avg_heart_rate=avg_heart_rate,
         shoe_id=shoe_id,
+        notes=notes,
         deleted_at=deleted_at,
     )
     run._shoe_name = shoe_name
@@ -388,6 +410,7 @@ def _row_to_run_detail(row) -> RunDetail:
         error_message,
         run_table_version,
         run_workout_id,
+        notes,
     ) = row
 
     # Normalize shoe_name
@@ -405,6 +428,7 @@ def _row_to_run_detail(row) -> RunDetail:
         shoe_id=shoe_id,
         shoes=shoe_name,
         shoe_retirement_notes=retirement_notes,
+        notes=notes,
         deleted_at=deleted_at,
         version=run_table_version,
         run_workout_id=run_workout_id,

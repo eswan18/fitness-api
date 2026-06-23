@@ -44,6 +44,7 @@ class Run(BaseModel):
     source: RunSource
     avg_heart_rate: float | None = None
     shoe_id: str | None = None  # Foreign key to shoes table
+    notes: str | None = None  # User-authored markdown note (preserved across re-syncs)
     deleted_at: datetime | None = None
 
     # Keep shoe name for backward compatibility and data loading
