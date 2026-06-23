@@ -3,6 +3,7 @@ from . import env_loader  # noqa: F401
 from .env_loader import get_current_environment
 
 import os
+import sys
 import logging
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
@@ -159,11 +160,19 @@ app.add_middleware(
 )
 
 
-# Configure basic logging
+# Configure basic logging. Route INFO/DEBUG to stdout and WARNING+ to stderr:
+# on GKE the logging agent tags everything on stderr as severity=ERROR, so
+# sending normal logs to stdout keeps them from showing up as false errors while
+# real warnings/errors stay visible (and correctly severity-tagged).
+_stdout_handler = logging.StreamHandler(sys.stdout)
+_stdout_handler.addFilter(lambda record: record.levelno < logging.WARNING)
+_stderr_handler = logging.StreamHandler(sys.stderr)
+_stderr_handler.setLevel(logging.WARNING)
 logging.basicConfig(
     level=logging.WARNING,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(filename)s:%(lineno)d",
     datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[_stdout_handler, _stderr_handler],
 )
 # Configure the logging for the API itself if the user specifies it.
 if "LOG_LEVEL" in os.environ:

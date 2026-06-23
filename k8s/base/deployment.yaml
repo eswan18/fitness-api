@@ -50,10 +50,13 @@ spec:
                 - ALL
           resources:
             requests:
-              memory: "80Mi"
+              memory: "128Mi"
               cpu: "40m"
             limits:
-              memory: "256Mi"
+              # HAE ingestion parses multi-MB workout payloads (GPS route +
+              # per-sample arrays) into memory; 256Mi OOM-killed the worker
+              # (-> 502 at the proxy). 512Mi gives headroom for typical runs.
+              memory: "512Mi"
               cpu: "400m"
           volumeMounts:
             - name: secrets-store
