@@ -40,9 +40,27 @@ def test_run_from_hae():
     assert run.deleted_at is None
 
 
-def test_run_from_hae_indoor_maps_to_treadmill():
-    run = Run.from_hae(_hae_run_workout(name="Indoor Running"))
+def test_run_from_hae_outdoor_by_default():
+    # HAE emits a single running activity type; absent isIndoor -> outdoor.
+    assert Run.from_hae(_hae_run_workout(name="Running")).type == "Outdoor Run"
+
+
+def test_run_from_hae_treadmill_via_is_indoor_flag():
+    # Indoor is signalled by the isIndoor boolean, not the workout name.
+    run = Run.from_hae(_hae_run_workout(name="Running", isIndoor=True))
     assert run.type == "Treadmill Run"
+
+
+def test_run_from_hae_treadmill_via_name_keyword():
+    # Fallback when isIndoor is absent but the name says indoor/treadmill.
+    assert Run.from_hae(_hae_run_workout(name="Indoor Run")).type == "Treadmill Run"
+    assert Run.from_hae(_hae_run_workout(name="Treadmill")).type == "Treadmill Run"
+
+
+def test_run_from_hae_handles_apple_fitness_outdoor_run_name():
+    # Whether HAE sends "Running" or "Outdoor Run", it must classify as a run.
+    run = Run.from_hae(_hae_run_workout(name="Outdoor Run"))
+    assert run.type == "Outdoor Run"
 
 
 def test_run_from_strava(

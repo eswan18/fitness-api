@@ -22,9 +22,9 @@ from pydantic import BaseModel
 from fitness.app.ingest_auth import require_ingest_token
 from fitness.db.runs import bulk_create_runs
 from fitness.db.rides import bulk_create_rides
-from fitness.models.hae import HaeIngestRequest, HaeWorkout
-from fitness.models.ride import HaeRideMap, Ride
-from fitness.models.run import HaeRunMap, Run
+from fitness.models.hae import HaeIngestRequest, HaeWorkout, workout_category
+from fitness.models.ride import Ride
+from fitness.models.run import Run
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +57,10 @@ async def ingest_hae(
 
     for workout in workouts:
         try:
-            if workout.name in HaeRunMap:
+            category = workout_category(workout)
+            if category == "run":
                 runs.append(Run.from_hae(workout))
-            elif workout.name in HaeRideMap:
+            elif category == "ride":
                 rides.append(Ride.from_hae(workout))
             else:
                 skipped += 1

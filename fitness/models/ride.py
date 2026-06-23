@@ -14,13 +14,6 @@ if TYPE_CHECKING:
 RideType = Literal["Outdoor Ride", "Indoor Ride"]
 RideSource = Literal["Strava", "Apple Health"]
 
-# Map Health Auto Export (Apple Health) workout names to our ride types. A name
-# absent from this map is NOT a ride (the ingest router skips it).
-HaeRideMap: dict[str, RideType] = {
-    "Cycling": "Outdoor Ride",
-    "Indoor Cycling": "Indoor Ride",
-}
-
 
 def _classify_strava_ride(strava_activity: "StravaActivity") -> RideType:
     """Map a Strava cycling activity to our RideType.
@@ -79,19 +72,24 @@ class Ride(BaseModel):
     def from_hae(cls, workout: "HaeWorkout") -> Self:
         """Create a Ride from a Health Auto Export (Apple Health) workout.
 
-        The caller is responsible for confirming the workout is a ride (its
-        ``name`` is in ``HaeRideMap``) before calling this.
+        The caller is responsible for confirming the workout is a ride
+        (``workout_category(workout) == "ride"``) before calling this. Indoor vs
+        outdoor is taken from the workout's ``isIndoor`` flag, not its name.
         """
         from fitness.models.hae import (
+            is_indoor_workout,
             parse_hae_timestamp,
             quantity_to_miles,
             quantity_value,
         )
 
+        ride_type: RideType = (
+            "Indoor Ride" if is_indoor_workout(workout) else "Outdoor Ride"
+        )
         return cls(
             id=f"hae_{workout.id}",
             datetime_utc=parse_hae_timestamp(workout.start),
-            type=HaeRideMap[workout.name],
+            type=ride_type,
             distance=quantity_to_miles(workout.distance),
             duration=workout.duration,
             avg_heart_rate=quantity_value(workout.avg_heart_rate),

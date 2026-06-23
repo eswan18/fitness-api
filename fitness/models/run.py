@@ -34,14 +34,6 @@ StravaActivityMap: dict[StravaActivityType, RunType] = {
     "Run": "Outdoor Run",
     "Indoor Run": "Treadmill Run",
 }
-# Map Health Auto Export (Apple Health) workout names to our run types. A name
-# absent from this map is NOT a run (the ingest router skips it), so non-run
-# workouts can never mis-land as runs.
-HaeRunMap: dict[str, RunType] = {
-    "Running": "Outdoor Run",
-    "Indoor Running": "Treadmill Run",
-    "Treadmill": "Treadmill Run",
-}
 
 
 class Run(BaseModel):
@@ -162,19 +154,24 @@ class Run(BaseModel):
     def from_hae(cls, workout: "HaeWorkout") -> Self:
         """Create a Run from a Health Auto Export (Apple Health) workout.
 
-        The caller is responsible for confirming the workout is a run (its
-        ``name`` is in ``HaeRunMap``) before calling this.
+        The caller is responsible for confirming the workout is a run
+        (``workout_category(workout) == "run"``) before calling this. Indoor vs
+        outdoor is taken from the workout's ``isIndoor`` flag, not its name.
         """
         from fitness.models.hae import (
+            is_indoor_workout,
             parse_hae_timestamp,
             quantity_to_miles,
             quantity_value,
         )
 
+        run_type: RunType = (
+            "Treadmill Run" if is_indoor_workout(workout) else "Outdoor Run"
+        )
         return cls(
             id=f"hae_{workout.id}",
             datetime_utc=parse_hae_timestamp(workout.start),
-            type=HaeRunMap[workout.name],
+            type=run_type,
             distance=quantity_to_miles(workout.distance),
             duration=workout.duration,
             avg_heart_rate=quantity_value(workout.avg_heart_rate),
