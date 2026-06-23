@@ -65,6 +65,83 @@ def test_unknown_token_returns_401(client, monkeypatch):
     assert resp.status_code == 401
 
 
+# A trimmed, anonymized copy of a REAL Health Auto Export workout (GPS route and
+# per-sample arrays shortened, location coordinates faked). Captured from a live
+# device to lock in the real field shapes: name "Outdoor Run" (not "Running"),
+# isIndoor/location, the aggregate avgHeartRate, stepCadence in count/min, a
+# float duration, and many extra fields that must be ignored.
+_REAL_OUTDOOR_RUN = {
+    "id": "AA0FB1AB-5C1E-4224-84D5-F2A6C0EA1444",
+    "name": "Outdoor Run",
+    "start": "2026-06-23 06:08:21 -0500",
+    "end": "2026-06-23 07:08:10 -0500",
+    "duration": 3586.641825914383,
+    "isIndoor": False,
+    "location": "Outdoor",
+    "distance": {"qty": 7.004961937937455, "units": "mi"},
+    "avgHeartRate": {"qty": 138.88300835654596, "units": "bpm"},
+    "maxHeartRate": {"qty": 164, "units": "bpm"},
+    "stepCadence": {"qty": 168.71888969566902, "units": "count/min"},
+    # extra fields HAE includes that we do not model and must ignore:
+    "heartRate": {
+        "avg": {"qty": 138.8, "units": "bpm"},
+        "max": {"qty": 164, "units": "bpm"},
+    },
+    "heartRateData": [
+        {
+            "Avg": 88,
+            "Max": 88,
+            "Min": 88,
+            "date": "2026-06-23 06:08:24 -0500",
+            "units": "bpm",
+        }
+    ],
+    "activeEnergyBurned": {"qty": 920.0, "units": "kcal"},
+    "avgSpeed": {"qty": 6.88, "units": "mi"},
+    "route": [{"latitude": 0.0, "longitude": 0.0, "altitude": 180.0}],
+    "metadata": {},
+}
+
+
+def test_ingests_realistic_full_workout(client, monkeypatch):
+    """A real-shaped HAE workout (many extra fields) ingests as one Outdoor Run."""
+    captured = {}
+    monkeypatch.setattr(
+        "fitness.app.ingest_auth.get_active_token_by_hash", lambda h: _active_token()
+    )
+    monkeypatch.setattr("fitness.app.ingest_auth.touch_last_used", lambda i: None)
+    monkeypatch.setattr(
+        "fitness.app.routers.ingest.bulk_create_runs",
+        lambda runs: captured.__setitem__("runs", runs) or len(runs),
+    )
+    monkeypatch.setattr(
+        "fitness.app.routers.ingest.bulk_create_rides", lambda rides: len(rides)
+    )
+
+    resp = client.post(
+        "/ingest/hae",
+        json=_body(_REAL_OUTDOOR_RUN),
+        headers={"Authorization": "Bearer fitapi_good"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {
+        "received": 1,
+        "created": 1,
+        "skipped": 0,
+        "errors": [],
+        "token_name": "hae-ingest",
+    }
+    run = captured["runs"][0]
+    assert run.id == "hae_AA0FB1AB-5C1E-4224-84D5-F2A6C0EA1444"
+    assert run.type == "Outdoor Run"
+    assert run.distance == pytest.approx(7.004961937937455)
+    assert run.avg_heart_rate == pytest.approx(138.88300835654596)
+    assert run.max_heart_rate == 164
+    assert run.step_cadence == pytest.approx(168.71888969566902)
+    assert run.source == "Apple Health"
+
+
 def test_valid_token_ingests_run(client, monkeypatch):
     captured = {}
     monkeypatch.setattr(
