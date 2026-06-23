@@ -8,10 +8,18 @@ from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from fitness.integrations.strava.models import StravaActivity
+    from fitness.models.hae import HaeWorkout
 
 
 RideType = Literal["Outdoor Ride", "Indoor Ride"]
-RideSource = Literal["Strava"]
+RideSource = Literal["Strava", "Apple Health"]
+
+# Map Health Auto Export (Apple Health) workout names to our ride types. A name
+# absent from this map is NOT a ride (the ingest router skips it).
+HaeRideMap: dict[str, RideType] = {
+    "Cycling": "Outdoor Ride",
+    "Indoor Cycling": "Indoor Ride",
+}
 
 
 def _classify_strava_ride(strava_activity: "StravaActivity") -> RideType:
@@ -41,6 +49,10 @@ class Ride(BaseModel):
     source: RideSource
     avg_heart_rate: float | None = None
     deleted_at: datetime | None = None
+    # Captured from Health Auto Export (Apple Health); None for Strava rides.
+    max_heart_rate: float | None = None
+    end_datetime_utc: datetime | None = None
+    source_name: str | None = None  # raw provider workout name, for provenance
 
     @property
     def is_deleted(self) -> bool:
@@ -62,6 +74,32 @@ class Ride(BaseModel):
             self.datetime_utc.date() if self.datetime_utc is not None else None
         )
         return data
+
+    @classmethod
+    def from_hae(cls, workout: "HaeWorkout") -> Self:
+        """Create a Ride from a Health Auto Export (Apple Health) workout.
+
+        The caller is responsible for confirming the workout is a ride (its
+        ``name`` is in ``HaeRideMap``) before calling this.
+        """
+        from fitness.models.hae import (
+            parse_hae_timestamp,
+            quantity_to_miles,
+            quantity_value,
+        )
+
+        return cls(
+            id=f"hae_{workout.id}",
+            datetime_utc=parse_hae_timestamp(workout.start),
+            type=HaeRideMap[workout.name],
+            distance=quantity_to_miles(workout.distance),
+            duration=workout.duration,
+            avg_heart_rate=quantity_value(workout.avg_heart_rate),
+            max_heart_rate=quantity_value(workout.max_heart_rate),
+            end_datetime_utc=parse_hae_timestamp(workout.end),
+            source_name=workout.name,
+            source="Apple Health",
+        )
 
     @classmethod
     def from_strava(cls, strava_activity: "StravaActivity") -> Self:

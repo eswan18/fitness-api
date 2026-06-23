@@ -8,6 +8,7 @@ Fitness API is a Python backend for analyzing and aggregating fitness data from 
 - **Strava**: Outdoor runs via OAuth API integration
 - **MapMyFitness**: Historical/treadmill runs via CSV upload
 - **Hevy**: Weightlifting data via Hevy API integration
+- **Apple Health (Health Auto Export)**: Runs and rides pushed by the HAE iOS app to `POST /ingest/hae` (decouples ingestion from Strava and captures running cadence, which Strava drops)
 
 The frontend dashboard is a separate project and not included in this repository.
 
@@ -43,6 +44,11 @@ make ty            # Type checking
 # Database
 uv run alembic upgrade head              # Run migrations
 uv run alembic revision -m "message"     # Create new migration
+
+# Ingestion API tokens (per-service bearer tokens for POST /ingest/hae)
+uv run fitapi-token mint --name health-auto-export   # raw token printed once
+uv run fitapi-token list [--all]
+uv run fitapi-token revoke --prefix fitapi_AbC123    # or --id N
 ```
 
 ## Directory Structure
@@ -72,7 +78,14 @@ tests/
 ### Database Layer
 - **Raw SQL via psycopg3** - No ORM, direct queries in `fitness/db/`
 - **Context managers** - Connection management with automatic cleanup
-- **Deterministic IDs** - Strava runs: `strava_{id}`, MMF runs: `mmf_{id}`, Shoes: normalized name
+- **Deterministic IDs** - Strava runs: `strava_{id}`, MMF runs: `mmf_{id}`, Apple Health runs/rides: `hae_{HealthKit UUID}`, Shoes: normalized name
+
+### Apple Health ingestion (`POST /ingest/hae`)
+- HAE forwards Apple Health workouts as JSON v2: `{ "data": { "workouts": [...], "metrics": [...] } }`. Timestamps are `yyyy-MM-dd HH:mm:ss Z` (space + offset, not ISO-`T`) — parse with `fitness/models/hae.py:parse_hae_timestamp`.
+- Running workout names map to `runs` (`HaeRunMap` in `models/run.py`), cycling to `rides` (`HaeRideMap` in `models/ride.py`); everything else is counted as `skipped`. Both tables feed the existing TRIMP/hrTSS calc via `avg_heart_rate` + `duration`, so no calc wiring is needed.
+- Idempotent: inserted with `ON CONFLICT (id) DO NOTHING` (HAE re-sends overlapping windows + retries). Re-sends never duplicate and never touch user-authored `notes`/`shoe_id`.
+- `runs`/`rides` gained nullable columns `max_heart_rate`, `step_cadence` (runs only), `end_datetime_utc`, `source_name`. These are persisted on ingest but not yet surfaced by the read models (`_row_to_run`/`_row_to_ride` still select base columns) — a future enhancement.
+- **No nginx/body-limit knob**: this service runs uvicorn directly behind a Cloudflare Tunnel (~100 MB cap). The issue's "raise `client_max_body_size`" task is a no-op here; if a 413 is ever seen on large GPS payloads, enable HAE "Batch Requests".
 
 ### Data Patterns
 - **Soft deletion** - `deleted_at` field, records preserved for audit
@@ -83,6 +96,7 @@ tests/
 - OAuth 2.0 via external identity provider
 - Bearer tokens for mutation endpoints (POST/PATCH/DELETE)
 - Read endpoints (GET) are public
+- **Ingestion tokens** (separate system): `POST /ingest/*` endpoints use per-service bearer tokens (`fitapi_<token_urlsafe(32)>`) stored as a SHA-256 hash in the `api_tokens` table — NOT OAuth/JWT. Minted/revoked with the `fitapi-token` CLI; validated by the `require_ingest_token` dependency (`fitness/app/ingest_auth.py`). SHA-256 (not bcrypt) because the token already carries 256 bits of entropy and we need an indexed hash lookup.
 
 ## Environment Variables
 

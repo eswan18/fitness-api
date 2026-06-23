@@ -15,6 +15,7 @@ from .exercise_templates import router as exercise_templates_router
 from .lift_sync import router as lift_sync_router
 from .run_workouts import router as run_workouts_router
 from .run_workout_sync import router as run_workout_sync_router
+from .ingest import router as ingest_router
 
 __all__ = [
     "metrics_router",
@@ -34,4 +35,5 @@ __all__ = [
     "lift_sync_router",
     "run_workouts_router",
     "run_workout_sync_router",
+    "ingest_router",
 ]

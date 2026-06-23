@@ -150,8 +150,8 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
                         # rather than failing the whole batch on a PK conflict.
                         cursor.execute(
                             """
-                            INSERT INTO runs (id, datetime_utc, type, distance, duration, source, avg_heart_rate, shoe_id, deleted_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            INSERT INTO runs (id, datetime_utc, type, distance, duration, source, avg_heart_rate, shoe_id, deleted_at, max_heart_rate, step_cadence, end_datetime_utc, source_name)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ON CONFLICT (id) DO NOTHING
                             """,
                             (
@@ -164,6 +164,10 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
                                 run.avg_heart_rate,
                                 shoe_id,
                                 run.deleted_at,
+                                run.max_heart_rate,
+                                run.step_cadence,
+                                run.end_datetime_utc,
+                                run.source_name,
                             ),
                         )
 
