@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     # This prevents circular imports at runtime.
     from fitness.load.mmf import MmfActivity, MmfActivityType
     from fitness.integrations.strava.models import (
+        StravaActivity,
         StravaActivityType,
-        StravaActivityWithGear,
     )
 
 
@@ -145,15 +145,16 @@ class Run(BaseModel):
         return run
 
     @classmethod
-    def from_strava(cls, strava_run: StravaActivityWithGear) -> Self:
-        """Create a Run from a Strava activity with gear metadata."""
-        shoe_name = strava_run.shoes()
+    def from_strava(cls, strava_run: StravaActivity) -> Self:
+        """Create a Run from a Strava activity, with or without gear metadata."""
+        from fitness.integrations.strava.models import StravaActivityWithGear as _WithGear
+
+        shoe_name = strava_run.shoes() if isinstance(strava_run, _WithGear) else None
         run = cls(
-            id=f"strava_{strava_run.id}",  # Use Strava's ID with prefix
+            id=f"strava_{strava_run.id}",
             datetime_utc=strava_run.start_date.replace(tzinfo=None),
             type=StravaActivityMap[strava_run.type],
-            # Note that we need to convert the distance from meters to miles.
-            distance=strava_run.distance_miles(),
+            distance=strava_run.distance * 0.000621371,  # meters -> miles
             duration=strava_run.elapsed_time,
             avg_heart_rate=strava_run.average_heartrate,
             source="Strava",
