@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 app = "fitness.app:app"
+fitapi-token = "fitness.scripts.tokens:main"
 
 [dependency-groups]
 dev = [

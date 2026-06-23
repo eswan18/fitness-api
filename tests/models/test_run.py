@@ -4,7 +4,63 @@ import zoneinfo
 import pytest
 
 from fitness.models import Run
+from fitness.models.hae import HaeWorkout
 from tests._factories import StravaActivityWithGearFactory, MmfActivityFactory
+
+
+def _hae_run_workout(**overrides) -> HaeWorkout:
+    base = {
+        "id": "AAAA-1111",
+        "name": "Running",
+        "start": "2026-06-20 07:00:00 -0500",
+        "end": "2026-06-20 07:30:00 -0500",
+        "duration": 1800,
+        "distance": {"qty": 10.0, "units": "km"},
+        "avgHeartRate": {"qty": 150.0, "units": "count/min"},
+        "maxHeartRate": {"qty": 175.0, "units": "count/min"},
+        "stepCadence": {"qty": 168.0, "units": "spm"},
+    }
+    base.update(overrides)
+    return HaeWorkout.model_validate(base)
+
+
+def test_run_from_hae():
+    run = Run.from_hae(_hae_run_workout())
+    assert run.id == "hae_AAAA-1111"
+    assert run.datetime_utc == datetime(2026, 6, 20, 12, 0, 0)  # -0500 -> UTC
+    assert run.end_datetime_utc == datetime(2026, 6, 20, 12, 30, 0)
+    assert run.type == "Outdoor Run"
+    assert run.distance == pytest.approx(6.21371, abs=1e-4)  # 10 km -> miles
+    assert run.duration == 1800
+    assert run.avg_heart_rate == 150.0
+    assert run.max_heart_rate == 175.0
+    assert run.step_cadence == 168.0
+    assert run.source == "Apple Health"
+    assert run.source_name == "Running"
+    assert run.deleted_at is None
+
+
+def test_run_from_hae_outdoor_by_default():
+    # HAE emits a single running activity type; absent isIndoor -> outdoor.
+    assert Run.from_hae(_hae_run_workout(name="Running")).type == "Outdoor Run"
+
+
+def test_run_from_hae_treadmill_via_is_indoor_flag():
+    # Indoor is signalled by the isIndoor boolean, not the workout name.
+    run = Run.from_hae(_hae_run_workout(name="Running", isIndoor=True))
+    assert run.type == "Treadmill Run"
+
+
+def test_run_from_hae_treadmill_via_name_keyword():
+    # Fallback when isIndoor is absent but the name says indoor/treadmill.
+    assert Run.from_hae(_hae_run_workout(name="Indoor Run")).type == "Treadmill Run"
+    assert Run.from_hae(_hae_run_workout(name="Treadmill")).type == "Treadmill Run"
+
+
+def test_run_from_hae_handles_apple_fitness_outdoor_run_name():
+    # Whether HAE sends "Running" or "Outdoor Run", it must classify as a run.
+    run = Run.from_hae(_hae_run_workout(name="Outdoor Run"))
+    assert run.type == "Outdoor Run"
 
 
 def test_run_from_strava(

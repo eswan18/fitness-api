@@ -134,13 +134,16 @@ def bulk_create_rides(rides: list[Ride], chunk_size: int = 20) -> int:
                             ride.source,
                             ride.avg_heart_rate,
                             ride.deleted_at,
+                            ride.max_heart_rate,
+                            ride.end_datetime_utc,
+                            ride.source_name,
                         )
                         for ride in chunk
                     ]
                     cursor.executemany(
                         """
-                        INSERT INTO rides (id, datetime_utc, type, distance, duration, source, avg_heart_rate, deleted_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO rides (id, datetime_utc, type, distance, duration, source, avg_heart_rate, deleted_at, max_heart_rate, end_datetime_utc, source_name)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (id) DO NOTHING
                         """,
                         ride_data,

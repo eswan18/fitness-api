@@ -8,10 +8,11 @@ from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from fitness.integrations.strava.models import StravaActivity
+    from fitness.models.hae import HaeWorkout
 
 
 RideType = Literal["Outdoor Ride", "Indoor Ride"]
-RideSource = Literal["Strava"]
+RideSource = Literal["Strava", "Apple Health"]
 
 
 def _classify_strava_ride(strava_activity: "StravaActivity") -> RideType:
@@ -41,6 +42,10 @@ class Ride(BaseModel):
     source: RideSource
     avg_heart_rate: float | None = None
     deleted_at: datetime | None = None
+    # Captured from Health Auto Export (Apple Health); None for Strava rides.
+    max_heart_rate: float | None = None
+    end_datetime_utc: datetime | None = None
+    source_name: str | None = None  # raw provider workout name, for provenance
 
     @property
     def is_deleted(self) -> bool:
@@ -62,6 +67,37 @@ class Ride(BaseModel):
             self.datetime_utc.date() if self.datetime_utc is not None else None
         )
         return data
+
+    @classmethod
+    def from_hae(cls, workout: "HaeWorkout") -> Self:
+        """Create a Ride from a Health Auto Export (Apple Health) workout.
+
+        The caller is responsible for confirming the workout is a ride
+        (``workout_category(workout) == "ride"``) before calling this. Indoor vs
+        outdoor is taken from the workout's ``isIndoor`` flag, not its name.
+        """
+        from fitness.models.hae import (
+            is_indoor_workout,
+            parse_hae_timestamp,
+            quantity_to_miles,
+            quantity_value,
+        )
+
+        ride_type: RideType = (
+            "Indoor Ride" if is_indoor_workout(workout) else "Outdoor Ride"
+        )
+        return cls(
+            id=f"hae_{workout.id}",
+            datetime_utc=parse_hae_timestamp(workout.start),
+            type=ride_type,
+            distance=quantity_to_miles(workout.distance),
+            duration=workout.duration,
+            avg_heart_rate=quantity_value(workout.avg_heart_rate),
+            max_heart_rate=quantity_value(workout.max_heart_rate),
+            end_datetime_utc=parse_hae_timestamp(workout.end),
+            source_name=workout.name,
+            source="Apple Health",
+        )
 
     @classmethod
     def from_strava(cls, strava_activity: "StravaActivity") -> Self:

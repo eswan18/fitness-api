@@ -4,7 +4,48 @@ import pytest
 from pydantic import ValidationError
 
 from fitness.models import Ride, LocalizedRide
+from fitness.models.hae import HaeWorkout
 from tests._factories import StravaRideActivityFactory
+
+
+def test_ride_from_hae():
+    workout = HaeWorkout.model_validate(
+        {
+            "id": "CYCLE-1",
+            "name": "Cycling",
+            "start": "2026-06-20 07:00:00 -0500",
+            "end": "2026-06-20 08:00:00 -0500",
+            "duration": 3600,
+            "distance": {"qty": 20.0, "units": "mi"},
+            "avgHeartRate": {"qty": 130.0, "units": "count/min"},
+            "maxHeartRate": {"qty": 160.0, "units": "count/min"},
+        }
+    )
+    ride = Ride.from_hae(workout)
+    assert ride.id == "hae_CYCLE-1"
+    assert ride.datetime_utc == datetime(2026, 6, 20, 12, 0, 0)
+    assert ride.end_datetime_utc == datetime(2026, 6, 20, 13, 0, 0)
+    assert ride.type == "Outdoor Ride"
+    assert ride.distance == 20.0
+    assert ride.duration == 3600
+    assert ride.avg_heart_rate == 130.0
+    assert ride.max_heart_rate == 160.0
+    assert ride.source == "Apple Health"
+    assert ride.source_name == "Cycling"
+
+
+def test_ride_from_hae_indoor_via_is_indoor_flag():
+    workout = HaeWorkout.model_validate(
+        {
+            "id": "CYCLE-2",
+            "name": "Cycling",
+            "isIndoor": True,
+            "start": "2026-06-20 07:00:00 -0500",
+            "end": "2026-06-20 08:00:00 -0500",
+            "duration": 3600,
+        }
+    )
+    assert Ride.from_hae(workout).type == "Indoor Ride"
 
 
 def test_ride_from_strava_outdoor(
@@ -73,9 +114,7 @@ def test_ride_from_strava_outdoor_explicit_no_trainer(
 def test_ride_from_strava_no_heartrate(
     strava_ride_activity_factory: StravaRideActivityFactory,
 ):
-    activity = strava_ride_activity_factory.make(
-        update={"average_heartrate": None}
-    )
+    activity = strava_ride_activity_factory.make(update={"average_heartrate": None})
     ride = Ride.from_strava(activity)
     assert ride.avg_heart_rate is None
 

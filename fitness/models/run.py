@@ -18,10 +18,11 @@ if TYPE_CHECKING:
         StravaActivityType,
         StravaActivityWithGear,
     )
+    from fitness.models.hae import HaeWorkout
 
 
 RunType = Literal["Outdoor Run", "Treadmill Run"]
-RunSource = Literal["MapMyFitness", "Strava"]
+RunSource = Literal["MapMyFitness", "Strava", "Apple Health"]
 
 # Map the MMF activity types to our run types.
 MmfActivityMap: dict[MmfActivityType, RunType] = {
@@ -46,6 +47,11 @@ class Run(BaseModel):
     shoe_id: str | None = None  # Foreign key to shoes table
     notes: str | None = None  # User-authored markdown note (preserved across re-syncs)
     deleted_at: datetime | None = None
+    # Captured from Health Auto Export (Apple Health); None for Strava/MMF runs.
+    max_heart_rate: float | None = None
+    step_cadence: float | None = None  # steps per minute
+    end_datetime_utc: datetime | None = None
+    source_name: str | None = None  # raw provider workout name, for provenance
 
     # Keep shoe name for backward compatibility and data loading
     _shoe_name: str | None = None
@@ -143,6 +149,38 @@ class Run(BaseModel):
         )
         run._shoe_name = shoe_name
         return run
+
+    @classmethod
+    def from_hae(cls, workout: "HaeWorkout") -> Self:
+        """Create a Run from a Health Auto Export (Apple Health) workout.
+
+        The caller is responsible for confirming the workout is a run
+        (``workout_category(workout) == "run"``) before calling this. Indoor vs
+        outdoor is taken from the workout's ``isIndoor`` flag, not its name.
+        """
+        from fitness.models.hae import (
+            is_indoor_workout,
+            parse_hae_timestamp,
+            quantity_to_miles,
+            quantity_value,
+        )
+
+        run_type: RunType = (
+            "Treadmill Run" if is_indoor_workout(workout) else "Outdoor Run"
+        )
+        return cls(
+            id=f"hae_{workout.id}",
+            datetime_utc=parse_hae_timestamp(workout.start),
+            type=run_type,
+            distance=quantity_to_miles(workout.distance),
+            duration=workout.duration,
+            avg_heart_rate=quantity_value(workout.avg_heart_rate),
+            max_heart_rate=quantity_value(workout.max_heart_rate),
+            step_cadence=quantity_value(workout.step_cadence),
+            end_datetime_utc=parse_hae_timestamp(workout.end),
+            source_name=workout.name,
+            source="Apple Health",
+        )
 
     @classmethod
     def from_strava(cls, strava_run: StravaActivityWithGear) -> Self:
