@@ -244,6 +244,50 @@ def test_marking_run_writes_history_audit(editor_client):
 
 
 @pytest.mark.e2e
+def test_duplicate_suggestions_surfaces_and_clears(viewer_client, editor_client):
+    """The suggestions endpoint flags a cross-source pair, then drops it once marked."""
+    strava = _run("sugg_strava_1", "Strava", datetime(2025, 5, 1, 6, 0, 0))
+    hae = _run("sugg_hae_1", "Apple Health", datetime(2025, 5, 1, 6, 2, 0))
+    assert bulk_create_runs([strava, hae]) == 2
+
+    def my_suggestion():
+        # The endpoint scans all-time, so other tests' data may also appear;
+        # locate our specific pair by id rather than asserting a global count.
+        res = viewer_client.get("/duplicate-suggestions")
+        assert res.status_code == 200
+        for s in res.json():
+            if {s["keep"]["id"], s["duplicate"]["id"]} == {
+                "sugg_strava_1",
+                "sugg_hae_1",
+            }:
+                return s
+        return None
+
+    s = my_suggestion()
+    assert s is not None
+    assert s["kind"] == "run"
+    # Neither is calendar-synced → default keep is the Strava copy.
+    assert s["keep"]["id"] == "sugg_strava_1"
+    assert s["duplicate"]["id"] == "sugg_hae_1"
+    assert 0.0 <= s["score"] <= 1.0
+
+    # Accept the suggestion via the existing mark endpoint.
+    res = editor_client.post(
+        f"/runs/{s['duplicate']['id']}/duplicate-of",
+        json={"duplicate_of_id": s["keep"]["id"]},
+    )
+    assert res.status_code == 200, res.text
+
+    # Once marked, the pair no longer shows up.
+    assert my_suggestion() is None
+
+
+@pytest.mark.e2e
+def test_duplicate_suggestions_requires_auth(client):
+    assert client.get("/duplicate-suggestions").status_code == 401
+
+
+@pytest.mark.e2e
 def test_ride_duplicate_error_cases(viewer_client, editor_client):
     """Ride self-reference and auth mirror the run rules."""
     a = _ride("dup_ride_err_a", "Strava", datetime(2025, 4, 5, 7, 0, 0))
