@@ -46,6 +46,7 @@ from .routers import (
     run_workouts_router,
     run_workout_sync_router,
     ingest_router,
+    duplicates_router,
 )
 from .models import EnvironmentResponse
 from .auth import require_viewer
@@ -142,6 +143,7 @@ app.include_router(lift_sync_router)
 app.include_router(run_workouts_router)
 app.include_router(run_workout_sync_router)
 app.include_router(ingest_router)
+app.include_router(duplicates_router)
 # Compress larger JSON responses (the per-day/week metrics lists compress ~5-10x).
 # Added before CORS so CORSMiddleware stays the outermost layer — it still handles
 # preflight and sets Access-Control headers on every (now-compressed) response.

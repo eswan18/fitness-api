@@ -16,6 +16,7 @@ from .lift_sync import router as lift_sync_router
 from .run_workouts import router as run_workouts_router
 from .run_workout_sync import router as run_workout_sync_router
 from .ingest import router as ingest_router
+from .duplicates import router as duplicates_router
 
 __all__ = [
     "metrics_router",
@@ -36,4 +37,5 @@ __all__ = [
     "run_workouts_router",
     "run_workout_sync_router",
     "ingest_router",
+    "duplicates_router",
 ]
