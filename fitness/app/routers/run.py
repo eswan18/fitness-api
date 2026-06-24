@@ -13,17 +13,26 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, Field
 
-from fitness.db.runs import get_run_by_id, update_run_notes
+from fitness.db.runs import (
+    get_run_by_id,
+    update_run_notes,
+    get_run_duplicate_of,
+    mark_run_duplicate,
+    unmark_run_duplicate,
+    find_candidate_duplicate_runs,
+)
 from fitness.db.runs_history import (
     update_run_with_history,
     get_run_history,
     get_run_version,
     RunHistoryRecord,
 )
-from fitness.db.synced_runs import is_run_synced
+from fitness.db.synced_runs import is_run_synced, get_synced_run, delete_synced_run
 from fitness.app.auth import require_viewer, require_editor
+from fitness.app.routers._sync_helpers import perform_unsync
 from fitness.models.user import User
 from fitness.models import Run
+from fitness.models.run_detail import RunDetail
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +237,129 @@ def update_run_note(
             detail=f"Run with ID {run_id} not found",
         )
     return updated
+
+
+class MarkDuplicateRequest(BaseModel):
+    """Request model for marking a run as a duplicate of another run."""
+
+    duplicate_of_id: str = Field(
+        ..., description="ID of the run this is a duplicate of (the one to keep)"
+    )
+    changed_by: str = Field("user", description="User making the change")
+
+
+class MarkDuplicateResponse(BaseModel):
+    """Response model for mark/unmark duplicate operations."""
+
+    status: str
+    message: str
+    run_id: str
+    duplicate_of_id: str | None = None
+
+
+@router.post("/{run_id}/duplicate-of", response_model=MarkDuplicateResponse)
+def mark_run_as_duplicate(
+    run_id: str,
+    request: MarkDuplicateRequest,
+    _user: User = Depends(require_editor),
+) -> MarkDuplicateResponse:
+    """Mark a run as a duplicate of another run.
+
+    Hides this run from the feed and metrics (via ``deleted_at``, which also
+    prevents it from being re-imported) and records which run it duplicates so
+    the mark can be displayed and undone.
+
+    Side effect: if this run is synced to Google Calendar, it is unsynced first
+    (the calendar event is deleted) so no orphaned event is left behind.
+    """
+    _get_run_or_404(run_id)
+
+    target_id = request.duplicate_of_id
+    if target_id == run_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A run cannot be a duplicate of itself",
+        )
+
+    # The kept run must exist and be live. Look it up including soft-deleted so
+    # we can give a precise error: a duplicate (always soft-deleted) would
+    # otherwise read as a plain 404.
+    target = get_run_by_id(target_id, include_deleted=True)
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run to keep ({target_id}) not found",
+        )
+    if target.deleted_at is not None:
+        if get_run_duplicate_of(target_id) is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Run to keep ({target_id}) is itself a duplicate; "
+                    "point at the original run instead"
+                ),
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Run to keep ({target_id}) has been deleted",
+        )
+
+    # Unsync from Google Calendar first so the marked-away run leaves no event.
+    if is_run_synced(run_id):
+        result = perform_unsync(
+            entity_id=run_id,
+            entity_type="run",
+            synced_record=get_synced_run(run_id),
+            delete_sync_record=lambda: delete_synced_run(run_id),
+        )
+        if not result.success:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not unsync run before marking duplicate: {result.message}",
+            )
+
+    if not mark_run_duplicate(run_id, target_id, request.changed_by):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Run {run_id} could not be marked as a duplicate",
+        )
+
+    return MarkDuplicateResponse(
+        status="success",
+        message=f"Run {run_id} marked as duplicate of {target_id}",
+        run_id=run_id,
+        duplicate_of_id=target_id,
+    )
+
+
+@router.delete("/{run_id}/duplicate-of", response_model=MarkDuplicateResponse)
+def unmark_run_as_duplicate(
+    run_id: str,
+    _user: User = Depends(require_editor),
+) -> MarkDuplicateResponse:
+    """Reverse a duplicate marking, restoring the run to the feed."""
+    if not unmark_run_duplicate(run_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run {run_id} is not currently marked as a duplicate",
+        )
+    return MarkDuplicateResponse(
+        status="success",
+        message=f"Run {run_id} is no longer marked as a duplicate",
+        run_id=run_id,
+        duplicate_of_id=None,
+    )
+
+
+@router.get("/{run_id}/duplicate-candidates", response_model=list[RunDetail])
+def get_run_duplicate_candidates(
+    run_id: str,
+    window_minutes: int = 120,
+    _user: User = Depends(require_viewer),
+) -> list[RunDetail]:
+    """List live runs near this one in time that it could be a duplicate of."""
+    _get_run_or_404(run_id)
+    return find_candidate_duplicate_runs(run_id, window_minutes=window_minutes)
 
 
 @router.get("/{run_id}/history", response_model=list[RunHistoryResponse])

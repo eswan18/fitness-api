@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 _RIDE_DETAIL_SELECT = sql.SQL("""
     SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source,
-           r.avg_heart_rate, r.deleted_at,
+           r.avg_heart_rate, r.deleted_at, r.duplicate_of_id,
            sr.sync_status, sr.synced_at, sr.google_event_id,
            sr.ride_version, sr.error_message
     FROM rides r
@@ -30,6 +30,7 @@ def _row_to_ride_detail(row) -> RideDetail:
         source,
         avg_heart_rate,
         deleted_at,
+        duplicate_of_id,
         sync_status,
         synced_at,
         google_event_id,
@@ -45,6 +46,7 @@ def _row_to_ride_detail(row) -> RideDetail:
         source=source,
         avg_heart_rate=avg_heart_rate,
         deleted_at=deleted_at,
+        duplicate_of_id=duplicate_of_id,
         is_synced=(sync_status == "synced"),
         sync_status=sync_status,
         synced_at=synced_at,
@@ -303,6 +305,90 @@ def update_ride(ride_id: str, updates: dict) -> Ride:
     if updated is None:  # Should be unreachable given rowcount check above.
         raise ValueError(f"Ride {ride_id} not found after update")
     return updated
+
+
+def get_ride_duplicate_of(ride_id: str) -> str | None:
+    """Return the id this ride is marked as a duplicate of, or None.
+
+    Returns None both when the ride does not exist and when it is not a
+    duplicate; callers needing to distinguish should check existence first.
+    """
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT duplicate_of_id FROM rides WHERE id = %s", (ride_id,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+
+def mark_ride_duplicate(ride_id: str, duplicate_of_id: str) -> bool:
+    """Mark a ride as a duplicate of another ride.
+
+    Sets `deleted_at` (so it disappears from every read and is skipped on
+    re-import) and `duplicate_of_id` (the kept ride). The caller is responsible
+    for validating that `duplicate_of_id` refers to a live, non-duplicate ride.
+    Returns False if the ride does not exist or is already soft-deleted.
+    Rides have no history table, so no audit row is written.
+    """
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE rides
+            SET deleted_at = CURRENT_TIMESTAMP,
+                duplicate_of_id = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND deleted_at IS NULL
+            """,
+            (duplicate_of_id, ride_id),
+        )
+        return cursor.rowcount > 0
+
+
+def unmark_ride_duplicate(ride_id: str) -> bool:
+    """Reverse `mark_ride_duplicate`: clear `deleted_at` and `duplicate_of_id`.
+
+    The `duplicate_of_id IS NOT NULL` guard ensures this only resurrects rides
+    hidden *because* they were duplicates. Returns False if the ride is not
+    currently a duplicate.
+    """
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE rides
+            SET deleted_at = NULL,
+                duplicate_of_id = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+              AND deleted_at IS NOT NULL
+              AND duplicate_of_id IS NOT NULL
+            """,
+            (ride_id,),
+        )
+        return cursor.rowcount > 0
+
+
+def find_candidate_duplicate_rides(
+    ride_id: str,
+    window_minutes: int = 120,
+) -> list[RideDetail]:
+    """Find live rides near `ride_id` in time that could be its original.
+
+    Returns non-deleted, non-duplicate rides (excluding `ride_id` itself) whose
+    `datetime_utc` is within ±`window_minutes` of the target, ordered by time
+    proximity. Returns an empty list if the target ride does not exist.
+    """
+    target = get_ride_by_id(ride_id, include_deleted=True)
+    if target is None:
+        return []
+
+    start = target.datetime_utc - timedelta(minutes=window_minutes)
+    end = target.datetime_utc + timedelta(minutes=window_minutes)
+    query = sql.SQL(
+        "{select} WHERE r.id != %s AND r.deleted_at IS NULL "
+        "AND r.duplicate_of_id IS NULL AND r.datetime_utc BETWEEN %s AND %s "
+        "ORDER BY ABS(EXTRACT(EPOCH FROM (r.datetime_utc - %s))) ASC"
+    ).format(select=_RIDE_DETAIL_SELECT)
+    with get_db_cursor() as cursor:
+        cursor.execute(query, (ride_id, start, end, target.datetime_utc))
+        return [_row_to_ride_detail(row) for row in cursor.fetchall()]
 
 
 def get_existing_ride_ids() -> set[str]:

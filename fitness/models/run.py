@@ -47,6 +47,8 @@ class Run(BaseModel):
     shoe_id: str | None = None  # Foreign key to shoes table
     notes: str | None = None  # User-authored markdown note (preserved across re-syncs)
     deleted_at: datetime | None = None
+    # Set when this run was marked as a duplicate of another run (the kept one).
+    duplicate_of_id: str | None = None
     # Captured from Health Auto Export (Apple Health); None for Strava/MMF runs.
     max_heart_rate: float | None = None
     step_cadence: float | None = None  # steps per minute
