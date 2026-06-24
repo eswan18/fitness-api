@@ -84,6 +84,32 @@ def make_sample_strava_gear() -> Callable[[], StravaGear]:
     return create_gear
 
 
+def test_strava_load_run_without_gear_is_included(
+    make_sample_strava_activity, make_sample_strava_gear, monkeypatch
+):
+    """Runs with no shoe assigned in Strava must still be synced (not silently dropped)."""
+    mock_client = MagicMock()
+    run_with_gear = make_sample_strava_activity()
+    run_with_gear.type = "Run"
+    run_with_gear.gear_id = "1"
+    run_no_gear = make_sample_strava_activity()
+    run_no_gear.type = "Run"
+    run_no_gear.gear_id = None
+    mock_client.get_activities.return_value = [run_with_gear, run_no_gear]
+
+    gear1 = make_sample_strava_gear()
+    gear1.id = "1"
+    gear1.nickname = "Brooks Shoes"
+    mock_client.get_gear.return_value = [gear1]
+
+    runs = load_strava_runs(mock_client)
+    assert len(runs) == 2
+    assert runs[0].gear is not None
+    assert runs[0].gear.nickname == "Brooks Shoes"
+    assert runs[1].gear is None
+    mock_client.get_gear.assert_called_once_with({"1"})
+
+
 def test_strava_load(make_sample_strava_activity, make_sample_strava_gear, monkeypatch):
     # Mock the StravaClient to avoid making real HTTP requests.
     mock_client = MagicMock()
@@ -108,7 +134,9 @@ def test_strava_load(make_sample_strava_activity, make_sample_strava_gear, monke
     mock_client.get_gear.return_value = [gear1, gear2]
     runs = load_strava_runs(mock_client)
     assert len(runs) == 2
+    assert runs[0].gear is not None
     assert runs[0].gear.nickname == "Brooks Shoes"
+    assert runs[1].gear is not None
     assert runs[1].gear.nickname == "Nike Shoes"
 
     mock_client.get_gear.assert_called_once_with({"1", "2"})
