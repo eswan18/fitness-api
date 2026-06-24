@@ -108,7 +108,8 @@ See `.env.dev.example` for a template. 🔑 = secret, do not commit.
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` 🔑 | PostgreSQL connection string |
-| `IDENTITY_PROVIDER_URL` | OAuth identity provider base URL |
+| `IDENTITY_PROVIDER_URL` | OAuth identity provider base URL (used for network calls; may be internal K8s DNS) |
+| `JWT_ISSUER` | Expected JWT issuer (`iss`) claim — the external identity URL, even when `IDENTITY_PROVIDER_URL` points at internal K8s DNS |
 | `JWT_AUDIENCE` | Expected JWT audience claim |
 | `PUBLIC_API_BASE_URL` | Public URL of this API (used in OAuth redirects) |
 | `PUBLIC_DASHBOARD_BASE_URL` | Public URL of the frontend dashboard |

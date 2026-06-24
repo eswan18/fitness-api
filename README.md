@@ -2,57 +2,54 @@
 
 ## Overview
 
-This API provides analysis and aggregation of your running data from two sources:
-- **MapMyFitness**: Historical and treadmill runs (CSV export)
-- **Strava**: Outdoor runs (via Strava API)
+This API aggregates and analyzes fitness data from multiple sources:
+- **Strava**: Outdoor runs via OAuth API integration
+- **MapMyFitness**: Historical/treadmill runs via CSV upload
+- **Hevy**: Weightlifting data via the Hevy API
+- **Apple Health (Health Auto Export)**: Runs and rides pushed by the HAE iOS app to `POST /ingest/hae`
+
+The frontend dashboard is a separate project — see [fitness-dashboard](https://github.com/eswan18/fitness-dashboard).
 
 ---
 
 ## 1. Prerequisites
 - Python 3.12+ (recommended: [uv](https://github.com/astral-sh/uv))
 - [Make](https://www.gnu.org/software/make/) (for convenience commands)
-- Strava account (for outdoor run data)
-- MapMyFitness CSV export (for historical/treadmill runs)
+- A PostgreSQL database (Neon in production)
+- A running [identity](https://github.com/eswan18/identity) OAuth provider (for authenticating mutation endpoints)
+- Optional, per integration you want: a Strava API app, a Hevy API key, Google Calendar OAuth credentials, or a MapMyFitness CSV export
 
 ---
 
 ## 2. Environment Variables
 
-Create a `.env` file in the project root directory with the following variables:
+Copy `.env.dev.example` to `.env.dev` and fill in your values. The authoritative list (and which values are secret) lives in [`CLAUDE.md`](CLAUDE.md#environment-variables); the essentials:
 
-```env
-# Required: OAuth Identity Provider
-IDENTITY_PROVIDER_URL=http://localhost:8080
+### Required
 
-# Required for Strava API integration
-STRAVA_CLIENT_ID=your_strava_client_id
-STRAVA_CLIENT_SECRET=your_strava_client_secret
-STRAVA_REFRESH_TOKEN=your_strava_refresh_token
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `IDENTITY_PROVIDER_URL` | OAuth identity provider base URL (used for network calls) |
+| `JWT_ISSUER` | Expected JWT issuer (`iss`) claim — the external identity URL |
+| `JWT_AUDIENCE` | Expected JWT audience claim |
+| `PUBLIC_API_BASE_URL` | Public URL of this API (used in OAuth redirects) |
+| `PUBLIC_DASHBOARD_BASE_URL` | Public URL of the frontend dashboard |
+| `TRMNL_API_KEY` | API key for the TRMNL device endpoint |
+| `OAUTH_STATE_SECRET` | Secret for signing OAuth `state` CSRF tokens |
 
-# Optional: Set the timezone for MMF data (default: America/Chicago)
-# Used when uploading MapMyFitness CSV files via the API
-MMF_TIMEZONE=America/Chicago
+### Optional integrations
 
-# Optional: Google Calendar sync (leave blank to disable sync features)
-GOOGLE_CLIENT_ID=your_google_oauth_client_id
-GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
-# Optional: target calendar (defaults to "primary" if unset)
-GOOGLE_CALENDAR_ID=your_calendar_id
-```
+| Variable | Description |
+|----------|-------------|
+| `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | Strava OAuth app credentials (see Strava Setup below) |
+| `STRAVA_OAUTH_URL` / `STRAVA_TOKEN_URL` | Strava OAuth authorize/token URLs |
+| `HEVY_API_KEY` | Hevy API key for lifting sync |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_CALENDAR_ID` | Google Calendar sync credentials (`GOOGLE_CALENDAR_ID` defaults to `primary`) |
+| `MMF_TIMEZONE` | Timezone for MapMyFitness CSV timestamps (default: `America/Chicago`; can also be set per-upload) |
+| `LOG_LEVEL` | Logging level (default: `WARNING`) |
 
-- **IDENTITY_PROVIDER_URL**:
-  Base URL of the OAuth identity provider. Required for authenticating mutation endpoints (PATCH, POST, DELETE operations). The separate frontend dashboard handles OAuth login automatically.
-
-- **STRAVA_CLIENT_ID / SECRET / REFRESH_TOKEN**:  
-  Get these from your Strava API application settings. See "Strava Setup" section below for initial setup.
-- **STRAVA_ACCESS_TOKEN / EXPIRES_AT** (optional):  
-  Auto-managed by the system after initial setup. These are automatically refreshed and updated.
-- **MMF_TIMEZONE**:  
-  Optional timezone for interpreting MapMyFitness CSV data when uploading. Defaults to "America/Chicago" if not set. Can also be specified per-upload via the API endpoint.
-- **GOOGLE_CLIENT_ID / SECRET**:  
-  OAuth 2.0 credentials from Google Cloud Console (https://console.cloud.google.com). Required for Google Calendar sync. Tokens are stored in the database via the OAuth flow.
-- **GOOGLE_CALENDAR_ID** (optional):
-  Calendar to create events in. If not provided, the API will use the `primary` calendar.
+> Strava and Google access/refresh tokens are **not** environment variables — they're obtained through the in-app OAuth flow and stored in the database (see below).
 
 ---
 
@@ -87,50 +84,32 @@ If you need to make authenticated requests directly (e.g., via curl or scripts),
 
 ---
 
-## 4. Strava Setup
+## 4. Strava Setup (Optional)
 
-Strava integration is required for fetching running activities. This section covers the complete setup and ongoing maintenance of OAuth tokens.
+Strava integration uses OAuth and stores credentials in the **database** — there are no Strava token environment variables, only the client app credentials.
 
 ### Initial Setup
 
-1. **Create Strava API Application**:
+1. **Create a Strava API Application**:
    - Go to [Strava API Settings](https://www.strava.com/settings/api)
-   - Click "Create App" and fill in the application details
-   - Set "Authorization Callback Domain" to `localhost`
+   - Click "Create App" and fill in the details
+   - Set the "Authorization Callback Domain" to match `PUBLIC_API_BASE_URL` (e.g. `localhost` for local dev)
    - Note your Client ID and Client Secret
 
-2. **Get OAuth Tokens via Manual Authorization**:
-   - Construct the authorization URL:
-     ```
-     https://www.strava.com/oauth/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http://localhost&scope=activity:read_all&approval_prompt=auto
-     ```
-   - Visit the URL in your browser and authorize the app
-   - After authorization, you'll be redirected to `localhost` with a `code` parameter in the URL
-   - Exchange the code for tokens:
-     ```sh
-     curl -X POST https://www.strava.com/oauth/token \
-       -d client_id=YOUR_CLIENT_ID \
-       -d client_secret=YOUR_CLIENT_SECRET \
-       -d code=AUTHORIZATION_CODE \
-       -d grant_type=authorization_code
-     ```
-   - The response will contain your access token, refresh token, and expiration timestamp
-
-3. **Add to Environment File**:
-   Copy the values to your `.env` file:
-   ```sh
+2. **Set Environment Variables**:
+   ```env
    STRAVA_CLIENT_ID=your_client_id
    STRAVA_CLIENT_SECRET=your_client_secret
-   STRAVA_REFRESH_TOKEN=your_refresh_token
    ```
+
+3. **Authorize via the OAuth flow**:
+   - Visit `/oauth/strava/authorize` (or fetch the URL from `/oauth/strava/authorize-url`)
+   - Authorize the app on Strava; you'll be redirected back to `/oauth/strava/callback` and tokens are stored in the database
+   - Check status at `/oauth/strava/status`
 
 ### Token Management
 
-The system automatically handles token refresh during runtime:
-- **Access tokens** expire every 6 hours and are auto-refreshed using the refresh token
-- **Refresh tokens** are long-lived and updated when rotated by Strava
-- **No re-authentication** needed during API operation
-- **Manual refresh**: Re-authorize via the steps above if tokens become invalid
+Access and refresh tokens live in the database and are refreshed automatically at runtime. Re-authorize via `/oauth/strava/authorize` only if the tokens are revoked or expire.
 
 ---
 
@@ -228,7 +207,7 @@ curl "http://localhost:8000/sync/runs/failed"
 - Or use the frontend dashboard's upload feature to upload your CSV file
 
 ### Strava
-- The API will prompt you to authorize the app on first run if credentials are missing or expired.
+- Authorize Strava via `/oauth/strava/authorize` (see [Strava Setup](#4-strava-setup-optional) above), then run `POST /strava/sync` to import activities.
 
 ---
 
