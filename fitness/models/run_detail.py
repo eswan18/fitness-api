@@ -24,6 +24,8 @@ class RunDetail(BaseModel):
     shoe_retirement_notes: Optional[str] = None
     notes: Optional[str] = None  # User-authored markdown note on the run
     deleted_at: Optional[datetime] = None
+    # Set when this run was marked as a duplicate of another run (the kept one).
+    duplicate_of_id: Optional[str] = None
     version: Optional[int] = None
     run_workout_id: Optional[str] = None
 

@@ -25,6 +25,8 @@ class RideDetail(BaseModel):
     source: RideSource
     avg_heart_rate: float | None = None
     deleted_at: datetime | None = None
+    # Set when this ride was marked as a duplicate of another ride (the kept one).
+    duplicate_of_id: str | None = None
 
     # Sync info (joined from `synced_rides`).
     is_synced: bool = False

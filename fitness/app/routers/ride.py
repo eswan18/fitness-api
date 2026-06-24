@@ -7,9 +7,23 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from fitness.app.auth import require_editor
-from fitness.db.rides import get_ride_by_id, update_ride
+from fitness.app.auth import require_editor, require_viewer
+from fitness.app.routers._sync_helpers import perform_unsync
+from fitness.db.rides import (
+    get_ride_by_id,
+    update_ride,
+    get_ride_duplicate_of,
+    mark_ride_duplicate,
+    unmark_ride_duplicate,
+    find_candidate_duplicate_rides,
+)
+from fitness.db.synced_rides import (
+    is_ride_synced,
+    get_synced_ride,
+    delete_synced_ride,
+)
 from fitness.models import Ride
+from fitness.models.ride_detail import RideDetail
 from fitness.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -91,3 +105,128 @@ def update_ride_endpoint(
         message="Ride updated",
         ride=updated,
     )
+
+
+class MarkDuplicateRequest(BaseModel):
+    """Request model for marking a ride as a duplicate of another ride."""
+
+    duplicate_of_id: str = Field(
+        ..., description="ID of the ride this is a duplicate of (the one to keep)"
+    )
+
+
+class MarkDuplicateResponse(BaseModel):
+    """Response model for mark/unmark duplicate operations."""
+
+    status: str
+    message: str
+    ride_id: str
+    duplicate_of_id: str | None = None
+
+
+@router.post("/{ride_id}/duplicate-of", response_model=MarkDuplicateResponse)
+def mark_ride_as_duplicate(
+    ride_id: str,
+    request: MarkDuplicateRequest,
+    _user: User = Depends(require_editor),
+) -> MarkDuplicateResponse:
+    """Mark a ride as a duplicate of another ride.
+
+    Hides this ride from the feed and metrics (via ``deleted_at``, which also
+    prevents re-import) and records which ride it duplicates. If the ride is
+    synced to Google Calendar, it is unsynced first so no orphaned event remains.
+    """
+    if get_ride_by_id(ride_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ride {ride_id} not found",
+        )
+
+    target_id = request.duplicate_of_id
+    if target_id == ride_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A ride cannot be a duplicate of itself",
+        )
+
+    # The kept ride must exist and be live. Look it up including soft-deleted so
+    # a duplicate (always soft-deleted) yields a precise error, not a plain 404.
+    target = get_ride_by_id(target_id, include_deleted=True)
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ride to keep ({target_id}) not found",
+        )
+    if target.deleted_at is not None:
+        if get_ride_duplicate_of(target_id) is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Ride to keep ({target_id}) is itself a duplicate; "
+                    "point at the original ride instead"
+                ),
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ride to keep ({target_id}) has been deleted",
+        )
+
+    if is_ride_synced(ride_id):
+        result = perform_unsync(
+            entity_id=ride_id,
+            entity_type="ride",
+            synced_record=get_synced_ride(ride_id),
+            delete_sync_record=lambda: delete_synced_ride(ride_id),
+        )
+        if not result.success:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not unsync ride before marking duplicate: {result.message}",
+            )
+
+    if not mark_ride_duplicate(ride_id, target_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ride {ride_id} could not be marked as a duplicate",
+        )
+
+    return MarkDuplicateResponse(
+        status="success",
+        message=f"Ride {ride_id} marked as duplicate of {target_id}",
+        ride_id=ride_id,
+        duplicate_of_id=target_id,
+    )
+
+
+@router.delete("/{ride_id}/duplicate-of", response_model=MarkDuplicateResponse)
+def unmark_ride_as_duplicate(
+    ride_id: str,
+    _user: User = Depends(require_editor),
+) -> MarkDuplicateResponse:
+    """Reverse a duplicate marking, restoring the ride to the feed."""
+    if not unmark_ride_duplicate(ride_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ride {ride_id} is not currently marked as a duplicate",
+        )
+    return MarkDuplicateResponse(
+        status="success",
+        message=f"Ride {ride_id} is no longer marked as a duplicate",
+        ride_id=ride_id,
+        duplicate_of_id=None,
+    )
+
+
+@router.get("/{ride_id}/duplicate-candidates", response_model=list[RideDetail])
+def get_ride_duplicate_candidates(
+    ride_id: str,
+    window_minutes: int = 120,
+    _user: User = Depends(require_viewer),
+) -> list[RideDetail]:
+    """List live rides near this one in time that it could be a duplicate of."""
+    if get_ride_by_id(ride_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ride {ride_id} not found",
+        )
+    return find_candidate_duplicate_rides(ride_id, window_minutes=window_minutes)

@@ -42,6 +42,8 @@ class Ride(BaseModel):
     source: RideSource
     avg_heart_rate: float | None = None
     deleted_at: datetime | None = None
+    # Set when this ride was marked as a duplicate of another ride (the kept one).
+    duplicate_of_id: str | None = None
     # Captured from Health Auto Export (Apple Health); None for Strava rides.
     max_heart_rate: float | None = None
     end_datetime_utc: datetime | None = None
