@@ -91,6 +91,29 @@ class VolumeByMuscleItem(BaseModel):
     volume: float
 
 
+# --- Helpers ---
+
+
+def _parse_user_timezone(user_timezone: Optional[str]) -> Optional[zoneinfo.ZoneInfo]:
+    """Parse an IANA timezone name, raising HTTP 400 if it's invalid.
+
+    Returns None when no timezone is supplied.
+    """
+    if not user_timezone:
+        return None
+    try:
+        return zoneinfo.ZoneInfo(user_timezone)
+    except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+        raise HTTPException(
+            status_code=400, detail=f"Invalid timezone: {user_timezone}"
+        )
+
+
+def _local_midnight_utc(d: date, tz: zoneinfo.ZoneInfo) -> datetime:
+    """The UTC instant of local midnight on date ``d`` in timezone ``tz``."""
+    return datetime(d.year, d.month, d.day, tzinfo=tz).astimezone(timezone.utc)
+
+
 # --- Endpoints ---
 
 
@@ -100,15 +123,35 @@ async def get_lifts(
         None, description="Filter lifts on or after this date"
     ),
     end_date: Optional[date] = Query(None, description="Filter lifts before this date"),
+    user_timezone: Optional[str] = Query(
+        None,
+        description=(
+            "IANA timezone (e.g. America/Chicago) used to interpret start_date and "
+            "end_date. Lift times are stored in UTC; without this the date bounds "
+            "are compared in UTC, which can drop lifts logged near local midnight."
+        ),
+    ),
     _user: User = Depends(require_viewer),
 ) -> LiftsResponse:
     """Get lifting sessions from the database.
 
     Optionally filter by date range. Either, both, or neither date can be provided.
-    Returns lifts in descending order by start time.
+    When ``user_timezone`` is supplied, start_date/end_date are interpreted as local
+    calendar dates in that timezone (start inclusive, end exclusive at local
+    midnight) and converted to the correct UTC bounds; otherwise the dates are
+    compared against the stored UTC timestamps directly. Returns lifts in
+    descending order by start time.
     """
+    tz = _parse_user_timezone(user_timezone)
+
     if start_date or end_date:
-        lifts_with_sync = get_lifts_in_date_range_with_sync(start_date, end_date)
+        if tz is not None:
+            start_bound = _local_midnight_utc(start_date, tz) if start_date else None
+            end_bound = _local_midnight_utc(end_date, tz) if end_date else None
+        else:
+            start_bound = start_date
+            end_bound = end_date
+        lifts_with_sync = get_lifts_in_date_range_with_sync(start_bound, end_bound)
     else:
         lifts_with_sync = get_all_lifts_with_sync()
 
@@ -324,14 +367,7 @@ async def get_lifts_by_day(
     Returns a list of dicts with keys {"date", "count"} for each day in the range.
     """
     # Validate timezone if provided
-    tz = None
-    if user_timezone:
-        try:
-            tz = zoneinfo.ZoneInfo(user_timezone)
-        except (zoneinfo.ZoneInfoNotFoundError, KeyError):
-            raise HTTPException(
-                status_code=400, detail=f"Invalid timezone: {user_timezone}"
-            )
+    tz = _parse_user_timezone(user_timezone)
 
     # Over-fetch from DB with buffer on both sides: get_lifts_in_date_range uses
     # exclusive end (start_time < end_date), and UTC times can differ from local

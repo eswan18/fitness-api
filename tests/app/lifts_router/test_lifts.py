@@ -229,6 +229,65 @@ class TestGetLiftsDateFiltering:
         mock_get_all.assert_called_once()
 
 
+class TestGetLiftsTimezoneFiltering:
+    """Test GET /lifts date filtering with a user_timezone."""
+
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range_with_sync")
+    def test_user_timezone_converts_bounds_to_utc(
+        self,
+        mock_get_lifts: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """Local dates are converted to the correct UTC instants before filtering."""
+        from datetime import datetime, timezone
+
+        mock_get_lifts.return_value = []
+
+        response = viewer_client.get(
+            "/lifts?start_date=2024-01-01&end_date=2024-12-31"
+            "&user_timezone=America/Chicago"
+        )
+
+        assert response.status_code == 200
+        mock_get_lifts.assert_called_once()
+        start_bound, end_bound = mock_get_lifts.call_args[0][:2]
+        # Local midnight in America/Chicago in January (CST, UTC-6) -> 06:00 UTC.
+        assert start_bound == datetime(2024, 1, 1, 6, tzinfo=timezone.utc)
+        assert end_bound == datetime(2024, 12, 31, 6, tzinfo=timezone.utc)
+
+    @patch("fitness.app.routers.lifts.get_lifts_in_date_range_with_sync")
+    def test_user_timezone_is_dst_aware_and_allows_open_end(
+        self,
+        mock_get_lifts: MagicMock,
+        viewer_client: TestClient,
+    ):
+        """A single bound is converted (DST-aware); the missing one stays None."""
+        from datetime import datetime, timezone
+
+        mock_get_lifts.return_value = []
+
+        response = viewer_client.get(
+            "/lifts?start_date=2024-06-01&user_timezone=America/Chicago"
+        )
+
+        assert response.status_code == 200
+        start_bound, end_bound = mock_get_lifts.call_args[0][:2]
+        # June is CDT (UTC-5), so local midnight -> 05:00 UTC.
+        assert start_bound == datetime(2024, 6, 1, 5, tzinfo=timezone.utc)
+        assert end_bound is None
+
+    def test_invalid_user_timezone_returns_400(
+        self,
+        viewer_client: TestClient,
+    ):
+        """An unknown timezone yields a 400."""
+        response = viewer_client.get(
+            "/lifts?start_date=2024-01-01&user_timezone=Not/AZone"
+        )
+
+        assert response.status_code == 400
+
+
 class TestGetLiftsStats:
     """Test GET /lifts/stats endpoint."""
 
