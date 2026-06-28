@@ -7,8 +7,7 @@ import sys
 import logging
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import date, datetime
 from pathlib import Path
 from typing import Literal, TypeVar
 
@@ -25,6 +24,12 @@ from fitness.app.routers.run_workouts import (
     ActivityFeedRideItem,
     ActivityFeedRunItem,
     ActivityFeedWorkoutItem,
+    fetch_cardio_activity_feed,
+)
+from fitness.app.cardio_export import (
+    build_cardio_csv,
+    build_cardio_json,
+    export_filename,
 )
 from .constants import DEFAULT_START, DEFAULT_END
 from .routers import (
@@ -295,38 +300,42 @@ def read_activity_feed(
     When `user_timezone` is provided, `start`/`end` are interpreted as dates
     in that timezone and the feed is filtered by each activity's local date.
     """
-    from fitness.db.runs import get_run_details_in_date_range, get_all_run_details
-    from fitness.db.rides import get_ride_details_in_date_range, get_all_ride_details
-    from fitness.app.routers.run_workouts import build_activity_feed
+    return fetch_cardio_activity_feed(
+        start, end, sort_order=sort_order, user_timezone=user_timezone
+    )
 
-    if start != DEFAULT_START or end != DEFAULT_END:
-        all_runs = get_run_details_in_date_range(
-            start, end, user_timezone=user_timezone
-        )
-        rides = get_ride_details_in_date_range(
-            start, end, user_timezone=user_timezone
-        )
-        if user_timezone is not None:
-            tz = ZoneInfo(user_timezone)
-            all_runs = [
-                r
-                for r in all_runs
-                if start
-                <= r.datetime_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
-                <= end
-            ]
-            rides = [
-                r
-                for r in rides
-                if start
-                <= r.datetime_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
-                <= end
-            ]
+
+@app.get("/cardio-activity-feed/export")
+def export_activity_feed(
+    start: date = DEFAULT_START,
+    end: date = DEFAULT_END,
+    format: Literal["csv", "json"] = "csv",
+    sort_order: Literal["asc", "desc"] = "desc",
+    user_timezone: str | None = None,
+    _user: User = Depends(require_viewer),
+) -> Response:
+    """Download all cardio activities in a period as a CSV or JSON file.
+
+    Covers the same runs + run-workouts + rides as `/cardio-activity-feed` for
+    the given period; the period (`start`/`end` + `user_timezone`) is the only
+    filter. CSV is flattened to one row per run or ride (workout runs tagged
+    with their workout); JSON mirrors the feed's `{type, item}` array shape.
+    """
+    feed = fetch_cardio_activity_feed(
+        start, end, sort_order=sort_order, user_timezone=user_timezone
+    )
+    filename = export_filename(start, end, format)
+    if format == "csv":
+        body = build_cardio_csv(feed, user_timezone)
+        media_type = "text/csv; charset=utf-8"
     else:
-        all_runs = get_all_run_details()
-        rides = get_all_ride_details()
-
-    return build_activity_feed(all_runs, rides=rides, sort_order=sort_order)
+        body = build_cardio_json(feed)
+        media_type = "application/json"
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def sort_runs_generic(

@@ -1,13 +1,15 @@
 """CRUD routes for run workouts and the unified activity feed."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
 from fitness.app.auth import require_viewer, require_editor
+from fitness.app.constants import DEFAULT_START, DEFAULT_END
 from fitness.models.user import User
 from fitness.models.ride_detail import RideDetail
 from fitness.models.run_detail import RunDetail
@@ -232,6 +234,53 @@ async def remove_workout(
             status_code=404, detail=f"Run workout {workout_id} not found"
         )
     return {"message": f"Run workout {workout_id} deleted"}
+
+
+def fetch_cardio_activity_feed(
+    start: date = DEFAULT_START,
+    end: date = DEFAULT_END,
+    sort_order: str = "desc",
+    user_timezone: str | None = None,
+) -> list[ActivityFeedRunItem | ActivityFeedWorkoutItem | ActivityFeedRideItem]:
+    """Fetch and build the unified cardio activity feed for a date range.
+
+    Single source of truth shared by the `/cardio-activity-feed` and
+    `/cardio-activity-feed/export` routes so the two never drift. When
+    `user_timezone` is provided, `start`/`end` are interpreted as dates in that
+    timezone and each activity is filtered by its local date.
+
+    DB lookups are imported function-locally so tests can patch them on their
+    source modules (`fitness.db.runs` / `fitness.db.rides`).
+    """
+    from fitness.db.runs import get_run_details_in_date_range, get_all_run_details
+    from fitness.db.rides import get_ride_details_in_date_range, get_all_ride_details
+
+    if start != DEFAULT_START or end != DEFAULT_END:
+        all_runs = get_run_details_in_date_range(
+            start, end, user_timezone=user_timezone
+        )
+        rides = get_ride_details_in_date_range(start, end, user_timezone=user_timezone)
+        if user_timezone is not None:
+            tz = ZoneInfo(user_timezone)
+            all_runs = [
+                r
+                for r in all_runs
+                if start
+                <= r.datetime_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
+                <= end
+            ]
+            rides = [
+                r
+                for r in rides
+                if start
+                <= r.datetime_utc.replace(tzinfo=timezone.utc).astimezone(tz).date()
+                <= end
+            ]
+    else:
+        all_runs = get_all_run_details()
+        rides = get_all_ride_details()
+
+    return build_activity_feed(all_runs, rides=rides, sort_order=sort_order)
 
 
 def build_activity_feed(
