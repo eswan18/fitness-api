@@ -1,5 +1,7 @@
 """Test the /run-workouts and /cardio-activity-feed endpoints."""
 
+import csv
+import io
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
@@ -666,3 +668,123 @@ class TestActivityFeed:
         data = response.json()
         assert len(data) == 1
         assert data[0]["item"]["avg_heart_rate"] is None
+
+
+class TestActivityFeedExport:
+    """Test GET /cardio-activity-feed/export."""
+
+    @pytest.fixture(autouse=True)
+    def _stub_ride_db(self, monkeypatch):
+        monkeypatch.setattr(
+            "fitness.db.rides.get_all_ride_details", lambda *a, **kw: []
+        )
+        monkeypatch.setattr(
+            "fitness.db.rides.get_ride_details_in_date_range",
+            lambda *a, **kw: [],
+        )
+
+    @staticmethod
+    def _csv_rows(text: str) -> list[dict[str, str]]:
+        return list(csv.DictReader(io.StringIO(text)))
+
+    @patch("fitness.db.runs.get_all_run_details")
+    def test_csv_default_headers_and_attachment(
+        self, mock_get_details: MagicMock, viewer_client: TestClient
+    ):
+        mock_get_details.return_value = [
+            _make_run_detail("run_1", datetime(2024, 6, 1, 8, 0, 0)),
+        ]
+        response = viewer_client.get("/cardio-activity-feed/export")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/csv")
+        assert (
+            'attachment; filename="cardio-activities_'
+            in response.headers["content-disposition"]
+        )
+        first_line = response.text.splitlines()[0]
+        assert first_line.startswith("activity_kind,activity_id,datetime_utc")
+
+    @patch("fitness.db.runs.get_all_run_details")
+    def test_csv_row_per_activity(
+        self, mock_get_details: MagicMock, viewer_client: TestClient, monkeypatch
+    ):
+        mock_get_details.return_value = [
+            _make_run_detail("run_1", datetime(2024, 6, 1, 8, 0, 0)),
+            _make_run_detail("run_2", datetime(2024, 6, 2, 8, 0, 0)),
+        ]
+        monkeypatch.setattr(
+            "fitness.db.rides.get_all_ride_details",
+            lambda *a, **kw: [_make_ride("ride_1", datetime(2024, 6, 1, 18, 0, 0))],
+        )
+        rows = self._csv_rows(viewer_client.get("/cardio-activity-feed/export").text)
+        assert len(rows) == 3
+        kinds = sorted(r["activity_kind"] for r in rows)
+        assert kinds == ["ride", "run", "run"]
+
+    @patch(f"{_DB_MOD}.get_synced_run_workouts_by_ids", return_value=[])
+    @patch(f"{_DB_MOD}.get_run_workouts_by_ids")
+    @patch("fitness.db.runs.get_all_run_details")
+    def test_csv_flattens_workout_into_run_rows(
+        self,
+        mock_get_details: MagicMock,
+        mock_get_workouts: MagicMock,
+        _mock_syncs: MagicMock,
+        viewer_client: TestClient,
+    ):
+        mock_get_details.return_value = [
+            _make_run_detail("run_1", datetime(2024, 6, 1, 8, 0, 0)),
+            _make_run_detail(
+                "run_2", datetime(2024, 6, 2, 8, 0, 0), run_workout_id="rw_1"
+            ),
+            _make_run_detail(
+                "run_3", datetime(2024, 6, 2, 8, 30, 0), run_workout_id="rw_1"
+            ),
+        ]
+        mock_get_workouts.return_value = {"rw_1": _make_workout(id="rw_1")}
+
+        rows = self._csv_rows(viewer_client.get("/cardio-activity-feed/export").text)
+        # 1 solo run + 2 workout runs = 3 rows; no aggregate workout row.
+        assert len(rows) == 3
+        assert all(r["activity_kind"] == "run" for r in rows)
+        tagged = [r for r in rows if r["workout_id"] == "rw_1"]
+        assert len(tagged) == 2
+        assert all(r["workout_title"] == "Speed Workout" for r in tagged)
+
+    @patch("fitness.db.runs.get_all_run_details", return_value=[])
+    def test_csv_ride_blanks_run_only_columns(
+        self, _mock_get_details: MagicMock, viewer_client: TestClient, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "fitness.db.rides.get_all_ride_details",
+            lambda *a, **kw: [_make_ride("ride_1", datetime(2024, 6, 1, 18, 0, 0))],
+        )
+        rows = self._csv_rows(viewer_client.get("/cardio-activity-feed/export").text)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["shoes"] == ""
+        assert row["notes"] == ""
+        assert row["workout_id"] == ""
+        assert row["avg_pace_min_per_mile"] == ""  # distance 0
+
+    @patch("fitness.db.runs.get_all_run_details")
+    def test_json_format_returns_feed_array(
+        self, mock_get_details: MagicMock, viewer_client: TestClient
+    ):
+        mock_get_details.return_value = [
+            _make_run_detail("run_1", datetime(2024, 6, 1, 8, 0, 0)),
+        ]
+        response = viewer_client.get("/cardio-activity-feed/export?format=json")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/json")
+        assert "attachment" in response.headers["content-disposition"]
+        data = response.json()
+        assert isinstance(data, list)
+        assert all(item["type"] in {"run", "run_workout", "ride"} for item in data)
+
+    def test_invalid_format_422(self, viewer_client: TestClient):
+        response = viewer_client.get("/cardio-activity-feed/export?format=xml")
+        assert response.status_code == 422
+
+    def test_requires_auth(self, client: TestClient):
+        response = client.get("/cardio-activity-feed/export")
+        assert response.status_code == 401
