@@ -1,7 +1,7 @@
 from typing import Literal, Self, Optional
 from datetime import date
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from .env_loader import EnvironmentName
 
@@ -67,16 +67,14 @@ class CreateShoeRequest(BaseModel):
     """Request model for creating a shoe via POST."""
 
     name: str
-    first_warning_mileage: int = 300
-    second_warning_mileage: int = 500
+    warning_mileage: int = Field(default=300, gt=0)
+    maximum_mileage: int = Field(default=500, gt=0)
     notes: Optional[str] = None
 
     @model_validator(mode="after")
-    def _check_warning_order(self) -> Self:
-        if self.second_warning_mileage < self.first_warning_mileage:
-            raise ValueError(
-                "second_warning_mileage must be >= first_warning_mileage"
-            )
+    def _check_mileage_order(self) -> Self:
+        if self.maximum_mileage <= self.warning_mileage:
+            raise ValueError("maximum_mileage must be greater than warning_mileage")
         return self
 
 
@@ -86,13 +84,13 @@ class UpdateShoeRequest(BaseModel):
     All fields are optional. The router distinguishes "field omitted" from
     "field explicitly set to null" via ``model_fields_set`` so that, for example,
     a name-only edit does not unretire a shoe (a sent ``retired_at=null`` is what
-    unretires it). The warning-mileage ordering (second >= first) is validated in
-    the router against the shoe's resulting values, since either may be omitted.
+    unretires it). The mileage ordering (maximum > warning) is validated in the
+    router against the shoe's resulting values, since either may be omitted.
     """
 
     name: Optional[str] = None
-    first_warning_mileage: Optional[int] = None
-    second_warning_mileage: Optional[int] = None
+    warning_mileage: Optional[int] = Field(default=None, gt=0)
+    maximum_mileage: Optional[int] = Field(default=None, gt=0)
     retired_at: Optional[date] = None
     retirement_notes: Optional[str] = None
 

@@ -49,7 +49,7 @@ def get_shoes(
 
         query = sql.SQL("""
             SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
-                   first_warning_mileage, second_warning_mileage
+                   warning_mileage, maximum_mileage
             FROM shoes
             {where_clause}
             {order_by}
@@ -67,7 +67,7 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
             cursor.execute(
                 """
                 SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
-                       first_warning_mileage, second_warning_mileage
+                       warning_mileage, maximum_mileage
                 FROM shoes
                 WHERE id = %s
             """,
@@ -77,7 +77,7 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
             cursor.execute(
                 """
                 SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
-                       first_warning_mileage, second_warning_mileage
+                       warning_mileage, maximum_mileage
                 FROM shoes
                 WHERE id = %s AND deleted_at IS NULL
             """,
@@ -89,8 +89,8 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
 
 def create_shoe(
     name: str,
-    first_warning_mileage: int = 300,
-    second_warning_mileage: int = 500,
+    warning_mileage: int = 300,
+    maximum_mileage: int = 500,
     notes: Optional[str] = None,
 ) -> Optional[Shoe]:
     """Create a new shoe.
@@ -115,17 +115,17 @@ def create_shoe(
         cursor.execute(
             """
             INSERT INTO shoes
-                (id, name, notes, first_warning_mileage, second_warning_mileage)
+                (id, name, notes, warning_mileage, maximum_mileage)
             VALUES (%s, %s, %s, %s, %s)
             """,
-            (shoe_id, name, notes, first_warning_mileage, second_warning_mileage),
+            (shoe_id, name, notes, warning_mileage, maximum_mileage),
         )
     return Shoe(
         id=shoe_id,
         name=name,
         notes=notes,
-        first_warning_mileage=first_warning_mileage,
-        second_warning_mileage=second_warning_mileage,
+        warning_mileage=warning_mileage,
+        maximum_mileage=maximum_mileage,
     )
 
 
@@ -162,8 +162,8 @@ def unretire_shoe_by_id(shoe_id: str) -> bool:
 # Columns the generic partial-update path is allowed to touch.
 _UPDATABLE_SHOE_FIELDS = (
     "name",
-    "first_warning_mileage",
-    "second_warning_mileage",
+    "warning_mileage",
+    "maximum_mileage",
     "retired_at",
     "retirement_notes",
 )
@@ -174,8 +174,8 @@ def update_shoe(
 ) -> bool:
     """Apply a partial update to a shoe within a single transaction.
 
-    ``fields`` may contain any of ``name``, ``first_warning_mileage``,
-    ``second_warning_mileage``, ``retired_at``, ``retirement_notes`` (unknown
+    ``fields`` may contain any of ``name``, ``warning_mileage``,
+    ``maximum_mileage``, ``retired_at``, ``retirement_notes`` (unknown
     keys are ignored). When ``alias_old_name`` is given — i.e. the shoe is being
     renamed — an alias mapping that old name to this shoe id is upserted so a
     future import carrying the old gear name still resolves to this shoe instead
@@ -240,11 +240,11 @@ def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUs
 
     query = sql.SQL("""
         SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
-               first_warning_mileage, second_warning_mileage, last_used_date
+               warning_mileage, maximum_mileage, last_used_date
         FROM (
             SELECT DISTINCT ON (s.id)
                 s.id, s.name, s.retired_at, s.notes, s.retirement_notes, s.deleted_at,
-                s.first_warning_mileage, s.second_warning_mileage,
+                s.warning_mileage, s.maximum_mileage,
                 r.datetime_utc AS last_used_date
             FROM shoes s
             LEFT JOIN runs r ON r.shoe_id = s.id AND r.deleted_at IS NULL
@@ -275,8 +275,8 @@ def _row_to_shoe(row) -> Shoe:
         notes,
         retirement_notes,
         deleted_at,
-        first_warning_mileage,
-        second_warning_mileage,
+        warning_mileage,
+        maximum_mileage,
     ) = row
     return Shoe(
         id=shoe_id,
@@ -285,8 +285,8 @@ def _row_to_shoe(row) -> Shoe:
         notes=notes,
         retirement_notes=retirement_notes,
         deleted_at=deleted_at,
-        first_warning_mileage=first_warning_mileage,
-        second_warning_mileage=second_warning_mileage,
+        warning_mileage=warning_mileage,
+        maximum_mileage=maximum_mileage,
     )
 
 

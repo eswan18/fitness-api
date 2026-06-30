@@ -608,15 +608,15 @@ def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_cli
         "/shoes/",
         json={
             "name": name,
-            "first_warning_mileage": 222,
-            "second_warning_mileage": 444,
+            "warning_mileage": 222,
+            "maximum_mileage": 444,
         },
     )
     assert res.status_code == 201
     created = res.json()
     assert created["id"] == shoe_id
-    assert created["first_warning_mileage"] == 222
-    assert created["second_warning_mileage"] == 444
+    assert created["warning_mileage"] == 222
+    assert created["maximum_mileage"] == 444
     assert created["retired_at"] is None
 
     # 2. It shows up in the shoe list with the thresholds persisted.
@@ -624,8 +624,8 @@ def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_cli
     assert res.status_code == 200
     listed = next((s for s in res.json() if s["id"] == shoe_id), None)
     assert listed is not None
-    assert listed["first_warning_mileage"] == 222
-    assert listed["second_warning_mileage"] == 444
+    assert listed["warning_mileage"] == 222
+    assert listed["maximum_mileage"] == 444
 
     # 3. Importing a run under the same name resolves to the existing shoe
     #    (no duplicate) and the thresholds ride along in the by-shoe metrics.
@@ -646,8 +646,8 @@ def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_cli
     matches = [s for s in by_shoe if s["shoe"]["id"] == shoe_id]
     assert len(matches) == 1  # exactly one — import did not create a duplicate
     assert matches[0]["mileage"] >= 8.0
-    assert matches[0]["shoe"]["first_warning_mileage"] == 222
-    assert matches[0]["shoe"]["second_warning_mileage"] == 444
+    assert matches[0]["shoe"]["warning_mileage"] == 222
+    assert matches[0]["shoe"]["maximum_mileage"] == 444
 
 
 @pytest.mark.e2e
@@ -715,7 +715,7 @@ def test_rename_creates_alias_and_preserves_retirement(viewer_client, editor_cli
     assert res.status_code == 200
 
     res = editor_client.patch(
-        f"/shoes/{shoe_id}", json={"first_warning_mileage": 275}
+        f"/shoes/{shoe_id}", json={"warning_mileage": 275}
     )
     assert res.status_code == 200
 
@@ -723,4 +723,4 @@ def test_rename_creates_alias_and_preserves_retirement(viewer_client, editor_cli
     still_retired = next((s for s in res.json() if s["id"] == shoe_id), None)
     assert still_retired is not None
     assert still_retired["retired_at"] == "2024-12-01"
-    assert still_retired["first_warning_mileage"] == 275
+    assert still_retired["warning_mileage"] == 275
