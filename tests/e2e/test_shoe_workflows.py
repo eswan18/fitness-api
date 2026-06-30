@@ -595,3 +595,132 @@ def test_shoe_transitive_merge_workflow(viewer_client, editor_client):
         f"Re-imported run with previously-merged name should resolve to final kept "
         f"shoe ({shoe_c_id}), not the intermediate soft-deleted shoe ({reimported.shoe_id})"
     )
+
+
+@pytest.mark.e2e
+def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_client):
+    """A shoe created via POST carries custom thresholds through to /shoes and metrics."""
+    name = "E2E Created Shoe"
+    shoe_id = generate_shoe_id(name)
+
+    # 1. Create directly via the new endpoint with custom thresholds.
+    res = editor_client.post(
+        "/shoes/",
+        json={
+            "name": name,
+            "first_warning_mileage": 222,
+            "second_warning_mileage": 444,
+        },
+    )
+    assert res.status_code == 201
+    created = res.json()
+    assert created["id"] == shoe_id
+    assert created["first_warning_mileage"] == 222
+    assert created["second_warning_mileage"] == 444
+    assert created["retired_at"] is None
+
+    # 2. It shows up in the shoe list with the thresholds persisted.
+    res = viewer_client.get("/shoes")
+    assert res.status_code == 200
+    listed = next((s for s in res.json() if s["id"] == shoe_id), None)
+    assert listed is not None
+    assert listed["first_warning_mileage"] == 222
+    assert listed["second_warning_mileage"] == 444
+
+    # 3. Importing a run under the same name resolves to the existing shoe
+    #    (no duplicate) and the thresholds ride along in the by-shoe metrics.
+    run = Run(
+        id="e2e_created_shoe_run_1",
+        datetime_utc=datetime(2024, 9, 1, 10, 0, 0),
+        type="Outdoor Run",
+        distance=8.0,
+        duration=3600.0,
+        source="Strava",
+    )
+    run._shoe_name = name
+    assert bulk_create_runs([run]) == 1
+
+    res = viewer_client.get("/metrics/mileage/by-shoe")
+    assert res.status_code == 200
+    by_shoe = res.json()
+    matches = [s for s in by_shoe if s["shoe"]["id"] == shoe_id]
+    assert len(matches) == 1  # exactly one — import did not create a duplicate
+    assert matches[0]["mileage"] >= 8.0
+    assert matches[0]["shoe"]["first_warning_mileage"] == 222
+    assert matches[0]["shoe"]["second_warning_mileage"] == 444
+
+
+@pytest.mark.e2e
+def test_rename_creates_alias_and_preserves_retirement(viewer_client, editor_client):
+    """Renaming a shoe keeps the id stable, aliases the old name, and an edit that
+    doesn't touch retirement leaves a retired shoe retired."""
+    from fitness.db.runs import get_run_by_id
+
+    old_name = "E2E Rename Original"
+    new_name = "E2E Rename Updated"
+    shoe_id = generate_shoe_id(old_name)
+
+    # Seed a run so the shoe exists (created implicitly with default thresholds).
+    seed = Run(
+        id="e2e_rename_run_1",
+        datetime_utc=datetime(2024, 10, 1, 10, 0, 0),
+        type="Outdoor Run",
+        distance=5.0,
+        duration=2400.0,
+        source="Strava",
+    )
+    seed._shoe_name = old_name
+    assert bulk_create_runs([seed]) == 1
+
+    # 1. Rename via PATCH (name only).
+    res = editor_client.patch(f"/shoes/{shoe_id}", json={"name": new_name})
+    assert res.status_code == 200
+    assert "updated" in res.json()["message"].lower()
+
+    # 2. The id is unchanged; only the display name changed.
+    res = viewer_client.get("/shoes")
+    shoes = res.json()
+    renamed = next((s for s in shoes if s["id"] == shoe_id), None)
+    assert renamed is not None and renamed["name"] == new_name
+    # No leftover shoe under the old name.
+    assert all(s["name"] != old_name for s in shoes)
+
+    # 3. A later import carrying the OLD gear name resolves to the same shoe via
+    #    the alias instead of spawning a duplicate.
+    reimport = Run(
+        id="e2e_rename_run_2",
+        datetime_utc=datetime(2024, 10, 5, 10, 0, 0),
+        type="Outdoor Run",
+        distance=6.0,
+        duration=2800.0,
+        source="MapMyFitness",
+    )
+    reimport._shoe_name = old_name
+    assert bulk_create_runs([reimport]) == 1
+
+    attached = get_run_by_id("e2e_rename_run_2")
+    assert attached is not None
+    assert attached.shoe_id == shoe_id  # resolved via alias, not a new shoe
+
+    res = viewer_client.get("/shoes")
+    assert sum(1 for s in res.json() if s["id"] == shoe_id) == 1
+    assert all(s["name"] != old_name for s in res.json())
+
+    # 4. REGRESSION: retire the shoe, then make a mileage-only edit and confirm
+    #    it stays retired (the old `retired_at is None` logic would unretire it).
+    res = editor_client.patch(
+        f"/shoes/{shoe_id}",
+        json={"retired_at": "2024-12-01", "retirement_notes": "done"},
+    )
+    assert res.status_code == 200
+
+    res = editor_client.patch(
+        f"/shoes/{shoe_id}", json={"first_warning_mileage": 275}
+    )
+    assert res.status_code == 200
+
+    res = viewer_client.get("/shoes", params={"retired": True})
+    still_retired = next((s for s in res.json() if s["id"] == shoe_id), None)
+    assert still_retired is not None
+    assert still_retired["retired_at"] == "2024-12-01"
+    assert still_retired["first_warning_mileage"] == 275

@@ -48,7 +48,8 @@ def get_shoes(
         )
 
         query = sql.SQL("""
-            SELECT id, name, retired_at, notes, retirement_notes, deleted_at
+            SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
+                   first_warning_mileage, second_warning_mileage
             FROM shoes
             {where_clause}
             {order_by}
@@ -65,7 +66,8 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
         if include_deleted:
             cursor.execute(
                 """
-                SELECT id, name, retired_at, notes, retirement_notes, deleted_at
+                SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
+                       first_warning_mileage, second_warning_mileage
                 FROM shoes
                 WHERE id = %s
             """,
@@ -74,7 +76,8 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
         else:
             cursor.execute(
                 """
-                SELECT id, name, retired_at, notes, retirement_notes, deleted_at
+                SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
+                       first_warning_mileage, second_warning_mileage
                 FROM shoes
                 WHERE id = %s AND deleted_at IS NULL
             """,
@@ -82,6 +85,48 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
             )
         row = cursor.fetchone()
         return _row_to_shoe(row) if row else None
+
+
+def create_shoe(
+    name: str,
+    first_warning_mileage: int = 300,
+    second_warning_mileage: int = 500,
+    notes: Optional[str] = None,
+) -> Optional[Shoe]:
+    """Create a new shoe.
+
+    Returns the created Shoe, or None if a shoe with the same (normalized) id
+    already exists — including a soft-deleted one, since the id is the primary
+    key. The caller turns None into a 409. Other shoe columns take their
+    defaults (active, no retirement).
+    """
+    from fitness.models.shoe import generate_shoe_id
+
+    shoe_id = generate_shoe_id(name)
+    with get_db_cursor() as cursor:
+        # Guard both the id primary key and the name UNIQUE constraint. The name
+        # unique constraint covers soft-deleted rows too, so check across all
+        # rows and return a clean None (→ 409) instead of an IntegrityError.
+        cursor.execute(
+            "SELECT 1 FROM shoes WHERE id = %s OR name = %s", (shoe_id, name)
+        )
+        if cursor.fetchone() is not None:
+            return None
+        cursor.execute(
+            """
+            INSERT INTO shoes
+                (id, name, notes, first_warning_mileage, second_warning_mileage)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (shoe_id, name, notes, first_warning_mileage, second_warning_mileage),
+        )
+    return Shoe(
+        id=shoe_id,
+        name=name,
+        notes=notes,
+        first_warning_mileage=first_warning_mileage,
+        second_warning_mileage=second_warning_mileage,
+    )
 
 
 def retire_shoe_by_id(
@@ -114,6 +159,59 @@ def unretire_shoe_by_id(shoe_id: str) -> bool:
         return cursor.rowcount > 0
 
 
+# Columns the generic partial-update path is allowed to touch.
+_UPDATABLE_SHOE_FIELDS = (
+    "name",
+    "first_warning_mileage",
+    "second_warning_mileage",
+    "retired_at",
+    "retirement_notes",
+)
+
+
+def update_shoe(
+    shoe_id: str, fields: dict, alias_old_name: Optional[str] = None
+) -> bool:
+    """Apply a partial update to a shoe within a single transaction.
+
+    ``fields`` may contain any of ``name``, ``first_warning_mileage``,
+    ``second_warning_mileage``, ``retired_at``, ``retirement_notes`` (unknown
+    keys are ignored). When ``alias_old_name`` is given — i.e. the shoe is being
+    renamed — an alias mapping that old name to this shoe id is upserted so a
+    future import carrying the old gear name still resolves to this shoe instead
+    of creating a duplicate (same mechanism as :func:`merge_shoes`).
+
+    Returns True if a non-deleted shoe matched and was updated.
+    """
+    updates = {k: v for k, v in fields.items() if k in _UPDATABLE_SHOE_FIELDS}
+    if not updates:
+        return False
+
+    assignments: list[sql.Composable] = [
+        sql.SQL("{} = %s").format(sql.Identifier(key)) for key in updates
+    ]
+    assignments.append(sql.SQL("updated_at = CURRENT_TIMESTAMP"))
+    query = sql.SQL(
+        "UPDATE shoes SET {assignments} WHERE id = %s AND deleted_at IS NULL"
+    ).format(assignments=sql.SQL(", ").join(assignments))
+    params = list(updates.values()) + [shoe_id]
+
+    with get_db_connection() as conn:
+        with conn.transaction():
+            with conn.cursor() as cursor:
+                cursor.execute(query, params)
+                updated = cursor.rowcount > 0
+                if updated and alias_old_name is not None:
+                    cursor.execute(
+                        "INSERT INTO shoe_aliases (alias_name, shoe_id) "
+                        "VALUES (%s, %s) "
+                        "ON CONFLICT (alias_name) DO UPDATE "
+                        "SET shoe_id = EXCLUDED.shoe_id",
+                        (alias_old_name, shoe_id),
+                    )
+    return updated
+
+
 def delete_shoe_by_id(shoe_id: str) -> bool:
     """Soft-delete a shoe by ID. Returns True if shoe was found and deleted."""
     with get_db_cursor() as cursor:
@@ -141,10 +239,12 @@ def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUs
     where_clause = sql.SQL("WHERE ") + sql.SQL(" AND ").join(conditions)
 
     query = sql.SQL("""
-        SELECT id, name, retired_at, notes, retirement_notes, deleted_at, last_used_date
+        SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
+               first_warning_mileage, second_warning_mileage, last_used_date
         FROM (
             SELECT DISTINCT ON (s.id)
                 s.id, s.name, s.retired_at, s.notes, s.retirement_notes, s.deleted_at,
+                s.first_warning_mileage, s.second_warning_mileage,
                 r.datetime_utc AS last_used_date
             FROM shoes s
             LEFT JOIN runs r ON r.shoe_id = s.id AND r.deleted_at IS NULL
@@ -159,8 +259,8 @@ def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUs
         rows = cursor.fetchall()
         return [
             ShoeRecentUse(
-                shoe=_row_to_shoe(row[:6]),
-                last_used_date=row[6],
+                shoe=_row_to_shoe(row[:8]),
+                last_used_date=row[8],
             )
             for row in rows
         ]
@@ -168,7 +268,16 @@ def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUs
 
 def _row_to_shoe(row) -> Shoe:
     """Convert a database row to a Shoe object."""
-    shoe_id, name, retired_at, notes, retirement_notes, deleted_at = row
+    (
+        shoe_id,
+        name,
+        retired_at,
+        notes,
+        retirement_notes,
+        deleted_at,
+        first_warning_mileage,
+        second_warning_mileage,
+    ) = row
     return Shoe(
         id=shoe_id,
         name=name,
@@ -176,7 +285,28 @@ def _row_to_shoe(row) -> Shoe:
         notes=notes,
         retirement_notes=retirement_notes,
         deleted_at=deleted_at,
+        first_warning_mileage=first_warning_mileage,
+        second_warning_mileage=second_warning_mileage,
     )
+
+
+def shoe_name_taken(name: str, exclude_shoe_id: Optional[str] = None) -> bool:
+    """Whether another shoe already uses this exact name.
+
+    Checks across all rows (including soft-deleted ones) because the ``name``
+    UNIQUE constraint spans them, so a rename that collides with a soft-deleted
+    shoe would otherwise fail with an IntegrityError. ``exclude_shoe_id`` skips
+    the shoe being renamed itself.
+    """
+    with get_db_cursor() as cursor:
+        if exclude_shoe_id is not None:
+            cursor.execute(
+                "SELECT 1 FROM shoes WHERE name = %s AND id <> %s",
+                (name, exclude_shoe_id),
+            )
+        else:
+            cursor.execute("SELECT 1 FROM shoes WHERE name = %s", (name,))
+        return cursor.fetchone() is not None
 
 
 def get_existing_shoes_by_names(shoe_names: set[str]) -> dict[str, str]:
