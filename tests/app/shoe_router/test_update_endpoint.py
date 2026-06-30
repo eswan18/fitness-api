@@ -112,23 +112,23 @@ def test_update_warning_mileages(monkeypatch, auth_client: TestClient):
 
     response = auth_client.patch(
         "/shoes/s",
-        json={"first_warning_mileage": 200, "second_warning_mileage": 400},
+        json={"warning_mileage": 200, "maximum_mileage": 400},
     )
 
     assert response.status_code == 200
     assert calls["update_shoe"]["fields"] == {
-        "first_warning_mileage": 200,
-        "second_warning_mileage": 400,
+        "warning_mileage": 200,
+        "maximum_mileage": 400,
     }
     assert calls["update_shoe"]["alias_old_name"] is None
 
 
 def test_update_mileage_validated_against_existing(monkeypatch, auth_client: TestClient):
-    """Setting second below the shoe's existing first is a 422 with no db write."""
-    shoe = Shoe(id="s", name="S", first_warning_mileage=300, second_warning_mileage=500)
+    """Setting maximum below the shoe's existing warning is a 422 with no db write."""
+    shoe = Shoe(id="s", name="S", warning_mileage=300, maximum_mileage=500)
     calls = _install_capturing_db(monkeypatch, shoe)
 
-    response = auth_client.patch("/shoes/s", json={"second_warning_mileage": 200})
+    response = auth_client.patch("/shoes/s", json={"maximum_mileage": 200})
 
     assert response.status_code == 422
     assert calls["update_shoe"] is None

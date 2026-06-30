@@ -58,13 +58,13 @@ def create_shoe_endpoint(
     """Create a new shoe.
 
     Requires OAuth 2.0 Bearer token authentication with editor role. The shoe id
-    is derived deterministically from the name. The two warning-mileage
-    thresholds default to 300 / 500 if omitted (validated so second >= first).
+    is derived deterministically from the name. The mileage thresholds default to
+    300 (warning) / 500 (maximum) if omitted (validated so maximum > warning).
     """
     shoe = create_shoe(
         name=request.name,
-        first_warning_mileage=request.first_warning_mileage,
-        second_warning_mileage=request.second_warning_mileage,
+        warning_mileage=request.warning_mileage,
+        maximum_mileage=request.maximum_mileage,
         notes=request.notes,
     )
     if shoe is None:
@@ -90,8 +90,8 @@ def update_shoe_endpoint(
 
     - ``name``: renames the shoe. The id stays stable; an alias from the old
       name is created so future imports carrying the old name still resolve here.
-    - ``first_warning_mileage`` / ``second_warning_mileage``: edit the thresholds
-      (validated so second >= first).
+    - ``warning_mileage`` / ``maximum_mileage``: edit the thresholds (validated so
+      maximum > warning).
     - ``retired_at``: only touched when present — a date retires the shoe, an
       explicit ``null`` unretires it.
 
@@ -120,20 +120,20 @@ def update_shoe_endpoint(
         fields["name"] = request.name
         alias_old_name = shoe.name
 
-    effective_first = shoe.first_warning_mileage
-    effective_second = shoe.second_warning_mileage
-    if "first_warning_mileage" in sent and request.first_warning_mileage is not None:
-        fields["first_warning_mileage"] = request.first_warning_mileage
-        effective_first = request.first_warning_mileage
-    if "second_warning_mileage" in sent and request.second_warning_mileage is not None:
-        fields["second_warning_mileage"] = request.second_warning_mileage
-        effective_second = request.second_warning_mileage
+    effective_warning = shoe.warning_mileage
+    effective_maximum = shoe.maximum_mileage
+    if "warning_mileage" in sent and request.warning_mileage is not None:
+        fields["warning_mileage"] = request.warning_mileage
+        effective_warning = request.warning_mileage
+    if "maximum_mileage" in sent and request.maximum_mileage is not None:
+        fields["maximum_mileage"] = request.maximum_mileage
+        effective_maximum = request.maximum_mileage
     if (
-        "first_warning_mileage" in fields or "second_warning_mileage" in fields
-    ) and effective_second < effective_first:
+        "warning_mileage" in fields or "maximum_mileage" in fields
+    ) and effective_maximum <= effective_warning:
         raise HTTPException(
             status_code=422,
-            detail="second_warning_mileage must be >= first_warning_mileage",
+            detail="maximum_mileage must be greater than warning_mileage",
         )
 
     if fields:
