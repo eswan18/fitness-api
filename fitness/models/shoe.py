@@ -37,6 +37,9 @@ class Shoe(BaseModel):
     notes: Optional[str] = None  # General notes
     retirement_notes: Optional[str] = None  # Notes specific to retirement
     deleted_at: Optional[datetime] = None
+    # Per-shoe mileage thresholds at which the UI warns the shoe is wearing out.
+    first_warning_mileage: int = 300
+    second_warning_mileage: int = 500
 
     @property
     def is_retired(self) -> bool:

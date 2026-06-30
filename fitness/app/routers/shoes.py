@@ -6,6 +6,9 @@ from fitness.db.shoes import (
     get_shoes,
     get_shoes_with_last_used,
     get_shoe_by_id,
+    create_shoe,
+    update_shoe,
+    shoe_name_taken,
     retire_shoe_by_id,
     unretire_shoe_by_id,
     merge_shoes,
@@ -13,7 +16,7 @@ from fitness.db.shoes import (
 )
 from fitness.models.shoe import Shoe, ShoeRecentUse
 from fitness.models.user import User
-from fitness.app.models import UpdateShoeRequest, MergeShoesRequest
+from fitness.app.models import CreateShoeRequest, UpdateShoeRequest, MergeShoesRequest
 from fitness.app.auth import require_viewer, require_editor
 
 router = APIRouter(prefix="/shoes", tags=["shoes"])
@@ -47,45 +50,118 @@ def read_recent_shoes(
     return get_shoes_with_last_used(include_retired=include_retired)
 
 
+@router.post("/", response_model=Shoe, status_code=201)
+def create_shoe_endpoint(
+    request: CreateShoeRequest,
+    user: User = Depends(require_editor),
+) -> Shoe:
+    """Create a new shoe.
+
+    Requires OAuth 2.0 Bearer token authentication with editor role. The shoe id
+    is derived deterministically from the name. The two warning-mileage
+    thresholds default to 300 / 500 if omitted (validated so second >= first).
+    """
+    shoe = create_shoe(
+        name=request.name,
+        first_warning_mileage=request.first_warning_mileage,
+        second_warning_mileage=request.second_warning_mileage,
+        notes=request.notes,
+    )
+    if shoe is None:
+        raise HTTPException(
+            status_code=409, detail=f"A shoe named '{request.name}' already exists"
+        )
+    return shoe
+
+
 @router.patch("/{shoe_id}", response_model=dict[str, str])
-def update_shoe(
+def update_shoe_endpoint(
     shoe_id: str,
     request: UpdateShoeRequest,
     user: User = Depends(require_editor),
 ) -> dict:
     """Update shoe properties.
 
-    Requires OAuth 2.0 Bearer token authentication.
+    Requires OAuth 2.0 Bearer token authentication with editor role.
 
-    Use `retired_at=null` to unretire, or provide a date to retire.
+    All fields are optional and only fields explicitly present in the request
+    body are changed (so a name- or mileage-only edit leaves retirement
+    untouched). Specifically:
+
+    - ``name``: renames the shoe. The id stays stable; an alias from the old
+      name is created so future imports carrying the old name still resolve here.
+    - ``first_warning_mileage`` / ``second_warning_mileage``: edit the thresholds
+      (validated so second >= first).
+    - ``retired_at``: only touched when present — a date retires the shoe, an
+      explicit ``null`` unretires it.
 
     Args:
-        shoe_id: Deterministic shoe identifier derived from name.
-        request: Partial update payload for retirement/unretirement.
+        shoe_id: Deterministic shoe identifier derived from the original name.
+        request: Partial update payload.
     """
-    # First check if shoe exists
     shoe = get_shoe_by_id(shoe_id)
     if not shoe:
         raise HTTPException(
             status_code=404, detail=f"Shoe with ID '{shoe_id}' not found"
         )
 
-    if request.retired_at is None:
-        # Unretire the shoe
-        unretire_shoe_by_id(shoe_id)
-        return {"message": f"Shoe '{shoe.name}' has been unretired"}
-    else:
-        # Retire the shoe
-        success = retire_shoe_by_id(
-            shoe_id=shoe_id,
-            retired_at=request.retired_at,
-            retirement_notes=request.retirement_notes,
-        )
-        if not success:
+    sent = request.model_fields_set
+
+    # --- Build the profile (name + mileage) update from explicitly-set fields ---
+    fields: dict = {}
+    alias_old_name: str | None = None
+
+    if "name" in sent and request.name is not None and request.name != shoe.name:
+        if shoe_name_taken(request.name, exclude_shoe_id=shoe.id):
             raise HTTPException(
-                status_code=404, detail=f"Shoe with ID '{shoe_id}' not found"
+                status_code=409,
+                detail=f"A shoe named '{request.name}' already exists",
             )
-        return {"message": f"Shoe '{shoe.name}' has been retired"}
+        fields["name"] = request.name
+        alias_old_name = shoe.name
+
+    effective_first = shoe.first_warning_mileage
+    effective_second = shoe.second_warning_mileage
+    if "first_warning_mileage" in sent and request.first_warning_mileage is not None:
+        fields["first_warning_mileage"] = request.first_warning_mileage
+        effective_first = request.first_warning_mileage
+    if "second_warning_mileage" in sent and request.second_warning_mileage is not None:
+        fields["second_warning_mileage"] = request.second_warning_mileage
+        effective_second = request.second_warning_mileage
+    if (
+        "first_warning_mileage" in fields or "second_warning_mileage" in fields
+    ) and effective_second < effective_first:
+        raise HTTPException(
+            status_code=422,
+            detail="second_warning_mileage must be >= first_warning_mileage",
+        )
+
+    if fields:
+        update_shoe(shoe_id, fields, alias_old_name=alias_old_name)
+
+    # --- Retirement: only touched when retired_at is explicitly present ---
+    retire_action: str | None = None
+    if "retired_at" in sent:
+        if request.retired_at is None:
+            unretire_shoe_by_id(shoe_id)
+            retire_action = "unretired"
+        else:
+            retire_shoe_by_id(
+                shoe_id=shoe_id,
+                retired_at=request.retired_at,
+                retirement_notes=request.retirement_notes,
+            )
+            retire_action = "retired"
+
+    profile_changed = bool(fields)
+    # Preserve the exact legacy messages for retirement-only requests.
+    if retire_action and not profile_changed:
+        return {"message": f"Shoe '{shoe.name}' has been {retire_action}"}
+    if profile_changed and not retire_action:
+        return {"message": f"Shoe '{shoe.name}' has been updated"}
+    if profile_changed and retire_action:
+        return {"message": f"Shoe '{shoe.name}' has been updated and {retire_action}"}
+    return {"message": f"No changes applied to shoe '{shoe.name}'"}
 
 
 @router.post("/merge", response_model=dict[str, str])
