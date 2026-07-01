@@ -46,6 +46,11 @@ class Shoe(BaseModel):
     # on newly-created shoes (POST /shoes/), but not in the schema.
     size: Optional[float] = None
     purchased_date: Optional[date] = None
+    # Structured identity. Nullable until the backfill; then made NOT NULL and
+    # `name` becomes derived from these. color stays optional.
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    color: Optional[str] = None
 
     @property
     def is_retired(self) -> bool:

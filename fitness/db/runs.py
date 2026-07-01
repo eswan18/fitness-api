@@ -95,42 +95,9 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
 
     logger.info(f"Starting bulk insert of {len(runs)} runs in chunks of {chunk_size}")
 
-    # Batch check and create shoes - much more efficient!
-    from fitness.db.shoes import (
-        get_existing_shoes_by_names,
-        bulk_create_shoes_by_names,
-        get_shoe_ids_by_alias_names,
-    )
-
-    # Get unique shoe names (excluding None)
-    unique_shoe_names = {run.shoe_name for run in runs if run.shoe_name is not None}
-    logger.debug(f"Found {len(unique_shoe_names)} unique shoes: {unique_shoe_names}")
-
-    # Batch check which shoes already exist
-    existing_shoes = get_existing_shoes_by_names(unique_shoe_names)
-    logger.debug(f"Found {len(existing_shoes)} existing shoes in database")
-
-    # Check aliases for any unmatched names
-    unmatched_names = unique_shoe_names - existing_shoes.keys()
-    if unmatched_names:
-        aliased_shoes = get_shoe_ids_by_alias_names(unmatched_names)
-        if aliased_shoes:
-            logger.info(f"Resolved {len(aliased_shoes)} shoe aliases: {aliased_shoes}")
-            existing_shoes.update(aliased_shoes)
-
-    # Create missing shoes in one batch
-    missing_shoe_names = unique_shoe_names - existing_shoes.keys()
-    if missing_shoe_names:
-        logger.info(
-            f"Creating {len(missing_shoe_names)} new shoes: {missing_shoe_names}"
-        )
-        new_shoes = bulk_create_shoes_by_names(missing_shoe_names)
-        # Combine existing and newly created shoes
-        all_shoes = {**existing_shoes, **new_shoes}
-    else:
-        all_shoes = existing_shoes
-        logger.debug("No new shoes needed")
-
+    # Imports no longer resolve or create shoes: each run records its raw gear
+    # name in `imported_shoe_name` and leaves `shoe_id` NULL. Shoes are created
+    # and assigned to runs manually.
     total_inserted = 0
 
     with get_db_connection() as conn:
@@ -142,17 +109,18 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
 
                     chunk_inserted = 0
                     for run in chunk:
-                        shoe_id = (
-                            all_shoes.get(run.shoe_name) if run.shoe_name else None
-                        )
+                        # Imports never assign a shoe; keep the raw gear name so
+                        # it can be assigned manually later.
+                        shoe_id = None
+                        imported_shoe_name = run.shoe_name
 
                         # ON CONFLICT DO NOTHING ensures a previously-imported
                         # run (including soft-deleted ones) is silently skipped
                         # rather than failing the whole batch on a PK conflict.
                         cursor.execute(
                             """
-                            INSERT INTO runs (id, datetime_utc, type, distance, duration, source, avg_heart_rate, shoe_id, deleted_at, max_heart_rate, step_cadence, end_datetime_utc, source_name)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            INSERT INTO runs (id, datetime_utc, type, distance, duration, source, avg_heart_rate, shoe_id, deleted_at, max_heart_rate, step_cadence, end_datetime_utc, source_name, imported_shoe_name)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ON CONFLICT (id) DO NOTHING
                             """,
                             (
@@ -169,6 +137,7 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
                                 run.step_cadence,
                                 run.end_datetime_utc,
                                 run.source_name,
+                                imported_shoe_name,
                             ),
                         )
 

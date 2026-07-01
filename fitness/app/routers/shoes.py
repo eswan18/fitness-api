@@ -8,7 +8,6 @@ from fitness.db.shoes import (
     get_shoe_by_id,
     create_shoe,
     update_shoe,
-    shoe_name_taken,
     retire_shoe_by_id,
     unretire_shoe_by_id,
     merge_shoes,
@@ -57,24 +56,22 @@ def create_shoe_endpoint(
 ) -> Shoe:
     """Create a new shoe.
 
-    Requires OAuth 2.0 Bearer token authentication with editor role. The shoe id
-    is derived deterministically from the name. ``size`` and ``purchased_date``
-    are required. The mileage thresholds default to 300 (warning) / 500 (maximum)
-    if omitted (validated so maximum > warning).
+    Requires OAuth 2.0 Bearer token authentication with editor role. ``brand``,
+    ``model``, ``size`` and ``purchased_date`` are required; ``color`` is
+    optional. The id is opaque and duplicate brand/model/color pairs are allowed
+    (e.g. a repurchased pair). Mileage thresholds default to 300 (warning) / 500
+    (maximum) if omitted (validated so maximum > warning).
     """
-    shoe = create_shoe(
-        name=request.name,
+    return create_shoe(
+        brand=request.brand,
+        model=request.model,
+        color=request.color,
         size=request.size,
         purchased_date=request.purchased_date,
         warning_mileage=request.warning_mileage,
         maximum_mileage=request.maximum_mileage,
         notes=request.notes,
     )
-    if shoe is None:
-        raise HTTPException(
-            status_code=409, detail=f"A shoe named '{request.name}' already exists"
-        )
-    return shoe
 
 
 @router.patch("/{shoe_id}", response_model=dict[str, str])
@@ -88,19 +85,19 @@ def update_shoe_endpoint(
     Requires OAuth 2.0 Bearer token authentication with editor role.
 
     All fields are optional and only fields explicitly present in the request
-    body are changed (so a name- or mileage-only edit leaves retirement
-    untouched). Specifically:
+    body are changed (so a brand/mileage-only edit leaves retirement untouched).
+    Specifically:
 
-    - ``name``: renames the shoe. The id stays stable; an alias from the old
-      name is created so future imports carrying the old name still resolve here.
+    - ``brand`` / ``model`` / ``color``: edit the shoe's identity. The id stays
+      stable; the stored ``name`` is kept as ``"{brand} {model}"``.
     - ``warning_mileage`` / ``maximum_mileage``: edit the thresholds (validated so
       maximum > warning).
-    - ``size`` / ``purchased_date``: edit or backfill these (optional on update).
+    - ``size`` / ``purchased_date``: edit or backfill these.
     - ``retired_at``: only touched when present — a date retires the shoe, an
       explicit ``null`` unretires it.
 
     Args:
-        shoe_id: Deterministic shoe identifier derived from the original name.
+        shoe_id: Opaque shoe identifier.
         request: Partial update payload.
     """
     shoe = get_shoe_by_id(shoe_id)
@@ -111,18 +108,23 @@ def update_shoe_endpoint(
 
     sent = request.model_fields_set
 
-    # --- Build the profile (name + mileage) update from explicitly-set fields ---
+    # --- Build the profile update from explicitly-set fields ---
     fields: dict = {}
-    alias_old_name: str | None = None
 
-    if "name" in sent and request.name is not None and request.name != shoe.name:
-        if shoe_name_taken(request.name, exclude_shoe_id=shoe.id):
-            raise HTTPException(
-                status_code=409,
-                detail=f"A shoe named '{request.name}' already exists",
-            )
-        fields["name"] = request.name
-        alias_old_name = shoe.name
+    # brand / model / color. brand & model can't be nulled; color may be cleared.
+    effective_brand = shoe.brand
+    effective_model = shoe.model
+    if "brand" in sent and request.brand is not None:
+        fields["brand"] = request.brand
+        effective_brand = request.brand
+    if "model" in sent and request.model is not None:
+        fields["model"] = request.model
+        effective_model = request.model
+    if "color" in sent:
+        fields["color"] = request.color
+    # Keep the stored name in sync once both parts are known.
+    if ("brand" in fields or "model" in fields) and effective_brand and effective_model:
+        fields["name"] = f"{effective_brand} {effective_model}"
 
     effective_warning = shoe.warning_mileage
     effective_maximum = shoe.maximum_mileage
@@ -146,7 +148,7 @@ def update_shoe_endpoint(
         fields["purchased_date"] = request.purchased_date
 
     if fields:
-        update_shoe(shoe_id, fields, alias_old_name=alias_old_name)
+        update_shoe(shoe_id, fields)
 
     # --- Retirement: only touched when retired_at is explicitly present ---
     retire_action: str | None = None

@@ -7,7 +7,8 @@ from fitness.models import Run
 from fitness.db.runs import bulk_create_runs
 from fitness.db.synced_runs import create_synced_run
 from fitness.db.shoes import retire_shoe_by_id
-from fitness.models.shoe import generate_shoe_id
+
+from tests.e2e.conftest import make_shoe, assign_shoe_to_runs
 
 
 @pytest.mark.e2e
@@ -23,16 +24,17 @@ def test_run_details_basic_and_shoe_notes(viewer_client):
         source="Strava",
         avg_heart_rate=150.0,
     )
-    run._shoe_name = "Details Shoe Alpha"
-
     inserted = bulk_create_runs([run])
     assert inserted == 1
 
+    # Create the shoe explicitly and attribute the run to it (imports no longer
+    # create/assign shoes). Display name is "Details Shoe Alpha".
+    shoe = make_shoe("Details Shoe", "Alpha")
+    assign_shoe_to_runs(shoe.id, ["details_test_run_1"])
+
     # Add retirement notes for the shoe to ensure they show up
-    shoe_id = generate_shoe_id("Details Shoe Alpha")
-    # Set a retirement date and notes
     retired = retire_shoe_by_id(
-        shoe_id=shoe_id,
+        shoe_id=shoe.id,
         retired_at=date(2035, 1, 10),
         retirement_notes="E2E retirement notes for verification",
     )

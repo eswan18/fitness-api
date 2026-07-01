@@ -5,6 +5,8 @@ from datetime import datetime
 from fitness.models import Run
 from fitness.db.runs import bulk_create_runs
 
+from tests.e2e.conftest import make_shoe, assign_shoe_to_runs
+
 
 @pytest.mark.e2e
 def test_runs_endpoint_basic(viewer_client):
@@ -136,10 +138,13 @@ def test_run_details_endpoint(viewer_client):
         source="Strava",
         avg_heart_rate=145.0,
     )
-    run._shoe_name = "Test Running Shoe"
-
     inserted = bulk_create_runs([run])
     assert inserted == 1
+
+    # Create the shoe explicitly and attribute the run to it (imports no longer
+    # create/assign shoes). Display name is "Test Running Shoe".
+    shoe = make_shoe("Test Running", "Shoe")
+    assign_shoe_to_runs(shoe.id, ["shoe_run_1"])
 
     # Test run details endpoint (alias path to avoid routing ambiguity)
     res = viewer_client.get("/runs-details")

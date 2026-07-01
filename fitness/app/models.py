@@ -66,11 +66,13 @@ class RetireShoeRequest(BaseModel):
 class CreateShoeRequest(BaseModel):
     """Request model for creating a shoe via POST.
 
-    ``size`` and ``purchased_date`` are required: new shoes must record them
-    (only old/imported shoes are allowed to leave them null).
+    ``brand``, ``model``, ``size`` and ``purchased_date`` are required on new
+    shoes; ``color`` is optional. (Old/imported shoes may lack any of these.)
     """
 
-    name: str
+    brand: str
+    model: str
+    color: Optional[str] = None
     size: float = Field(gt=0)
     purchased_date: date
     warning_mileage: int = Field(default=300, gt=0)
@@ -89,12 +91,14 @@ class UpdateShoeRequest(BaseModel):
 
     All fields are optional. The router distinguishes "field omitted" from
     "field explicitly set to null" via ``model_fields_set`` so that, for example,
-    a name-only edit does not unretire a shoe (a sent ``retired_at=null`` is what
-    unretires it). The mileage ordering (maximum > warning) is validated in the
-    router against the shoe's resulting values, since either may be omitted.
+    a brand/model edit does not unretire a shoe (a sent ``retired_at=null`` is
+    what unretires it). The mileage ordering (maximum > warning) is validated in
+    the router against the shoe's resulting values, since either may be omitted.
     """
 
-    name: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    color: Optional[str] = None
     warning_mileage: Optional[int] = Field(default=None, gt=0)
     maximum_mileage: Optional[int] = Field(default=None, gt=0)
     size: Optional[float] = Field(default=None, gt=0)

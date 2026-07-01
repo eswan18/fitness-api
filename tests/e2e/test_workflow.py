@@ -2,12 +2,13 @@ import pytest
 from datetime import datetime
 from fitness.models import Run
 from fitness.db.runs import bulk_create_runs
-from fitness.models.shoe import generate_shoe_id
+
+from tests.e2e.conftest import make_shoe, assign_shoe_to_runs
 
 
 @pytest.mark.e2e
 def test_minimal_workflow(viewer_client, editor_client):
-    # Seed: create a run with a shoe name so it auto-creates the shoe and history
+    # Seed: create a run and a shoe attributed to it, plus history.
     run = Run(
         id="e2e_run_1",
         datetime_utc=datetime(2024, 1, 1, 12, 0, 0),
@@ -17,10 +18,12 @@ def test_minimal_workflow(viewer_client, editor_client):
         source="Strava",
         avg_heart_rate=150.0,
     )
-    run._shoe_name = "E2E Test Shoe"
 
     inserted = bulk_create_runs([run])
     assert inserted == 1
+
+    shoe = make_shoe("E2E Test", "Shoe")
+    assign_shoe_to_runs(shoe.id, ["e2e_run_1"])
 
     # View runs
     res = viewer_client.get("/runs")
@@ -46,7 +49,7 @@ def test_minimal_workflow(viewer_client, editor_client):
     assert len(history) >= 2
 
     # Retire the shoe
-    shoe_id = generate_shoe_id("E2E Test Shoe")
+    shoe_id = shoe.id
     res = editor_client.patch(
         f"/shoes/{shoe_id}",
         json={"retired_at": "2024-12-31", "retirement_notes": "done"},

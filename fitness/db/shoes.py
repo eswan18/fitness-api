@@ -49,7 +49,8 @@ def get_shoes(
 
         query = sql.SQL("""
             SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
-                   warning_mileage, maximum_mileage, size, purchased_date
+                   warning_mileage, maximum_mileage, size, purchased_date,
+                   brand, model, color
             FROM shoes
             {where_clause}
             {order_by}
@@ -67,7 +68,8 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
             cursor.execute(
                 """
                 SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
-                       warning_mileage, maximum_mileage, size, purchased_date
+                       warning_mileage, maximum_mileage, size, purchased_date,
+                       brand, model, color
                 FROM shoes
                 WHERE id = %s
             """,
@@ -77,7 +79,8 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
             cursor.execute(
                 """
                 SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
-                       warning_mileage, maximum_mileage, size, purchased_date
+                       warning_mileage, maximum_mileage, size, purchased_date,
+                       brand, model, color
                 FROM shoes
                 WHERE id = %s AND deleted_at IS NULL
             """,
@@ -88,44 +91,40 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
 
 
 def create_shoe(
-    name: str,
+    brand: str,
+    model: str,
     size: float,
     purchased_date: date,
+    color: Optional[str] = None,
     warning_mileage: int = 300,
     maximum_mileage: int = 500,
     notes: Optional[str] = None,
-) -> Optional[Shoe]:
-    """Create a new shoe.
+) -> Shoe:
+    """Create a new shoe with an opaque id.
 
-    ``size`` and ``purchased_date`` are required here because the create endpoint
-    enforces them on new shoes (only import-created shoes are allowed to omit them).
-
-    Returns the created Shoe, or None if a shoe with the same (normalized) id
-    already exists — including a soft-deleted one, since the id is the primary
-    key. The caller turns None into a 409. Other shoe columns take their
-    defaults (active, no retirement).
+    Ids are opaque (not derived from the name) so duplicate brand/model/color
+    pairs — e.g. a repurchased pair — can coexist. ``name`` is kept in sync as
+    ``"{brand} {model}"`` while the column still exists (a later migration drops
+    it in favour of a computed value).
     """
-    from fitness.models.shoe import generate_shoe_id
+    import secrets
 
-    shoe_id = generate_shoe_id(name)
+    shoe_id = f"shoe_{secrets.token_hex(8)}"
+    name = f"{brand} {model}"
     with get_db_cursor() as cursor:
-        # Guard both the id primary key and the name UNIQUE constraint. The name
-        # unique constraint covers soft-deleted rows too, so check across all
-        # rows and return a clean None (→ 409) instead of an IntegrityError.
-        cursor.execute(
-            "SELECT 1 FROM shoes WHERE id = %s OR name = %s", (shoe_id, name)
-        )
-        if cursor.fetchone() is not None:
-            return None
         cursor.execute(
             """
             INSERT INTO shoes
-                (id, name, notes, warning_mileage, maximum_mileage, size, purchased_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (id, name, brand, model, color, notes,
+                 warning_mileage, maximum_mileage, size, purchased_date)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 shoe_id,
                 name,
+                brand,
+                model,
+                color,
                 notes,
                 warning_mileage,
                 maximum_mileage,
@@ -136,6 +135,9 @@ def create_shoe(
     return Shoe(
         id=shoe_id,
         name=name,
+        brand=brand,
+        model=model,
+        color=color,
         notes=notes,
         warning_mileage=warning_mileage,
         maximum_mileage=maximum_mileage,
@@ -174,9 +176,13 @@ def unretire_shoe_by_id(shoe_id: str) -> bool:
         return cursor.rowcount > 0
 
 
-# Columns the generic partial-update path is allowed to touch.
+# Columns the generic partial-update path is allowed to touch. ``name`` is set
+# by the router (kept as "{brand} {model}") whenever brand/model change.
 _UPDATABLE_SHOE_FIELDS = (
     "name",
+    "brand",
+    "model",
+    "color",
     "warning_mileage",
     "maximum_mileage",
     "size",
@@ -186,17 +192,12 @@ _UPDATABLE_SHOE_FIELDS = (
 )
 
 
-def update_shoe(
-    shoe_id: str, fields: dict, alias_old_name: Optional[str] = None
-) -> bool:
-    """Apply a partial update to a shoe within a single transaction.
+def update_shoe(shoe_id: str, fields: dict) -> bool:
+    """Apply a partial update to a shoe.
 
-    ``fields`` may contain any of ``name``, ``warning_mileage``,
-    ``maximum_mileage``, ``size``, ``purchased_date``, ``retired_at``,
-    ``retirement_notes`` (unknown keys are ignored). When ``alias_old_name`` is given — i.e. the shoe is being
-    renamed — an alias mapping that old name to this shoe id is upserted so a
-    future import carrying the old gear name still resolves to this shoe instead
-    of creating a duplicate (same mechanism as :func:`merge_shoes`).
+    ``fields`` may contain any of ``name``, ``brand``, ``model``, ``color``,
+    ``warning_mileage``, ``maximum_mileage``, ``size``, ``purchased_date``,
+    ``retired_at``, ``retirement_notes`` (unknown keys are ignored).
 
     Returns True if a non-deleted shoe matched and was updated.
     """
@@ -213,20 +214,9 @@ def update_shoe(
     ).format(assignments=sql.SQL(", ").join(assignments))
     params = list(updates.values()) + [shoe_id]
 
-    with get_db_connection() as conn:
-        with conn.transaction():
-            with conn.cursor() as cursor:
-                cursor.execute(query, params)
-                updated = cursor.rowcount > 0
-                if updated and alias_old_name is not None:
-                    cursor.execute(
-                        "INSERT INTO shoe_aliases (alias_name, shoe_id) "
-                        "VALUES (%s, %s) "
-                        "ON CONFLICT (alias_name) DO UPDATE "
-                        "SET shoe_id = EXCLUDED.shoe_id",
-                        (alias_old_name, shoe_id),
-                    )
-    return updated
+    with get_db_cursor() as cursor:
+        cursor.execute(query, params)
+        return cursor.rowcount > 0
 
 
 def delete_shoe_by_id(shoe_id: str) -> bool:
@@ -257,11 +247,13 @@ def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUs
 
     query = sql.SQL("""
         SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
-               warning_mileage, maximum_mileage, size, purchased_date, last_used_date
+               warning_mileage, maximum_mileage, size, purchased_date,
+               brand, model, color, last_used_date
         FROM (
             SELECT DISTINCT ON (s.id)
                 s.id, s.name, s.retired_at, s.notes, s.retirement_notes, s.deleted_at,
                 s.warning_mileage, s.maximum_mileage, s.size, s.purchased_date,
+                s.brand, s.model, s.color,
                 r.datetime_utc AS last_used_date
             FROM shoes s
             LEFT JOIN runs r ON r.shoe_id = s.id AND r.deleted_at IS NULL
@@ -276,8 +268,8 @@ def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUs
         rows = cursor.fetchall()
         return [
             ShoeRecentUse(
-                shoe=_row_to_shoe(row[:10]),
-                last_used_date=row[10],
+                shoe=_row_to_shoe(row[:13]),
+                last_used_date=row[13],
             )
             for row in rows
         ]
@@ -296,6 +288,9 @@ def _row_to_shoe(row) -> Shoe:
         maximum_mileage,
         size,
         purchased_date,
+        brand,
+        model,
+        color,
     ) = row
     return Shoe(
         id=shoe_id,
@@ -308,96 +303,18 @@ def _row_to_shoe(row) -> Shoe:
         maximum_mileage=maximum_mileage,
         size=size,
         purchased_date=purchased_date,
+        brand=brand,
+        model=model,
+        color=color,
     )
-
-
-def shoe_name_taken(name: str, exclude_shoe_id: Optional[str] = None) -> bool:
-    """Whether another shoe already uses this exact name.
-
-    Checks across all rows (including soft-deleted ones) because the ``name``
-    UNIQUE constraint spans them, so a rename that collides with a soft-deleted
-    shoe would otherwise fail with an IntegrityError. ``exclude_shoe_id`` skips
-    the shoe being renamed itself.
-    """
-    with get_db_cursor() as cursor:
-        if exclude_shoe_id is not None:
-            cursor.execute(
-                "SELECT 1 FROM shoes WHERE name = %s AND id <> %s",
-                (name, exclude_shoe_id),
-            )
-        else:
-            cursor.execute("SELECT 1 FROM shoes WHERE name = %s", (name,))
-        return cursor.fetchone() is not None
-
-
-def get_existing_shoes_by_names(shoe_names: set[str]) -> dict[str, str]:
-    """Get existing shoes by their names. Returns dict mapping shoe_name -> shoe_id."""
-    if not shoe_names:
-        return {}
-
-    logger.debug(f"Checking existence of {len(shoe_names)} shoes: {shoe_names}")
-
-    with get_db_cursor() as cursor:
-        # Create placeholders for IN clause using sql.SQL
-        placeholders = sql.SQL(",").join(sql.Placeholder() * len(shoe_names))
-        query = sql.SQL("""
-            SELECT name, id FROM shoes
-            WHERE name IN ({placeholders}) AND deleted_at IS NULL
-        """).format(placeholders=placeholders)
-        cursor.execute(query, list(shoe_names))
-
-        result = {name: shoe_id for name, shoe_id in cursor.fetchall()}
-        logger.debug(f"Found {len(result)} existing shoes in database")
-        return result
-
-
-def bulk_create_shoes_by_names(shoe_names: set[str]) -> dict[str, str]:
-    """Create multiple shoes by names. Returns dict mapping shoe_name -> shoe_id."""
-    if not shoe_names:
-        return {}
-
-    logger.info(f"Creating {len(shoe_names)} new shoes: {shoe_names}")
-
-    from fitness.models.shoe import generate_shoe_id
-
-    # Generate shoe data
-    shoe_data = [(generate_shoe_id(name), name) for name in shoe_names]
-
-    with get_db_cursor() as cursor:
-        cursor.executemany(
-            """
-            INSERT INTO shoes (id, name, retired_at, notes, retirement_notes, deleted_at)
-            VALUES (%s, %s, NULL, NULL, NULL, NULL)
-        """,
-            shoe_data,
-        )
-
-        logger.info(f"Successfully created {len(shoe_data)} shoes")
-
-        # Return mapping of name -> id
-        return {name: shoe_id for shoe_id, name in shoe_data}
-
-
-def get_shoe_ids_by_alias_names(alias_names: set[str]) -> dict[str, str]:
-    """Look up shoe aliases. Returns dict mapping alias_name -> shoe_id."""
-    if not alias_names:
-        return {}
-
-    with get_db_cursor() as cursor:
-        placeholders = sql.SQL(",").join(sql.Placeholder() * len(alias_names))
-        query = sql.SQL("""
-            SELECT alias_name, shoe_id FROM shoe_aliases
-            WHERE alias_name IN ({placeholders})
-        """).format(placeholders=placeholders)
-        cursor.execute(query, list(alias_names))
-        return {alias_name: shoe_id for alias_name, shoe_id in cursor.fetchall()}
 
 
 def merge_shoes(keep_shoe_id: str, merge_shoe_id: str, merge_shoe_name: str) -> None:
     """Merge one shoe into another within a single transaction.
 
-    Re-points all runs and history to keep_shoe_id, creates an alias for the
-    merged shoe's name, and soft-deletes the merged shoe.
+    Re-points all runs and history from the merged shoe to keep_shoe_id and
+    soft-deletes the merged shoe. (``merge_shoe_name`` is unused now that imports
+    no longer resolve shoe names, but kept for a stable call signature.)
     """
     with get_db_connection() as conn:
         with conn.transaction():
@@ -411,19 +328,6 @@ def merge_shoes(keep_shoe_id: str, merge_shoe_id: str, merge_shoe_name: str) -> 
                 cursor.execute(
                     "UPDATE runs_history SET shoe_id = %s WHERE shoe_id = %s",
                     (keep_shoe_id, merge_shoe_id),
-                )
-                # Cascade existing aliases that pointed at the merged shoe forward
-                # to the kept shoe, so transitive merges (B->A then A->C) don't
-                # leave aliases stranded on a soft-deleted intermediate.
-                cursor.execute(
-                    "UPDATE shoe_aliases SET shoe_id = %s WHERE shoe_id = %s",
-                    (keep_shoe_id, merge_shoe_id),
-                )
-                # Create alias (upsert in case this name was already aliased)
-                cursor.execute(
-                    "INSERT INTO shoe_aliases (alias_name, shoe_id) VALUES (%s, %s) "
-                    "ON CONFLICT (alias_name) DO UPDATE SET shoe_id = EXCLUDED.shoe_id",
-                    (merge_shoe_name, keep_shoe_id),
                 )
                 # Soft-delete merged shoe
                 cursor.execute(
