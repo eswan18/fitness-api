@@ -4,10 +4,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fitness.models.ride import RideType, RideSource
 from fitness.models.sync import SyncStatus
+from fitness.models.tag import Tag
 
 
 class RideDetail(BaseModel):
@@ -25,6 +26,7 @@ class RideDetail(BaseModel):
     source: RideSource
     avg_heart_rate: float | None = None
     name: str | None = None  # User-authored display name on the ride
+    tags: list[Tag] = Field(default_factory=list)
     deleted_at: datetime | None = None
     # Set when this ride was marked as a duplicate of another ride (the kept one).
     duplicate_of_id: str | None = None
