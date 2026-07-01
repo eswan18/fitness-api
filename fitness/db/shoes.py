@@ -44,11 +44,11 @@ def get_shoes(
         order_by = (
             sql.SQL("ORDER BY retired_at DESC")
             if retired is True
-            else sql.SQL("ORDER BY name")
+            else sql.SQL("ORDER BY brand, model")
         )
 
         query = sql.SQL("""
-            SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
+            SELECT id, retired_at, notes, retirement_notes, deleted_at,
                    warning_mileage, maximum_mileage, size, purchased_date,
                    brand, model, color
             FROM shoes
@@ -67,7 +67,7 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
         if include_deleted:
             cursor.execute(
                 """
-                SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
+                SELECT id, retired_at, notes, retirement_notes, deleted_at,
                        warning_mileage, maximum_mileage, size, purchased_date,
                        brand, model, color
                 FROM shoes
@@ -78,7 +78,7 @@ def get_shoe_by_id(shoe_id: str, include_deleted: bool = False) -> Optional[Shoe
         else:
             cursor.execute(
                 """
-                SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
+                SELECT id, retired_at, notes, retirement_notes, deleted_at,
                        warning_mileage, maximum_mileage, size, purchased_date,
                        brand, model, color
                 FROM shoes
@@ -103,9 +103,8 @@ def create_shoe(
     """Create a new shoe with an opaque id.
 
     Ids are opaque (not derived from the name) so duplicate brand/model/color
-    pairs — e.g. a repurchased pair — can coexist. ``name`` is kept in sync as
-    ``"{brand} {model}"`` while the column still exists (a later migration drops
-    it in favour of a computed value).
+    pairs — e.g. a repurchased pair — can coexist. The display ``name`` is
+    composed as ``"{brand} {model}"`` (no longer stored).
     """
     import secrets
 
@@ -115,13 +114,12 @@ def create_shoe(
         cursor.execute(
             """
             INSERT INTO shoes
-                (id, name, brand, model, color, notes,
+                (id, brand, model, color, notes,
                  warning_mileage, maximum_mileage, size, purchased_date)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 shoe_id,
-                name,
                 brand,
                 model,
                 color,
@@ -176,10 +174,9 @@ def unretire_shoe_by_id(shoe_id: str) -> bool:
         return cursor.rowcount > 0
 
 
-# Columns the generic partial-update path is allowed to touch. ``name`` is set
-# by the router (kept as "{brand} {model}") whenever brand/model change.
+# Columns the generic partial-update path is allowed to touch. ``name`` is no
+# longer stored — it's composed from brand/model.
 _UPDATABLE_SHOE_FIELDS = (
-    "name",
     "brand",
     "model",
     "color",
@@ -246,12 +243,12 @@ def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUs
     where_clause = sql.SQL("WHERE ") + sql.SQL(" AND ").join(conditions)
 
     query = sql.SQL("""
-        SELECT id, name, retired_at, notes, retirement_notes, deleted_at,
+        SELECT id, retired_at, notes, retirement_notes, deleted_at,
                warning_mileage, maximum_mileage, size, purchased_date,
                brand, model, color, last_used_date
         FROM (
             SELECT DISTINCT ON (s.id)
-                s.id, s.name, s.retired_at, s.notes, s.retirement_notes, s.deleted_at,
+                s.id, s.retired_at, s.notes, s.retirement_notes, s.deleted_at,
                 s.warning_mileage, s.maximum_mileage, s.size, s.purchased_date,
                 s.brand, s.model, s.color,
                 r.datetime_utc AS last_used_date
@@ -260,7 +257,7 @@ def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUs
             {where_clause}
             ORDER BY s.id, r.datetime_utc DESC NULLS LAST
         ) sub
-        ORDER BY last_used_date DESC NULLS LAST, name
+        ORDER BY last_used_date DESC NULLS LAST, brand, model
     """).format(where_clause=where_clause)
 
     with get_db_cursor() as cursor:
@@ -268,8 +265,8 @@ def get_shoes_with_last_used(include_retired: bool = False) -> List[ShoeRecentUs
         rows = cursor.fetchall()
         return [
             ShoeRecentUse(
-                shoe=_row_to_shoe(row[:13]),
-                last_used_date=row[13],
+                shoe=_row_to_shoe(row[:12]),
+                last_used_date=row[12],
             )
             for row in rows
         ]
@@ -279,7 +276,6 @@ def _row_to_shoe(row) -> Shoe:
     """Convert a database row to a Shoe object."""
     (
         shoe_id,
-        name,
         retired_at,
         notes,
         retirement_notes,
@@ -294,7 +290,7 @@ def _row_to_shoe(row) -> Shoe:
     ) = row
     return Shoe(
         id=shoe_id,
-        name=name,
+        name=f"{brand} {model}",
         retired_at=retired_at,
         notes=notes,
         retirement_notes=retirement_notes,

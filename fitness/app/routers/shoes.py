@@ -89,7 +89,7 @@ def update_shoe_endpoint(
     Specifically:
 
     - ``brand`` / ``model`` / ``color``: edit the shoe's identity. The id stays
-      stable; the stored ``name`` is kept as ``"{brand} {model}"``.
+      stable; the displayed ``name`` is composed from ``"{brand} {model}"``.
     - ``warning_mileage`` / ``maximum_mileage``: edit the thresholds (validated so
       maximum > warning).
     - ``size`` / ``purchased_date``: edit or backfill these.
@@ -112,19 +112,12 @@ def update_shoe_endpoint(
     fields: dict = {}
 
     # brand / model / color. brand & model can't be nulled; color may be cleared.
-    effective_brand = shoe.brand
-    effective_model = shoe.model
     if "brand" in sent and request.brand is not None:
         fields["brand"] = request.brand
-        effective_brand = request.brand
     if "model" in sent and request.model is not None:
         fields["model"] = request.model
-        effective_model = request.model
     if "color" in sent:
         fields["color"] = request.color
-    # Keep the stored name in sync once both parts are known.
-    if ("brand" in fields or "model" in fields) and effective_brand and effective_model:
-        fields["name"] = f"{effective_brand} {effective_model}"
 
     effective_warning = shoe.warning_mileage
     effective_maximum = shoe.maximum_mileage
