@@ -61,6 +61,14 @@ def mock_db_calls(monkeypatch):
     monkeypatch.setattr(
         "fitness.db.runs.get_all_run_details", lambda *args, **kwargs: []
     )
+    # Mock tag enrichment (used by the cardio activity feed) - default to no
+    # tags so feed tests that don't care about tags aren't hitting the DB.
+    monkeypatch.setattr(
+        "fitness.db.tags.get_tags_for_run_ids", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        "fitness.db.tags.get_tags_for_ride_ids", lambda *args, **kwargs: {}
+    )
 
 
 # Shared test user data

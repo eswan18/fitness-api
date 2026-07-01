@@ -11,6 +11,23 @@ from .runs_history import insert_run_history_with_cursor
 logger = logging.getLogger(__name__)
 
 
+_RUN_SELECT = sql.SQL("""
+    SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), r.notes, r.name
+    FROM runs r
+    LEFT JOIN shoes s ON r.shoe_id = s.id
+""")
+
+_RUN_DETAIL_SELECT = sql.SQL("""
+    SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
+           COALESCE(NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), 'Unknown') as shoe_name, s.retirement_notes,
+           sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
+           r.run_workout_id, r.notes, r.duplicate_of_id, r.name
+    FROM runs r
+    LEFT JOIN shoes s ON r.shoe_id = s.id
+    LEFT JOIN synced_runs sr ON sr.run_id = r.id
+""")
+
+
 def _build_run_detail_filters(
     include_deleted: bool = False,
     synced: bool | None = None,
@@ -35,13 +52,9 @@ def get_all_runs(include_deleted: bool = False) -> list[Run]:
     """Get all runs from the database with shoe information."""
     with get_db_cursor() as cursor:
         deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" WHERE r.deleted_at IS NULL")
-        query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), r.notes
-            FROM runs r
-            LEFT JOIN shoes s ON r.shoe_id = s.id
-            {deleted_filter}
-            ORDER BY r.datetime_utc
-        """).format(deleted_filter=deleted_filter)
+        query = sql.SQL("{select} {deleted_filter} ORDER BY r.datetime_utc").format(
+            select=_RUN_SELECT, deleted_filter=deleted_filter
+        )
         cursor.execute(query)
         rows = cursor.fetchall()
         return [_row_to_run(row) for row in rows]
@@ -57,14 +70,9 @@ def get_runs_in_date_range(
         deleted_filter = sql.SQL("")
         if not include_deleted:
             deleted_filter = sql.SQL(" AND r.deleted_at IS NULL")
-        query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source,
-                   r.avg_heart_rate, r.shoe_id, r.deleted_at, NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), r.notes
-            FROM runs r
-            LEFT JOIN shoes s ON r.shoe_id = s.id
-            WHERE DATE(r.datetime_utc) BETWEEN %s AND %s{deleted_filter}
-            ORDER BY r.datetime_utc
-        """).format(deleted_filter=deleted_filter)
+        query = sql.SQL(
+            "{select} WHERE DATE(r.datetime_utc) BETWEEN %s AND %s{deleted_filter} ORDER BY r.datetime_utc"
+        ).format(select=_RUN_SELECT, deleted_filter=deleted_filter)
         cursor.execute(query, [start_date, end_date])
         rows = cursor.fetchall()
         return [_row_to_run(row) for row in rows]
@@ -309,23 +317,12 @@ def find_candidate_duplicate_runs(
     start = target.datetime_utc - timedelta(minutes=window_minutes)
     end = target.datetime_utc + timedelta(minutes=window_minutes)
     with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
-                   COALESCE(NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), 'Unknown') as shoe_name, s.retirement_notes,
-                   sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
-                   r.run_workout_id, r.notes, r.duplicate_of_id
-            FROM runs r
-            LEFT JOIN shoes s ON r.shoe_id = s.id
-            LEFT JOIN synced_runs sr ON sr.run_id = r.id
-            WHERE r.id != %s
-              AND r.deleted_at IS NULL
-              AND r.duplicate_of_id IS NULL
-              AND r.datetime_utc BETWEEN %s AND %s
-            ORDER BY ABS(EXTRACT(EPOCH FROM (r.datetime_utc - %s))) ASC
-            """,
-            (run_id, start, end, target.datetime_utc),
-        )
+        query = sql.SQL(
+            "{select} WHERE r.id != %s AND r.deleted_at IS NULL "
+            "AND r.duplicate_of_id IS NULL AND r.datetime_utc BETWEEN %s AND %s "
+            "ORDER BY ABS(EXTRACT(EPOCH FROM (r.datetime_utc - %s))) ASC"
+        ).format(select=_RUN_DETAIL_SELECT)
+        cursor.execute(query, (run_id, start, end, target.datetime_utc))
         rows = cursor.fetchall()
         return [_row_to_run_detail(row) for row in rows]
 
@@ -373,17 +370,9 @@ def get_run_details_in_date_range(
         params: list = [start_date, end_date]
 
         where_clause = sql.SQL(" AND ").join(conditions)
-        query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
-                   COALESCE(NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), 'Unknown') as shoe_name, s.retirement_notes,
-                   sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
-                   r.run_workout_id, r.notes, r.duplicate_of_id
-            FROM runs r
-            LEFT JOIN shoes s ON r.shoe_id = s.id
-            LEFT JOIN synced_runs sr ON sr.run_id = r.id
-            WHERE {where_clause}
-            ORDER BY r.datetime_utc DESC
-        """).format(where_clause=where_clause)
+        query = sql.SQL("{select} WHERE {where_clause} ORDER BY r.datetime_utc DESC").format(
+            select=_RUN_DETAIL_SELECT, where_clause=where_clause
+        )
         cursor.execute(query, params)
         rows = cursor.fetchall()
         return [_row_to_run_detail(row) for row in rows]
@@ -401,17 +390,9 @@ def get_all_run_details(
             if conditions
             else sql.SQL("")
         )
-        query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
-                   COALESCE(NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), 'Unknown') as shoe_name, s.retirement_notes,
-                   sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
-                   r.run_workout_id, r.notes, r.duplicate_of_id
-            FROM runs r
-            LEFT JOIN shoes s ON r.shoe_id = s.id
-            LEFT JOIN synced_runs sr ON sr.run_id = r.id
-            {where_clause}
-            ORDER BY r.datetime_utc DESC
-        """).format(where_clause=where_clause)
+        query = sql.SQL("{select} {where_clause} ORDER BY r.datetime_utc DESC").format(
+            select=_RUN_DETAIL_SELECT, where_clause=where_clause
+        )
         cursor.execute(query, params)
         rows = cursor.fetchall()
         return [_row_to_run_detail(row) for row in rows]
@@ -423,17 +404,10 @@ def get_run_details_by_ids(run_ids: list[str]) -> list[RunDetail]:
         return []
     with get_db_cursor() as cursor:
         placeholders = sql.SQL(", ").join(sql.Placeholder() * len(run_ids))
-        query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
-                   COALESCE(NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), 'Unknown') as shoe_name, s.retirement_notes,
-                   sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
-                   r.run_workout_id, r.notes, r.duplicate_of_id
-            FROM runs r
-            LEFT JOIN shoes s ON r.shoe_id = s.id
-            LEFT JOIN synced_runs sr ON sr.run_id = r.id
-            WHERE r.id IN ({placeholders}) AND r.deleted_at IS NULL
-            ORDER BY r.datetime_utc ASC
-        """).format(placeholders=placeholders)
+        query = sql.SQL(
+            "{select} WHERE r.id IN ({placeholders}) AND r.deleted_at IS NULL "
+            "ORDER BY r.datetime_utc ASC"
+        ).format(select=_RUN_DETAIL_SELECT, placeholders=placeholders)
         cursor.execute(query, run_ids)
         rows = cursor.fetchall()
         return [_row_to_run_detail(row) for row in rows]
@@ -448,12 +422,9 @@ def get_run_by_id(run_id: str, include_deleted: bool = False) -> Run | None:
     """
     with get_db_cursor() as cursor:
         deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" AND r.deleted_at IS NULL")
-        query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), r.notes
-            FROM runs r
-            LEFT JOIN shoes s ON r.shoe_id = s.id
-            WHERE r.id = %s{deleted_filter}
-        """).format(deleted_filter=deleted_filter)
+        query = sql.SQL("{select} WHERE r.id = %s{deleted_filter}").format(
+            select=_RUN_SELECT, deleted_filter=deleted_filter
+        )
         cursor.execute(query, (run_id,))
         row = cursor.fetchone()
         if not row:
@@ -481,6 +452,26 @@ def update_run_notes(run_id: str, notes: str | None) -> bool:
         return cursor.rowcount > 0
 
 
+def update_run_name(run_id: str, name: str | None) -> bool:
+    """Set (or clear) a run's user-authored display name.
+
+    A lightweight, single-field update with no version bump or history record
+    (unlike metric edits via ``update_run_with_history``). The name is never
+    touched by re-imports (``bulk_create_runs`` skips existing rows), so it
+    survives Strava/MMF re-syncs. Returns True if a non-deleted run matched.
+    """
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE runs
+            SET name = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND deleted_at IS NULL
+            """,
+            (name, run_id),
+        )
+        return cursor.rowcount > 0
+
+
 def _row_to_run(row) -> Run:
     """Convert a database row to a Run object."""
     (
@@ -495,6 +486,7 @@ def _row_to_run(row) -> Run:
         deleted_at,
         shoe_name,
         notes,
+        name,
     ) = row
     run = Run(
         id=run_id,
@@ -506,6 +498,7 @@ def _row_to_run(row) -> Run:
         avg_heart_rate=avg_heart_rate,
         shoe_id=shoe_id,
         notes=notes,
+        name=name,
         deleted_at=deleted_at,
     )
     run._shoe_name = shoe_name
@@ -534,6 +527,7 @@ def _row_to_run_detail(row) -> RunDetail:
         run_workout_id,
         notes,
         duplicate_of_id,
+        name,
     ) = row
 
     # Normalize shoe_name
@@ -552,6 +546,7 @@ def _row_to_run_detail(row) -> RunDetail:
         shoes=shoe_name,
         shoe_retirement_notes=retirement_notes,
         notes=notes,
+        name=name,
         deleted_at=deleted_at,
         duplicate_of_id=duplicate_of_id,
         version=run_table_version,

@@ -22,6 +22,7 @@ from fitness.app.routers.run_workouts import (
 from fitness.models.ride_detail import RideDetail
 from fitness.models.run_detail import RunDetail
 from fitness.models.run_workout import RunWorkoutDetail
+from fitness.models.tag import Tag
 
 
 def _run(
@@ -45,7 +46,7 @@ def _run(
     )
 
 
-def _ride(id: str = "ride_1", dt: datetime | None = None) -> RideDetail:
+def _ride(id: str = "ride_1", dt: datetime | None = None, **kwargs) -> RideDetail:
     return RideDetail(
         id=id,
         datetime_utc=dt or datetime(2024, 6, 1, 18, 0, 0),
@@ -53,7 +54,8 @@ def _ride(id: str = "ride_1", dt: datetime | None = None) -> RideDetail:
         distance=0.0,
         duration=3600.0,
         source="Strava",
-        avg_heart_rate=140.0,
+        avg_heart_rate=kwargs.pop("avg_heart_rate", 140.0),
+        **kwargs,
     )
 
 
@@ -136,6 +138,69 @@ class TestBuildCsv:
         assert row["distance_mi"] == "3.0"
         assert row["duration_hms"] == "0:25:00"
         assert row["avg_pace_min_per_mile"] == "8:20"
+
+    def test_run_name_populated_and_blank_when_missing(self):
+        named = _run("run_1", name="Morning Tempo")
+        unnamed = _run("run_2")
+        rows = _parse(
+            build_cardio_csv(
+                [
+                    ActivityFeedRunItem(item=named),
+                    ActivityFeedRunItem(item=unnamed),
+                ],
+                None,
+            )
+        )
+        assert rows[0]["name"] == "Morning Tempo"
+        assert rows[1]["name"] == ""
+
+    def test_run_tags_joined_and_blank_when_missing(self):
+        tagged = _run(
+            "run_1",
+            tags=[Tag(id="tag_1", name="Hills"), Tag(id="tag_2", name="Speedwork")],
+        )
+        untagged = _run("run_2")
+        rows = _parse(
+            build_cardio_csv(
+                [
+                    ActivityFeedRunItem(item=tagged),
+                    ActivityFeedRunItem(item=untagged),
+                ],
+                None,
+            )
+        )
+        assert rows[0]["tags"] == "Hills; Speedwork"
+        assert rows[1]["tags"] == ""
+
+    def test_ride_tags_joined_and_blank_when_missing(self):
+        tagged = _ride("ride_1", tags=[Tag(id="tag_3", name="Crit")])
+        untagged = _ride("ride_2")
+        rows = _parse(
+            build_cardio_csv(
+                [
+                    ActivityFeedRideItem(item=tagged),
+                    ActivityFeedRideItem(item=untagged),
+                ],
+                None,
+            )
+        )
+        assert rows[0]["tags"] == "Crit"
+        assert rows[1]["tags"] == ""
+
+    def test_ride_name_populated_and_blank_when_missing(self):
+        named = _ride("ride_1", name="Sunday Century")
+        unnamed = _ride("ride_2")
+        rows = _parse(
+            build_cardio_csv(
+                [
+                    ActivityFeedRideItem(item=named),
+                    ActivityFeedRideItem(item=unnamed),
+                ],
+                None,
+            )
+        )
+        assert rows[0]["name"] == "Sunday Century"
+        assert rows[1]["name"] == ""
 
     def test_missing_heart_rate_blank(self):
         run = _run("run_1", avg_heart_rate=None)

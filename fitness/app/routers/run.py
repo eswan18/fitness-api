@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from fitness.db.runs import (
     get_run_by_id,
     update_run_notes,
+    update_run_name,
     get_run_duplicate_of,
     mark_run_duplicate,
     unmark_run_duplicate,
@@ -28,11 +29,13 @@ from fitness.db.runs_history import (
     RunHistoryRecord,
 )
 from fitness.db.synced_runs import is_run_synced, get_synced_run, delete_synced_run
+from fitness.db.tags import set_run_tags
 from fitness.app.auth import require_viewer, require_editor
 from fitness.app.routers._sync_helpers import perform_unsync
 from fitness.models.user import User
 from fitness.models import Run
 from fitness.models.run_detail import RunDetail
+from fitness.models.tag import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +240,64 @@ def update_run_note(
             detail=f"Run with ID {run_id} not found",
         )
     return updated
+
+
+class RunNameUpdateRequest(BaseModel):
+    """Request model for setting a run's user-authored display name."""
+
+    name: str | None = Field(
+        None, max_length=255, description="Display name; null or empty clears it"
+    )
+
+
+@router.patch("/{run_id}/name", response_model=Run)
+def update_run_name_endpoint(
+    run_id: str,
+    request: RunNameUpdateRequest,
+    _user: User = Depends(require_editor),
+) -> Run:
+    """Set or clear a run's user-authored display name.
+
+    Unlike metric edits (`PATCH /runs/{id}`), this is a lightweight single-field
+    update: it is NOT version/history-tracked and IS allowed on calendar-synced
+    runs (a name doesn't affect the synced event).
+    """
+    _get_run_or_404(run_id)
+    name = (request.name or "").strip() or None
+    update_run_name(run_id, name)
+    updated = get_run_by_id(run_id)
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run with ID {run_id} not found",
+        )
+    return updated
+
+
+class SetRunTagsRequest(BaseModel):
+    """Request model for replacing a run's tag assignments."""
+
+    tag_ids: list[str]
+
+
+@router.put("/{run_id}/tags", response_model=list[Tag])
+def set_run_tags_endpoint(
+    run_id: str,
+    request: SetRunTagsRequest,
+    _user: User = Depends(require_editor),
+) -> list[Tag]:
+    """Replace the full set of tags assigned to a run.
+
+    Unlike metric edits (`PATCH /runs/{id}`), this is allowed on
+    calendar-synced runs (tags don't affect the synced event).
+    """
+    _get_run_or_404(run_id)
+    try:
+        return set_run_tags(run_id, request.tag_ids)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from e
 
 
 class MarkDuplicateRequest(BaseModel):

@@ -2,10 +2,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .run import RunType, RunSource
 from .sync import SyncStatus
+from .tag import Tag
 
 
 class RunDetail(BaseModel):
@@ -23,6 +24,8 @@ class RunDetail(BaseModel):
     shoes: Optional[str] = None
     shoe_retirement_notes: Optional[str] = None
     notes: Optional[str] = None  # User-authored markdown note on the run
+    name: Optional[str] = None  # User-authored display name on the run
+    tags: list[Tag] = Field(default_factory=list)
     deleted_at: Optional[datetime] = None
     # Set when this run was marked as a duplicate of another run (the kept one).
     duplicate_of_id: Optional[str] = None
