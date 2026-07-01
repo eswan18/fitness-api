@@ -31,8 +31,12 @@ def generate_shoe_id(shoe_name: str) -> str:
 
 
 class Shoe(BaseModel):
-    id: str  # Generated from shoe name
-    name: str  # The display name of the shoe
+    id: str  # Opaque identifier
+    # Structured identity (brand/model are NOT NULL in the db; the display name
+    # is composed from them — see `display_name`). color is optional.
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    color: Optional[str] = None
     retired_at: Optional[date] = None
     notes: Optional[str] = None  # General notes
     retirement_notes: Optional[str] = None  # Notes specific to retirement
@@ -46,11 +50,11 @@ class Shoe(BaseModel):
     # on newly-created shoes (POST /shoes/), but not in the schema.
     size: Optional[float] = None
     purchased_date: Optional[date] = None
-    # Structured identity. Nullable until the backfill; then made NOT NULL and
-    # `name` becomes derived from these. color stays optional.
-    brand: Optional[str] = None
-    model: Optional[str] = None
-    color: Optional[str] = None
+
+    @property
+    def display_name(self) -> str:
+        """Human label composed from brand + model (not serialized)."""
+        return " ".join(p for p in (self.brand, self.model) if p)
 
     @property
     def is_retired(self) -> bool:
@@ -61,26 +65,6 @@ class Shoe(BaseModel):
     def is_deleted(self) -> bool:
         """Check if the shoe is soft-deleted."""
         return self.deleted_at is not None
-
-    @classmethod
-    def from_name(cls, name: str) -> Shoe:
-        """Create a new shoe from just a name."""
-        return cls(
-            id=generate_shoe_id(name),
-            name=name,
-        )
-
-    @classmethod
-    def retired_shoe(
-        cls, name: str, retired_at: date, retirement_notes: Optional[str] = None
-    ) -> Shoe:
-        """Create a retired shoe."""
-        return cls(
-            id=generate_shoe_id(name),
-            name=name,
-            retired_at=retired_at,
-            retirement_notes=retirement_notes,
-        )
 
     def retire(self, retired_at: date, retirement_notes: Optional[str] = None) -> None:
         """Mark this shoe as retired."""

@@ -24,15 +24,15 @@ def test_recent_shoes_endpoint_returns_sorted_list(
 
     recent = [
         ShoeRecentUse(
-            shoe=Shoe(id="pegasus", name="Pegasus"),
+            shoe=Shoe(id="pegasus", brand="Nike", model="Pegasus"),
             last_used_date=newer,
         ),
         ShoeRecentUse(
-            shoe=Shoe(id="ghost", name="Ghost"),
+            shoe=Shoe(id="ghost", brand="Brooks", model="Ghost"),
             last_used_date=older,
         ),
         ShoeRecentUse(
-            shoe=Shoe(id="unused", name="Unused"),
+            shoe=Shoe(id="unused", brand="Unused", model="Shoe"),
             last_used_date=None,
         ),
     ]

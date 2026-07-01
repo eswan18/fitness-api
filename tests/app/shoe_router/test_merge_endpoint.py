@@ -14,8 +14,10 @@ def test_merge_shoes_requires_auth(client: TestClient):
 
 def test_merge_shoes_success(monkeypatch, auth_client: TestClient):
     shoes = {
-        "zoom_fly_4": Shoe(id="zoom_fly_4", name="Zoom Fly 4"),
-        "nike_zoom_fly_4": Shoe(id="nike_zoom_fly_4", name="Nike Zoom Fly 4"),
+        "zoom_fly_4": Shoe(id="zoom_fly_4", brand="Zoom", model="Fly 4"),
+        "nike_zoom_fly_4": Shoe(
+            id="nike_zoom_fly_4", brand="Nike", model="Zoom Fly 4"
+        ),
     }
 
     monkeypatch.setattr(
@@ -44,7 +46,7 @@ def test_merge_shoes_success(monkeypatch, auth_client: TestClient):
 
 
 def test_merge_shoes_same_id(monkeypatch, auth_client: TestClient):
-    shoe = Shoe(id="zoom_fly_4", name="Zoom Fly 4")
+    shoe = Shoe(id="zoom_fly_4", brand="Zoom", model="Fly 4")
     monkeypatch.setattr(
         "fitness.app.routers.shoes.get_shoe_by_id",
         lambda shoe_id, **kw: shoe,

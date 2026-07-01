@@ -13,8 +13,8 @@ def test_mileage_by_shoes(run_factory):
     nikes_id = generate_shoe_id(nikes)
 
     shoes = [
-        Shoe(id=brooks_id, name=brooks),
-        Shoe(id=nikes_id, name=nikes),
+        Shoe(id=brooks_id, brand="Brooks", model="Ghost 14"),
+        Shoe(id=nikes_id, brand="Nike", model="Air Zoom Pegasus 37"),
     ]
 
     runs = [
@@ -27,7 +27,9 @@ def test_mileage_by_shoes(run_factory):
     ]
 
     mileage_results = mileage_by_shoes(runs, shoes=shoes)
-    mileage_dict = {result.shoe.name: result.mileage for result in mileage_results}
+    mileage_dict = {
+        result.shoe.display_name: result.mileage for result in mileage_results
+    }
     assert mileage_dict[brooks] == 5.0
     assert mileage_dict[nikes] == 8.0
 
@@ -46,11 +48,12 @@ def test_mileage_by_shoes_exclude_retired(run_factory):
     mock_shoes = [
         Shoe(
             id=nikes_id,
-            name=nikes,
+            brand="Nike",
+            model="Air Zoom Pegasus 37",
             retired_at=date(2024, 12, 15),
             retirement_notes="Worn out",
         ),
-        Shoe(id=brooks_id, name=brooks),  # Active shoe
+        Shoe(id=brooks_id, brand="Brooks", model="Ghost 14"),  # Active shoe
     ]
 
     runs = [
@@ -62,7 +65,9 @@ def test_mileage_by_shoes_exclude_retired(run_factory):
 
     # Test without including retired (default behavior)
     mileage_results = mileage_by_shoes(runs, shoes=mock_shoes, include_retired=False)
-    mileage_dict = {result.shoe.name: result.mileage for result in mileage_results}
+    mileage_dict = {
+        result.shoe.display_name: result.mileage for result in mileage_results
+    }
     assert brooks in mileage_dict
     assert nikes not in mileage_dict  # Should be excluded
     assert mileage_dict[brooks] == 5.0
@@ -72,7 +77,8 @@ def test_mileage_by_shoes_exclude_retired(run_factory):
         runs, shoes=mock_shoes, include_retired=True
     )
     mileage_with_retired_dict = {
-        result.shoe.name: result.mileage for result in mileage_with_retired_results
+        result.shoe.display_name: result.mileage
+        for result in mileage_with_retired_results
     }
     assert brooks in mileage_with_retired_dict
     assert nikes in mileage_with_retired_dict  # Should be included
@@ -94,11 +100,12 @@ def test_mileage_by_shoes_include_retired(run_factory):
     mock_shoes = [
         Shoe(
             id=nikes_id,
-            name=nikes,
+            brand="Nike",
+            model="Air Zoom Pegasus 37",
             retired_at=date(2024, 12, 15),
             retirement_notes="Worn out",
         ),
-        Shoe(id=brooks_id, name=brooks),  # Active shoe
+        Shoe(id=brooks_id, brand="Brooks", model="Ghost 14"),  # Active shoe
     ]
 
     runs = [
@@ -112,7 +119,9 @@ def test_mileage_by_shoes_include_retired(run_factory):
     mileage_results = mileage_by_shoes(runs, shoes=mock_shoes, include_retired=True)
 
     # Convert to dict for easier testing
-    results_by_name = {result.shoe.name: result for result in mileage_results}
+    results_by_name = {
+        result.shoe.display_name: result for result in mileage_results
+    }
 
     # Check Nike shoes (retired) - should be included when include_retired=True
     nike_result = results_by_name[nikes]

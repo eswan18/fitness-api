@@ -45,6 +45,6 @@ def mileage_by_shoes(
     ]
 
     # Sort by shoe name for consistent ordering
-    results.sort(key=lambda x: x.shoe.name)
+    results.sort(key=lambda x: x.shoe.display_name)
 
     return results

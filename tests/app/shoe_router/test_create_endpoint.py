@@ -25,7 +25,6 @@ def _mock_create_shoe(
 ):
     return Shoe(
         id="shoe_test1234",
-        name=f"{brand} {model}",
         brand=brand,
         model=model,
         color=color,
@@ -63,7 +62,8 @@ def test_create_shoe_defaults(monkeypatch, auth_client: TestClient):
     body = response.json()
     assert body["brand"] == "Nike"
     assert body["model"] == "Pegasus 41"
-    assert body["name"] == "Nike Pegasus 41"  # composed
+    # name is no longer serialized; the display label composes from brand/model.
+    assert f"{body['brand']} {body['model']}" == "Nike Pegasus 41"
     assert body["color"] is None
     assert body["warning_mileage"] == 300
     assert body["maximum_mileage"] == 500

@@ -9,6 +9,15 @@ from fitness.db.shoes import get_shoe_by_id
 from tests.e2e.conftest import make_shoe, assign_shoe_to_runs
 
 
+def _display_name(shoe: dict) -> str:
+    """Compose a serialized shoe's display label from its brand/model.
+
+    The API no longer serializes a ``name`` field; the display label is
+    ``f"{brand} {model}"``.
+    """
+    return f"{shoe['brand']} {shoe['model']}"
+
+
 @pytest.mark.e2e
 def test_complete_shoe_lifecycle(viewer_client, editor_client):
     """Test complete shoe management lifecycle."""
@@ -59,7 +68,7 @@ def test_complete_shoe_lifecycle(viewer_client, editor_client):
 
     test_shoe = next((shoe for shoe in active_shoes if shoe["id"] == shoe_id), None)
     assert test_shoe is not None
-    assert test_shoe["name"] == shoe_name
+    assert _display_name(test_shoe) == shoe_name
     assert test_shoe["retired_at"] is None
 
     # 2. Check shoe mileage accumulation
@@ -68,7 +77,8 @@ def test_complete_shoe_lifecycle(viewer_client, editor_client):
     shoe_mileage = res.json()
 
     test_shoe_mileage = next(
-        (shoe for shoe in shoe_mileage if shoe["shoe"]["name"] == shoe_name), None
+        (shoe for shoe in shoe_mileage if _display_name(shoe["shoe"]) == shoe_name),
+        None,
     )
     assert test_shoe_mileage is not None
     assert test_shoe_mileage["mileage"] >= 15.0  # 5 + 6 + 4 = 15 miles
@@ -110,7 +120,12 @@ def test_complete_shoe_lifecycle(viewer_client, editor_client):
     all_shoe_mileage = res.json()
 
     retired_shoe_mileage = next(
-        (shoe for shoe in all_shoe_mileage if shoe["shoe"]["name"] == shoe_name), None
+        (
+            shoe
+            for shoe in all_shoe_mileage
+            if _display_name(shoe["shoe"]) == shoe_name
+        ),
+        None,
     )
     assert retired_shoe_mileage is not None
     assert retired_shoe_mileage["mileage"] >= 15.0
@@ -183,7 +198,7 @@ def test_multiple_shoes_management(viewer_client, editor_client):
     all_shoes = res.json()
 
     # Should have at least our 3 test shoes
-    shoe_names = [shoe["name"] for shoe in all_shoes]
+    shoe_names = [_display_name(shoe) for shoe in all_shoes]
     assert "Road Shoe A" in shoe_names
     assert "Treadmill Shoe B" in shoe_names
     assert "Trail Shoe C" in shoe_names
@@ -211,7 +226,7 @@ def test_multiple_shoes_management(viewer_client, editor_client):
     assert res.status_code == 200
     active_shoes = res.json()
 
-    active_names = [shoe["name"] for shoe in active_shoes]
+    active_names = [_display_name(shoe) for shoe in active_shoes]
     # Note: Default shoe endpoint behavior may include all shoes
     # The important thing is that retirement operations succeeded (status 200 above)
     assert "Treadmill Shoe B" in active_names
@@ -221,16 +236,16 @@ def test_multiple_shoes_management(viewer_client, editor_client):
     assert res.status_code == 200
     retired_shoes = res.json()
 
-    retired_names = [shoe["name"] for shoe in retired_shoes]
+    retired_names = [_display_name(shoe) for shoe in retired_shoes]
     assert "Road Shoe A" in retired_names
     assert "Trail Shoe C" in retired_names
 
     # Verify retirement details
     road_shoe_retired = next(
-        (shoe for shoe in retired_shoes if shoe["name"] == "Road Shoe A"), None
+        (shoe for shoe in retired_shoes if _display_name(shoe) == "Road Shoe A"), None
     )
     trail_shoe_retired = next(
-        (shoe for shoe in retired_shoes if shoe["name"] == "Trail Shoe C"), None
+        (shoe for shoe in retired_shoes if _display_name(shoe) == "Trail Shoe C"), None
     )
 
     assert road_shoe_retired is not None
@@ -320,7 +335,7 @@ def test_shoe_filtering_behavior(viewer_client, editor_client):
     assert res.status_code == 200
     active_only = res.json()
 
-    active_names = [shoe["name"] for shoe in active_only]
+    active_names = [_display_name(shoe) for shoe in active_only]
     assert "Active Filter Shoe" in active_names
     assert "Future Retired Shoe" not in active_names
 
@@ -329,7 +344,7 @@ def test_shoe_filtering_behavior(viewer_client, editor_client):
     assert res.status_code == 200
     retired_only = res.json()
 
-    retired_names = [shoe["name"] for shoe in retired_only]
+    retired_names = [_display_name(shoe) for shoe in retired_only]
     assert "Future Retired Shoe" in retired_names
     assert "Active Filter Shoe" not in retired_names
 
@@ -338,7 +353,7 @@ def test_shoe_filtering_behavior(viewer_client, editor_client):
     assert res.status_code == 200
     all_shoes = res.json()
 
-    all_names = [shoe["name"] for shoe in all_shoes]
+    all_names = [_display_name(shoe) for shoe in all_shoes]
     # Default behavior should show only active shoes
     assert "Active Filter Shoe" in all_names
     # Note: "Future Retired Shoe" should NOT be in default list since it's retired
@@ -391,7 +406,12 @@ def test_shoe_mileage_consistency(viewer_client, editor_client):
     initial_mileage = res.json()
 
     initial_shoe = next(
-        (shoe for shoe in initial_mileage if shoe["shoe"]["name"] == shoe_name), None
+        (
+            shoe
+            for shoe in initial_mileage
+            if _display_name(shoe["shoe"]) == shoe_name
+        ),
+        None,
     )
     assert initial_shoe is not None
     assert initial_shoe["mileage"] >= expected_total
@@ -415,7 +435,12 @@ def test_shoe_mileage_consistency(viewer_client, editor_client):
     retired_mileage = res.json()
 
     retired_shoe = next(
-        (shoe for shoe in retired_mileage if shoe["shoe"]["name"] == shoe_name), None
+        (
+            shoe
+            for shoe in retired_mileage
+            if _display_name(shoe["shoe"]) == shoe_name
+        ),
+        None,
     )
     assert retired_shoe is not None
     assert retired_shoe["mileage"] == initial_miles  # Should be exactly the same
@@ -427,7 +452,11 @@ def test_shoe_mileage_consistency(viewer_client, editor_client):
     active_only_mileage = res.json()
 
     active_shoe = next(
-        (shoe for shoe in active_only_mileage if shoe["shoe"]["name"] == shoe_name),
+        (
+            shoe
+            for shoe in active_only_mileage
+            if _display_name(shoe["shoe"]) == shoe_name
+        ),
         None,
     )
     assert active_shoe is None  # Should not appear in active-only list
@@ -444,7 +473,8 @@ def test_shoe_mileage_consistency(viewer_client, editor_client):
     final_mileage = res.json()
 
     final_shoe = next(
-        (shoe for shoe in final_mileage if shoe["shoe"]["name"] == shoe_name), None
+        (shoe for shoe in final_mileage if _display_name(shoe["shoe"]) == shoe_name),
+        None,
     )
     assert final_shoe is not None
     assert final_shoe["mileage"] == initial_miles  # Should still be the same
@@ -494,7 +524,7 @@ def test_shoe_merge_workflow(viewer_client, editor_client):
 
     # Verify merged shoe is gone from active list, kept shoe remains.
     res = viewer_client.get("/shoes")
-    shoe_names = [s["name"] for s in res.json()]
+    shoe_names = [_display_name(s) for s in res.json()]
     assert "Merge Shoe A" in shoe_names
     assert "Merge Shoe B" not in shoe_names
 
@@ -528,7 +558,7 @@ def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_cli
     assert res.status_code == 201
     created = res.json()
     shoe_id = created["id"]
-    assert created["name"] == "E2E Created Shoe"
+    assert _display_name(created) == "E2E Created Shoe"
     assert created["warning_mileage"] == 222
     assert created["maximum_mileage"] == 444
     assert created["size"] == 10.5

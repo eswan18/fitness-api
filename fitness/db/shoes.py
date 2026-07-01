@@ -109,7 +109,6 @@ def create_shoe(
     import secrets
 
     shoe_id = f"shoe_{secrets.token_hex(8)}"
-    name = f"{brand} {model}"
     with get_db_cursor() as cursor:
         cursor.execute(
             """
@@ -132,7 +131,6 @@ def create_shoe(
         )
     return Shoe(
         id=shoe_id,
-        name=name,
         brand=brand,
         model=model,
         color=color,
@@ -290,7 +288,6 @@ def _row_to_shoe(row) -> Shoe:
     ) = row
     return Shoe(
         id=shoe_id,
-        name=f"{brand} {model}",
         retired_at=retired_at,
         notes=notes,
         retirement_notes=retirement_notes,
