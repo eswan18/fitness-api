@@ -190,7 +190,7 @@ def set_run_tags(run_id: str, tag_ids: list[str]) -> list[Tag]:
                         "INSERT INTO run_tags (run_id, tag_id) VALUES (%s, %s)",
                         [(run_id, tag_id) for tag_id in tag_ids],
                     )
-    return sorted(tags, key=lambda t: t.name)
+    return sorted(tags, key=lambda t: t.name.lower())
 
 
 def set_ride_tags(ride_id: str, tag_ids: list[str]) -> list[Tag]:
@@ -222,7 +222,7 @@ def set_ride_tags(ride_id: str, tag_ids: list[str]) -> list[Tag]:
                         "INSERT INTO ride_tags (ride_id, tag_id) VALUES (%s, %s)",
                         [(ride_id, tag_id) for tag_id in tag_ids],
                     )
-    return sorted(tags, key=lambda t: t.name)
+    return sorted(tags, key=lambda t: t.name.lower())
 
 
 def get_tags_for_run_ids(run_ids: list[str]) -> dict[str, list[Tag]]:

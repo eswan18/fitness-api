@@ -295,7 +295,9 @@ def set_run_tags_endpoint(
     try:
         return set_run_tags(run_id, request.tag_ids)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from e
 
 
 class MarkDuplicateRequest(BaseModel):

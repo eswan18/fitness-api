@@ -11,10 +11,12 @@ from fitness.db.tags import (
     create_tag,
     delete_tag,
     get_all_tags,
+    get_tag_by_id,
     get_tags_for_ride_ids,
     get_tags_for_run_ids,
     set_ride_tags,
     set_run_tags,
+    update_tag_name,
 )
 
 
@@ -152,6 +154,44 @@ def test_delete_tag_removes_assignments_and_frees_name(db_url: str):
     assert recreated.id != tag.id
     assert recreated.name == "Interval"
     assert recreated.id in {t.id for t in get_all_tags()}
+
+
+@pytest.mark.e2e
+def test_update_tag_name_renames_and_propagates_to_run_tags(db_url: str):
+    _make_run("tag_e2e_run_7")
+    tag = create_tag("Base Building")
+    set_run_tags("tag_e2e_run_7", [tag.id])
+
+    renamed = update_tag_name(tag.id, "Marathon Block")
+    assert renamed is not None
+    assert renamed.id == tag.id
+    assert renamed.name == "Marathon Block"
+
+    fetched = get_tag_by_id(tag.id)
+    assert fetched is not None
+    assert fetched.name == "Marathon Block"
+
+    grouped = get_tags_for_run_ids(["tag_e2e_run_7"])
+    assert [t.name for t in grouped["tag_e2e_run_7"]] == ["Marathon Block"]
+
+
+@pytest.mark.e2e
+def test_update_tag_name_conflict_with_live_tag_is_case_insensitive(db_url: str):
+    create_tag("Easy Run")
+    other = create_tag("Hard Run")
+
+    with pytest.raises(ValueError):
+        update_tag_name(other.id, "easy run")
+
+    # The rename didn't happen.
+    unchanged = get_tag_by_id(other.id)
+    assert unchanged is not None
+    assert unchanged.name == "Hard Run"
+
+
+@pytest.mark.e2e
+def test_update_tag_name_unknown_id_returns_none(db_url: str):
+    assert update_tag_name("tag_does_not_exist", "New Name") is None
 
 
 @pytest.mark.e2e

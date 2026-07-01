@@ -76,7 +76,7 @@ def rename_tag(
     try:
         tag = update_tag_name(tag_id, name)
     except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
     if tag is None:
         raise HTTPException(status_code=404, detail=f"Tag '{tag_id}' not found")
