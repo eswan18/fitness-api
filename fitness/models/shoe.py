@@ -42,6 +42,10 @@ class Shoe(BaseModel):
     # intermediate "danger" mileage is the midpoint of the two, derived not stored.
     warning_mileage: int = 300
     maximum_mileage: int = 500
+    # Nullable metadata: old/imported shoes may lack these. The API requires them
+    # on newly-created shoes (POST /shoes/), but not in the schema.
+    size: Optional[float] = None
+    purchased_date: Optional[date] = None
 
     @property
     def is_retired(self) -> bool:

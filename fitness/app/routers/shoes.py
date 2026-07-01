@@ -58,11 +58,14 @@ def create_shoe_endpoint(
     """Create a new shoe.
 
     Requires OAuth 2.0 Bearer token authentication with editor role. The shoe id
-    is derived deterministically from the name. The mileage thresholds default to
-    300 (warning) / 500 (maximum) if omitted (validated so maximum > warning).
+    is derived deterministically from the name. ``size`` and ``purchased_date``
+    are required. The mileage thresholds default to 300 (warning) / 500 (maximum)
+    if omitted (validated so maximum > warning).
     """
     shoe = create_shoe(
         name=request.name,
+        size=request.size,
+        purchased_date=request.purchased_date,
         warning_mileage=request.warning_mileage,
         maximum_mileage=request.maximum_mileage,
         notes=request.notes,
@@ -92,6 +95,7 @@ def update_shoe_endpoint(
       name is created so future imports carrying the old name still resolve here.
     - ``warning_mileage`` / ``maximum_mileage``: edit the thresholds (validated so
       maximum > warning).
+    - ``size`` / ``purchased_date``: edit or backfill these (optional on update).
     - ``retired_at``: only touched when present — a date retires the shoe, an
       explicit ``null`` unretires it.
 
@@ -135,6 +139,11 @@ def update_shoe_endpoint(
             status_code=422,
             detail="maximum_mileage must be greater than warning_mileage",
         )
+
+    if "size" in sent and request.size is not None:
+        fields["size"] = request.size
+    if "purchased_date" in sent and request.purchased_date is not None:
+        fields["purchased_date"] = request.purchased_date
 
     if fields:
         update_shoe(shoe_id, fields, alias_old_name=alias_old_name)
