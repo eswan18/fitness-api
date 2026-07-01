@@ -175,6 +175,9 @@ def set_run_tags(run_id: str, tag_ids: list[str]) -> list[Tag]:
     Raises:
         ValueError: If any tag_id doesn't reference a live tag.
     """
+    # Dedupe (preserving first-seen order) so a repeated id can't violate the
+    # join table's primary key.
+    tag_ids = list(dict.fromkeys(tag_ids))
     tags = get_tags_by_ids(tag_ids)
     _raise_if_unknown_ids(tag_ids, tags)
 
@@ -204,6 +207,9 @@ def set_ride_tags(ride_id: str, tag_ids: list[str]) -> list[Tag]:
     Raises:
         ValueError: If any tag_id doesn't reference a live tag.
     """
+    # Dedupe (preserving first-seen order) so a repeated id can't violate the
+    # join table's primary key.
+    tag_ids = list(dict.fromkeys(tag_ids))
     tags = get_tags_by_ids(tag_ids)
     _raise_if_unknown_ids(tag_ids, tags)
 

@@ -99,6 +99,19 @@ def test_set_run_tags_unknown_id_raises(db_url: str):
 
 
 @pytest.mark.e2e
+def test_set_run_tags_dedupes_repeated_ids(db_url: str):
+    """A duplicated tag id succeeds (no PK violation) and appears once."""
+    _make_run("tag_e2e_run_6")
+    tag = create_tag("Dedupe Me")
+
+    result = set_run_tags("tag_e2e_run_6", [tag.id, tag.id])
+    assert [t.id for t in result] == [tag.id]
+
+    grouped = get_tags_for_run_ids(["tag_e2e_run_6"])
+    assert [t.id for t in grouped["tag_e2e_run_6"]] == [tag.id]
+
+
+@pytest.mark.e2e
 def test_get_tags_for_run_ids_groups_and_excludes_deleted(db_url: str):
     _make_run("tag_e2e_run_3")
     _make_run("tag_e2e_run_4")
