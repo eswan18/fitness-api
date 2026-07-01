@@ -22,6 +22,7 @@ from fitness.app.routers.run_workouts import (
 from fitness.models.ride_detail import RideDetail
 from fitness.models.run_detail import RunDetail
 from fitness.models.run_workout import RunWorkoutDetail
+from fitness.models.tag import Tag
 
 
 def _run(
@@ -152,6 +153,39 @@ class TestBuildCsv:
         )
         assert rows[0]["name"] == "Morning Tempo"
         assert rows[1]["name"] == ""
+
+    def test_run_tags_joined_and_blank_when_missing(self):
+        tagged = _run(
+            "run_1",
+            tags=[Tag(id="tag_1", name="Hills"), Tag(id="tag_2", name="Speedwork")],
+        )
+        untagged = _run("run_2")
+        rows = _parse(
+            build_cardio_csv(
+                [
+                    ActivityFeedRunItem(item=tagged),
+                    ActivityFeedRunItem(item=untagged),
+                ],
+                None,
+            )
+        )
+        assert rows[0]["tags"] == "Hills; Speedwork"
+        assert rows[1]["tags"] == ""
+
+    def test_ride_tags_joined_and_blank_when_missing(self):
+        tagged = _ride("ride_1", tags=[Tag(id="tag_3", name="Crit")])
+        untagged = _ride("ride_2")
+        rows = _parse(
+            build_cardio_csv(
+                [
+                    ActivityFeedRideItem(item=tagged),
+                    ActivityFeedRideItem(item=untagged),
+                ],
+                None,
+            )
+        )
+        assert rows[0]["tags"] == "Crit"
+        assert rows[1]["tags"] == ""
 
     def test_ride_name_populated_and_blank_when_missing(self):
         named = _ride("ride_1", name="Sunday Century")

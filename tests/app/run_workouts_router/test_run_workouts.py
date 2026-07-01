@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from fitness.models.ride_detail import RideDetail
 from fitness.models.run_workout import RunWorkout
 from fitness.models.run_detail import RunDetail
+from fitness.models.tag import Tag
 
 
 # --- Helpers ---
@@ -788,3 +789,99 @@ class TestActivityFeedExport:
     def test_requires_auth(self, client: TestClient):
         response = client.get("/cardio-activity-feed/export")
         assert response.status_code == 401
+
+
+class TestActivityFeedTagEnrichment:
+    """The feed enriches runs/rides with tags via batch lookups.
+
+    Patches `fitness.db.tags.get_tags_for_run_ids`/`get_tags_for_ride_ids` on
+    their source module, same trick the other feed tests use for
+    `fitness.db.runs.get_all_run_details`.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _stub_ride_db(self, monkeypatch):
+        monkeypatch.setattr(
+            "fitness.db.rides.get_all_ride_details", lambda *a, **kw: []
+        )
+        monkeypatch.setattr(
+            "fitness.db.rides.get_ride_details_in_date_range",
+            lambda *a, **kw: [],
+        )
+
+    @patch("fitness.db.tags.get_tags_for_run_ids")
+    @patch("fitness.db.runs.get_all_run_details")
+    def test_solo_run_carries_tags(
+        self,
+        mock_get_details: MagicMock,
+        mock_get_run_tags: MagicMock,
+        viewer_client: TestClient,
+    ):
+        mock_get_details.return_value = [
+            _make_run_detail("run_1", datetime(2024, 6, 1, 8, 0, 0)),
+        ]
+        mock_get_run_tags.return_value = {"run_1": [Tag(id="tag_1", name="Speedwork")]}
+
+        response = viewer_client.get("/cardio-activity-feed")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert [t["name"] for t in data[0]["item"]["tags"]] == ["Speedwork"]
+
+    @patch("fitness.db.tags.get_tags_for_ride_ids")
+    @patch("fitness.db.runs.get_all_run_details", return_value=[])
+    def test_ride_carries_tags(
+        self,
+        _mock_get_details: MagicMock,
+        mock_get_ride_tags: MagicMock,
+        viewer_client: TestClient,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(
+            "fitness.db.rides.get_all_ride_details",
+            lambda *a, **kw: [_make_ride("ride_1", datetime(2024, 6, 1, 18, 0, 0))],
+        )
+        mock_get_ride_tags.return_value = {
+            "ride_1": [Tag(id="tag_2", name="Endurance Ride")]
+        }
+
+        response = viewer_client.get("/cardio-activity-feed")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert [t["name"] for t in data[0]["item"]["tags"]] == ["Endurance Ride"]
+
+    @patch(f"{_DB_MOD}.get_synced_run_workouts_by_ids", return_value=[])
+    @patch(f"{_DB_MOD}.get_run_workouts_by_ids")
+    @patch("fitness.db.tags.get_tags_for_run_ids")
+    @patch("fitness.db.runs.get_all_run_details")
+    def test_workout_constituent_run_carries_tags(
+        self,
+        mock_get_details: MagicMock,
+        mock_get_run_tags: MagicMock,
+        mock_get_workouts: MagicMock,
+        _mock_syncs: MagicMock,
+        viewer_client: TestClient,
+    ):
+        mock_get_details.return_value = [
+            _make_run_detail(
+                "run_2",
+                datetime(2024, 6, 2, 8, 0, 0),
+                run_workout_id="rw_1",
+            ),
+            _make_run_detail(
+                "run_3",
+                datetime(2024, 6, 2, 8, 30, 0),
+                run_workout_id="rw_1",
+            ),
+        ]
+        mock_get_workouts.return_value = {"rw_1": _make_workout(id="rw_1")}
+        mock_get_run_tags.return_value = {"run_2": [Tag(id="tag_3", name="Tempo")]}
+
+        response = viewer_client.get("/cardio-activity-feed")
+        assert response.status_code == 200
+        data = response.json()
+        workout_item = next(i for i in data if i["type"] == "run_workout")
+        runs_by_id = {r["id"]: r for r in workout_item["item"]["runs"]}
+        assert [t["name"] for t in runs_by_id["run_2"]["tags"]] == ["Tempo"]
+        assert runs_by_id["run_3"]["tags"] == []

@@ -280,6 +280,18 @@ def fetch_cardio_activity_feed(
         all_runs = get_all_run_details()
         rides = get_all_ride_details()
 
+    # Batch-enrich with tags. Only the feed does this — other endpoints
+    # returning RunDetail/RideDetail (e.g. GET /runs/details, GET /rides-details)
+    # intentionally leave `tags: []` for now.
+    from fitness.db.tags import get_tags_for_run_ids, get_tags_for_ride_ids
+
+    run_tag_map = get_tags_for_run_ids([r.id for r in all_runs])
+    for r in all_runs:
+        r.tags = run_tag_map.get(r.id, [])
+    ride_tag_map = get_tags_for_ride_ids([r.id for r in rides])
+    for r in rides:
+        r.tags = ride_tag_map.get(r.id, [])
+
     return build_activity_feed(all_runs, rides=rides, sort_order=sort_order)
 
 

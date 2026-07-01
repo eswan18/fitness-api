@@ -23,8 +23,10 @@ from fitness.db.synced_rides import (
     get_synced_ride,
     delete_synced_ride,
 )
+from fitness.db.tags import set_ride_tags
 from fitness.models import Ride
 from fitness.models.ride_detail import RideDetail
+from fitness.models.tag import Tag
 from fitness.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -142,6 +144,36 @@ def update_ride_name_endpoint(
             detail=f"Ride {ride_id} not found",
         )
     return updated
+
+
+class SetRideTagsRequest(BaseModel):
+    """Request model for replacing a ride's tag assignments."""
+
+    tag_ids: list[str]
+
+
+@router.put("/{ride_id}/tags", response_model=list[Tag])
+def set_ride_tags_endpoint(
+    ride_id: str,
+    request: SetRideTagsRequest,
+    _user: User = Depends(require_editor),
+) -> list[Tag]:
+    """Replace the full set of tags assigned to a ride.
+
+    Unlike metric edits (`PATCH /rides/{id}`), this is allowed on
+    calendar-synced rides (tags don't affect the synced event).
+    """
+    if get_ride_by_id(ride_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ride {ride_id} not found",
+        )
+    try:
+        return set_ride_tags(ride_id, request.tag_ids)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from e
 
 
 class MarkDuplicateRequest(BaseModel):

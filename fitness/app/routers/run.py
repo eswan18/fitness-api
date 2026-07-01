@@ -29,11 +29,13 @@ from fitness.db.runs_history import (
     RunHistoryRecord,
 )
 from fitness.db.synced_runs import is_run_synced, get_synced_run, delete_synced_run
+from fitness.db.tags import set_run_tags
 from fitness.app.auth import require_viewer, require_editor
 from fitness.app.routers._sync_helpers import perform_unsync
 from fitness.models.user import User
 from fitness.models import Run
 from fitness.models.run_detail import RunDetail
+from fitness.models.tag import Tag
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +272,30 @@ def update_run_name_endpoint(
             detail=f"Run with ID {run_id} not found",
         )
     return updated
+
+
+class SetRunTagsRequest(BaseModel):
+    """Request model for replacing a run's tag assignments."""
+
+    tag_ids: list[str]
+
+
+@router.put("/{run_id}/tags", response_model=list[Tag])
+def set_run_tags_endpoint(
+    run_id: str,
+    request: SetRunTagsRequest,
+    _user: User = Depends(require_editor),
+) -> list[Tag]:
+    """Replace the full set of tags assigned to a run.
+
+    Unlike metric edits (`PATCH /runs/{id}`), this is allowed on
+    calendar-synced runs (tags don't affect the synced event).
+    """
+    _get_run_or_404(run_id)
+    try:
+        return set_run_tags(run_id, request.tag_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 class MarkDuplicateRequest(BaseModel):

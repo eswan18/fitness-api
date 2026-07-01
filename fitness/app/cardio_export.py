@@ -29,7 +29,7 @@ FeedItem = ActivityFeedRunItem | ActivityFeedWorkoutItem | ActivityFeedRideItem
 
 # Column order for the CSV export. Run-only columns (shoes/notes/workout_*) are
 # left blank for ride rows; pace is blank when distance is 0 (most rides). `name`
-# applies to both runs and rides.
+# and `tags` apply to both runs and rides (tags joined with "; ").
 CSV_COLUMNS = [
     "activity_kind",
     "activity_id",
@@ -49,6 +49,7 @@ CSV_COLUMNS = [
     "workout_id",
     "workout_title",
     "notes",
+    "tags",
 ]
 
 
@@ -126,6 +127,7 @@ def _run_row(
         "workout_id": workout_id or "",
         "workout_title": workout_title or "",
         "notes": run.notes or "",
+        "tags": "; ".join(t.name for t in run.tags),
     }
 
 
@@ -146,6 +148,7 @@ def _ride_row(ride: RideDetail, user_timezone: str | None) -> dict[str, object]:
         "avg_heart_rate": _fmt_hr(ride.avg_heart_rate),
         "is_synced": str(ride.is_synced).lower(),
         "sync_status": ride.sync_status or "",
+        "tags": "; ".join(t.name for t in ride.tags),
     }
 
 
