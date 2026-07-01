@@ -610,6 +610,8 @@ def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_cli
             "name": name,
             "warning_mileage": 222,
             "maximum_mileage": 444,
+            "size": 10.5,
+            "purchased_date": "2024-08-15",
         },
     )
     assert res.status_code == 201
@@ -617,6 +619,8 @@ def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_cli
     assert created["id"] == shoe_id
     assert created["warning_mileage"] == 222
     assert created["maximum_mileage"] == 444
+    assert created["size"] == 10.5
+    assert created["purchased_date"] == "2024-08-15"
     assert created["retired_at"] is None
 
     # 2. It shows up in the shoe list with the thresholds persisted.
@@ -724,3 +728,41 @@ def test_rename_creates_alias_and_preserves_retirement(viewer_client, editor_cli
     assert still_retired is not None
     assert still_retired["retired_at"] == "2024-12-01"
     assert still_retired["warning_mileage"] == 275
+
+
+@pytest.mark.e2e
+def test_size_and_date_null_for_imports_and_backfillable(viewer_client, editor_client):
+    """Import-created shoes have null size/purchased_date; PATCH can backfill them."""
+    name = "E2E Backfill Shoe"
+    shoe_id = generate_shoe_id(name)
+
+    # Importing a run creates the shoe implicitly, with no size/purchase date.
+    seed = Run(
+        id="e2e_backfill_run_1",
+        datetime_utc=datetime(2024, 8, 1, 10, 0, 0),
+        type="Outdoor Run",
+        distance=5.0,
+        duration=2400.0,
+        source="Strava",
+    )
+    seed._shoe_name = name
+    assert bulk_create_runs([seed]) == 1
+
+    res = viewer_client.get("/shoes")
+    listed = next((s for s in res.json() if s["id"] == shoe_id), None)
+    assert listed is not None
+    assert listed["size"] is None
+    assert listed["purchased_date"] is None
+
+    # Backfill via PATCH.
+    res = editor_client.patch(
+        f"/shoes/{shoe_id}",
+        json={"size": 9.0, "purchased_date": "2024-07-01"},
+    )
+    assert res.status_code == 200
+
+    res = viewer_client.get("/shoes")
+    updated = next((s for s in res.json() if s["id"] == shoe_id), None)
+    assert updated is not None
+    assert updated["size"] == 9.0
+    assert updated["purchased_date"] == "2024-07-01"

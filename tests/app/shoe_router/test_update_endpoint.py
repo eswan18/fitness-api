@@ -123,6 +123,23 @@ def test_update_warning_mileages(monkeypatch, auth_client: TestClient):
     assert calls["update_shoe"]["alias_old_name"] is None
 
 
+def test_update_size_and_purchased_date(monkeypatch, auth_client: TestClient):
+    """size / purchased_date can be set (e.g. backfilling an old shoe)."""
+    shoe = Shoe(id="s", name="S")
+    calls = _install_capturing_db(monkeypatch, shoe)
+
+    response = auth_client.patch(
+        "/shoes/s",
+        json={"size": 9.5, "purchased_date": "2026-02-02"},
+    )
+
+    assert response.status_code == 200
+    assert calls["update_shoe"]["fields"] == {
+        "size": 9.5,
+        "purchased_date": date(2026, 2, 2),
+    }
+
+
 def test_update_mileage_validated_against_existing(monkeypatch, auth_client: TestClient):
     """Setting maximum below the shoe's existing warning is a 422 with no db write."""
     shoe = Shoe(id="s", name="S", warning_mileage=300, maximum_mileage=500)

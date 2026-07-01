@@ -64,9 +64,15 @@ class RetireShoeRequest(BaseModel):
 
 
 class CreateShoeRequest(BaseModel):
-    """Request model for creating a shoe via POST."""
+    """Request model for creating a shoe via POST.
+
+    ``size`` and ``purchased_date`` are required: new shoes must record them
+    (only old/imported shoes are allowed to leave them null).
+    """
 
     name: str
+    size: float = Field(gt=0)
+    purchased_date: date
     warning_mileage: int = Field(default=300, gt=0)
     maximum_mileage: int = Field(default=500, gt=0)
     notes: Optional[str] = None
@@ -91,6 +97,8 @@ class UpdateShoeRequest(BaseModel):
     name: Optional[str] = None
     warning_mileage: Optional[int] = Field(default=None, gt=0)
     maximum_mileage: Optional[int] = Field(default=None, gt=0)
+    size: Optional[float] = Field(default=None, gt=0)
+    purchased_date: Optional[date] = None
     retired_at: Optional[date] = None
     retirement_notes: Optional[str] = None
 
