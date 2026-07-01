@@ -57,27 +57,24 @@ def test_update_unknown_shoe_404(monkeypatch, auth_client: TestClient):
     assert response.status_code == 404
 
 
-def test_update_brand_model_syncs_name(monkeypatch, auth_client: TestClient):
+def test_update_brand_and_model(monkeypatch, auth_client: TestClient):
     calls = _install_capturing_db(monkeypatch, _shoe())
 
     response = auth_client.patch("/shoes/s", json={"brand": "New", "model": "Shoe"})
 
     assert response.status_code == 200
-    assert calls["update_shoe"]["fields"] == {
-        "brand": "New",
-        "model": "Shoe",
-        "name": "New Shoe",  # kept in sync
-    }
+    # name is no longer stored — it's composed from brand/model on read.
+    assert calls["update_shoe"]["fields"] == {"brand": "New", "model": "Shoe"}
     assert calls["retired"] is None and calls["unretired"] is False
 
 
-def test_update_brand_only_syncs_name_with_existing_model(monkeypatch, auth_client: TestClient):
+def test_update_brand_only(monkeypatch, auth_client: TestClient):
     calls = _install_capturing_db(monkeypatch, _shoe(brand="Old", model="Model"))
 
     response = auth_client.patch("/shoes/s", json={"brand": "New"})
 
     assert response.status_code == 200
-    assert calls["update_shoe"]["fields"] == {"brand": "New", "name": "New Model"}
+    assert calls["update_shoe"]["fields"] == {"brand": "New"}
 
 
 def test_update_color_can_be_set_and_cleared(monkeypatch, auth_client: TestClient):

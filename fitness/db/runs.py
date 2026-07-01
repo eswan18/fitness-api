@@ -36,7 +36,7 @@ def get_all_runs(include_deleted: bool = False) -> list[Run]:
     with get_db_cursor() as cursor:
         deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" WHERE r.deleted_at IS NULL")
         query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name, r.notes
+            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), r.notes
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             {deleted_filter}
@@ -59,7 +59,7 @@ def get_runs_in_date_range(
             deleted_filter = sql.SQL(" AND r.deleted_at IS NULL")
         query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source,
-                   r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name, r.notes
+                   r.avg_heart_rate, r.shoe_id, r.deleted_at, NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), r.notes
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             WHERE DATE(r.datetime_utc) BETWEEN %s AND %s{deleted_filter}
@@ -312,7 +312,7 @@ def find_candidate_duplicate_runs(
         cursor.execute(
             """
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
-                   COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
+                   COALESCE(NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), 'Unknown') as shoe_name, s.retirement_notes,
                    sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
                    r.run_workout_id, r.notes, r.duplicate_of_id
             FROM runs r
@@ -375,7 +375,7 @@ def get_run_details_in_date_range(
         where_clause = sql.SQL(" AND ").join(conditions)
         query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
-                   COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
+                   COALESCE(NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), 'Unknown') as shoe_name, s.retirement_notes,
                    sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
                    r.run_workout_id, r.notes, r.duplicate_of_id
             FROM runs r
@@ -403,7 +403,7 @@ def get_all_run_details(
         )
         query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
-                   COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
+                   COALESCE(NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), 'Unknown') as shoe_name, s.retirement_notes,
                    sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
                    r.run_workout_id, r.notes, r.duplicate_of_id
             FROM runs r
@@ -425,7 +425,7 @@ def get_run_details_by_ids(run_ids: list[str]) -> list[RunDetail]:
         placeholders = sql.SQL(", ").join(sql.Placeholder() * len(run_ids))
         query = sql.SQL("""
             SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at,
-                   COALESCE(s.name, 'Unknown') as shoe_name, s.retirement_notes,
+                   COALESCE(NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), 'Unknown') as shoe_name, s.retirement_notes,
                    sr.sync_status, sr.synced_at, sr.google_event_id, sr.run_version, sr.error_message, r.version,
                    r.run_workout_id, r.notes, r.duplicate_of_id
             FROM runs r
@@ -449,7 +449,7 @@ def get_run_by_id(run_id: str, include_deleted: bool = False) -> Run | None:
     with get_db_cursor() as cursor:
         deleted_filter = sql.SQL("") if include_deleted else sql.SQL(" AND r.deleted_at IS NULL")
         query = sql.SQL("""
-            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, s.name, r.notes
+            SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source, r.avg_heart_rate, r.shoe_id, r.deleted_at, NULLIF(CONCAT_WS(' ', s.brand, s.model), ''), r.notes
             FROM runs r
             LEFT JOIN shoes s ON r.shoe_id = s.id
             WHERE r.id = %s{deleted_filter}
