@@ -200,11 +200,17 @@ def test_shoe_mileage_metrics(viewer_client):
     shoe_mileage = res.json()
 
     # Find our test shoes
+    def _display_name(shoe: dict) -> str:
+        # name is no longer serialized; compose the label from brand/model.
+        return f"{shoe['brand']} {shoe['model']}"
+
     test_shoe_a = next(
-        (shoe for shoe in shoe_mileage if shoe["shoe"]["name"] == "Test Shoe A"), None
+        (shoe for shoe in shoe_mileage if _display_name(shoe["shoe"]) == "Test Shoe A"),
+        None,
     )
     test_shoe_b = next(
-        (shoe for shoe in shoe_mileage if shoe["shoe"]["name"] == "Test Shoe B"), None
+        (shoe for shoe in shoe_mileage if _display_name(shoe["shoe"]) == "Test Shoe B"),
+        None,
     )
 
     assert test_shoe_a is not None

@@ -39,9 +39,7 @@ def _install_capturing_db(monkeypatch, shoe: Shoe):
 
 
 def _shoe(**over) -> Shoe:
-    return Shoe(
-        id="s", name="Old Model", brand="Old", model="Model"
-    ).model_copy(update=over)
+    return Shoe(id="s", brand="Old", model="Model").model_copy(update=over)
 
 
 def test_update_requires_auth(client: TestClient):

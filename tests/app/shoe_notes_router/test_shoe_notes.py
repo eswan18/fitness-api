@@ -15,8 +15,10 @@ _SHOE_ID = "nike_pegasus_41"
 _MOD = "fitness.app.routers.shoe_notes"
 
 
-def _make_shoe(id: str = _SHOE_ID, name: str = "Nike Pegasus 41") -> Shoe:
-    return Shoe(id=id, name=name)
+def _make_shoe(
+    id: str = _SHOE_ID, brand: str = "Nike", model: str = "Pegasus 41"
+) -> Shoe:
+    return Shoe(id=id, brand=brand, model=model)
 
 
 def _make_note(

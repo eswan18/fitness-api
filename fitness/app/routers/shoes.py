@@ -160,12 +160,12 @@ def update_shoe_endpoint(
     profile_changed = bool(fields)
     # Preserve the exact legacy messages for retirement-only requests.
     if retire_action and not profile_changed:
-        return {"message": f"Shoe '{shoe.name}' has been {retire_action}"}
+        return {"message": f"Shoe '{shoe.display_name}' has been {retire_action}"}
     if profile_changed and not retire_action:
-        return {"message": f"Shoe '{shoe.name}' has been updated"}
+        return {"message": f"Shoe '{shoe.display_name}' has been updated"}
     if profile_changed and retire_action:
-        return {"message": f"Shoe '{shoe.name}' has been updated and {retire_action}"}
-    return {"message": f"No changes applied to shoe '{shoe.name}'"}
+        return {"message": f"Shoe '{shoe.display_name}' has been updated and {retire_action}"}
+    return {"message": f"No changes applied to shoe '{shoe.display_name}'"}
 
 
 @router.post("/merge", response_model=dict[str, str])
@@ -198,10 +198,10 @@ def merge_shoes_endpoint(
     merge_shoes(
         keep_shoe_id=keep_shoe.id,
         merge_shoe_id=merge_shoe.id,
-        merge_shoe_name=merge_shoe.name,
+        merge_shoe_name=merge_shoe.display_name,
     )
 
-    return {"message": f"Merged '{merge_shoe.name}' into '{keep_shoe.name}'"}
+    return {"message": f"Merged '{merge_shoe.display_name}' into '{keep_shoe.display_name}'"}
 
 
 @router.delete("/{shoe_id}", response_model=dict[str, str])

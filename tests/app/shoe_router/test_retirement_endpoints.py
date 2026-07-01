@@ -20,7 +20,7 @@ def test_retire_shoe_endpoint(monkeypatch, auth_client: TestClient):
     def mock_get_shoe_by_id(shoe_id):
         from fitness.models.shoe import Shoe
 
-        return Shoe(id=shoe_id, name="Nike Air Zoom")
+        return Shoe(id=shoe_id, brand="Nike", model="Air Zoom")
 
     def mock_retire_shoe_by_id(shoe_id, retired_at, retirement_notes):
         return True  # Success
@@ -50,7 +50,7 @@ def test_retire_shoe_without_notes(monkeypatch, auth_client: TestClient):
     def mock_get_shoe_by_id(shoe_id):
         from fitness.models.shoe import Shoe
 
-        return Shoe(id=shoe_id, name="Nike Air Zoom")
+        return Shoe(id=shoe_id, brand="Nike", model="Air Zoom")
 
     def mock_retire_shoe_by_id(shoe_id, retired_at, retirement_notes):
         return True  # Success
@@ -73,7 +73,7 @@ def test_unretire_shoe_endpoint(monkeypatch, auth_client: TestClient):
     def mock_get_shoe_by_id(shoe_id):
         from fitness.models.shoe import Shoe
 
-        return Shoe(id=shoe_id, name="Nike Air Zoom")
+        return Shoe(id=shoe_id, brand="Nike", model="Air Zoom")
 
     def mock_unretire_shoe_by_id(shoe_id):
         return True  # Success
@@ -97,7 +97,7 @@ def test_unretire_non_retired_shoe(monkeypatch, auth_client: TestClient):
     def mock_get_shoe_by_id(shoe_id):
         from fitness.models.shoe import Shoe
 
-        return Shoe(id=shoe_id, name="Nike Air Zoom")
+        return Shoe(id=shoe_id, brand="Nike", model="Air Zoom")
 
     def mock_unretire_shoe_by_id(shoe_id):
         return True  # Success (idempotent)
