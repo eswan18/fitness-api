@@ -3,14 +3,17 @@
 import pytest
 from datetime import datetime
 from fitness.models import Run
-from fitness.db.runs import bulk_create_runs
-from fitness.models.shoe import generate_shoe_id
+from fitness.db.runs import bulk_create_runs, get_run_by_id
+from fitness.db.shoes import get_shoe_by_id
+
+from tests.e2e.conftest import make_shoe, assign_shoe_to_runs
 
 
 @pytest.mark.e2e
 def test_complete_shoe_lifecycle(viewer_client, editor_client):
     """Test complete shoe management lifecycle."""
-    # Create runs with a specific shoe to trigger shoe creation
+    # Seed runs, then create a shoe and attribute the runs to it (imports no
+    # longer create/assign shoes).
     runs = [
         Run(
             id="shoe_lifecycle_1",
@@ -41,15 +44,13 @@ def test_complete_shoe_lifecycle(viewer_client, editor_client):
         ),
     ]
 
-    # Set shoe name for all runs
-    shoe_name = "Lifecycle Test Shoe"
-    for run in runs:
-        run._shoe_name = shoe_name
-
     inserted = bulk_create_runs(runs)
     assert inserted == 3
 
-    shoe_id = generate_shoe_id(shoe_name)
+    shoe_name = "Lifecycle Test Shoe"
+    shoe = make_shoe("Lifecycle Test", "Shoe")
+    assign_shoe_to_runs(shoe.id, [r.id for r in runs])
+    shoe_id = shoe.id
 
     # 1. Verify shoe appears in active shoes list
     res = viewer_client.get("/shoes")
@@ -137,7 +138,7 @@ def test_complete_shoe_lifecycle(viewer_client, editor_client):
 @pytest.mark.e2e
 def test_multiple_shoes_management(viewer_client, editor_client):
     """Test managing multiple different shoes."""
-    # Create runs with different shoes
+    # Create runs, then create and attribute a distinct shoe to each.
     runs = [
         Run(
             id="multi_shoe_1",
@@ -165,13 +166,16 @@ def test_multiple_shoes_management(viewer_client, editor_client):
         ),
     ]
 
-    # Assign different shoes
-    runs[0]._shoe_name = "Road Shoe A"
-    runs[1]._shoe_name = "Treadmill Shoe B"
-    runs[2]._shoe_name = "Trail Shoe C"
-
     inserted = bulk_create_runs(runs)
     assert inserted == 3
+
+    # Create and assign different shoes.
+    road_shoe = make_shoe("Road Shoe", "A")
+    treadmill_shoe = make_shoe("Treadmill Shoe", "B")
+    trail_shoe = make_shoe("Trail Shoe", "C")
+    assign_shoe_to_runs(road_shoe.id, ["multi_shoe_1"])
+    assign_shoe_to_runs(treadmill_shoe.id, ["multi_shoe_2"])
+    assign_shoe_to_runs(trail_shoe.id, ["multi_shoe_3"])
 
     # Get all shoes
     res = viewer_client.get("/shoes")
@@ -185,8 +189,8 @@ def test_multiple_shoes_management(viewer_client, editor_client):
     assert "Trail Shoe C" in shoe_names
 
     # Retire two different shoes with different dates and notes
-    road_shoe_id = generate_shoe_id("Road Shoe A")
-    trail_shoe_id = generate_shoe_id("Trail Shoe C")
+    road_shoe_id = road_shoe.id
+    trail_shoe_id = trail_shoe.id
 
     # Retire road shoe
     res = editor_client.patch(
@@ -249,22 +253,16 @@ def test_shoe_error_cases(viewer_client, editor_client):
     )
     assert res.status_code == 404
 
-    # Test invalid retirement date format
-    # First create a shoe by creating a run with it
-    run = Run(
-        id="error_test_run",
-        datetime_utc=datetime(2024, 1, 1, 10, 0, 0),
-        type="Outdoor Run",
-        distance=3.0,
-        duration=1800.0,
-        source="Strava",
+    # Creating a shoe requires the new required fields (brand/model/size/
+    # purchased_date); omitting size and purchased_date is a validation error.
+    res = editor_client.post(
+        "/shoes/", json={"brand": "Error", "model": "Test Shoe"}
     )
-    run._shoe_name = "Error Test Shoe"
+    assert res.status_code == 422  # Validation error (missing size/purchased_date)
 
-    inserted = bulk_create_runs([run])
-    assert inserted == 1
-
-    shoe_id = generate_shoe_id("Error Test Shoe")
+    # Create a valid shoe to exercise PATCH validation against.
+    shoe = make_shoe("Error Test", "Shoe")
+    shoe_id = shoe.id
 
     # Test invalid date format
     res = editor_client.patch(
@@ -281,7 +279,7 @@ def test_shoe_error_cases(viewer_client, editor_client):
 @pytest.mark.e2e
 def test_shoe_filtering_behavior(viewer_client, editor_client):
     """Test different shoe filtering scenarios."""
-    # Create runs with shoes in different states
+    # Create runs, then create shoes in different states and attribute the runs.
     runs = [
         Run(
             id="filter_test_1",
@@ -301,14 +299,16 @@ def test_shoe_filtering_behavior(viewer_client, editor_client):
         ),
     ]
 
-    runs[0]._shoe_name = "Active Filter Shoe"
-    runs[1]._shoe_name = "Future Retired Shoe"
-
     inserted = bulk_create_runs(runs)
     assert inserted == 2
 
+    active_shoe = make_shoe("Active Filter", "Shoe")
+    retired_shoe = make_shoe("Future Retired", "Shoe")
+    assign_shoe_to_runs(active_shoe.id, ["filter_test_1"])
+    assign_shoe_to_runs(retired_shoe.id, ["filter_test_2"])
+
     # Retire one shoe
-    retired_shoe_id = generate_shoe_id("Future Retired Shoe")
+    retired_shoe_id = retired_shoe.id
     res = editor_client.patch(
         f"/shoes/{retired_shoe_id}",
         json={"retired_at": "2024-01-15", "retirement_notes": "test retirement"},
@@ -375,12 +375,13 @@ def test_shoe_mileage_consistency(viewer_client, editor_client):
         ),
     ]
 
-    shoe_name = "Consistency Test Shoe"
-    for run in runs:
-        run._shoe_name = shoe_name
-
     inserted = bulk_create_runs(runs)
     assert inserted == 3
+
+    shoe_name = "Consistency Test Shoe"
+    shoe = make_shoe("Consistency Test", "Shoe")
+    assign_shoe_to_runs(shoe.id, [r.id for r in runs])
+    shoe_id = shoe.id
 
     expected_total = 3.5 + 4.2 + 2.8  # 10.5 miles
 
@@ -397,7 +398,6 @@ def test_shoe_mileage_consistency(viewer_client, editor_client):
     initial_miles = initial_shoe["mileage"]
 
     # Retire the shoe
-    shoe_id = generate_shoe_id(shoe_name)
     res = editor_client.patch(
         f"/shoes/{shoe_id}",
         json={
@@ -453,8 +453,9 @@ def test_shoe_mileage_consistency(viewer_client, editor_client):
 
 @pytest.mark.e2e
 def test_shoe_merge_workflow(viewer_client, editor_client):
-    """Test merging duplicate shoes and verifying alias resolution on re-import."""
-    # Create runs with two different shoe names (same physical shoe)
+    """Merging re-points the merged shoe's runs to the kept shoe and soft-deletes it."""
+    # Create runs, then create two shoes (same physical shoe) and attribute a run
+    # to each.
     runs = [
         Run(
             id="merge_test_1",
@@ -473,14 +474,16 @@ def test_shoe_merge_workflow(viewer_client, editor_client):
             source="MapMyFitness",
         ),
     ]
-    runs[0]._shoe_name = "Merge Shoe A"
-    runs[1]._shoe_name = "Merge Shoe B"
 
     inserted = bulk_create_runs(runs)
     assert inserted == 2
 
-    shoe_a_id = generate_shoe_id("Merge Shoe A")
-    shoe_b_id = generate_shoe_id("Merge Shoe B")
+    shoe_a = make_shoe("Merge Shoe", "A")
+    shoe_b = make_shoe("Merge Shoe", "B")
+    assign_shoe_to_runs(shoe_a.id, ["merge_test_1"])
+    assign_shoe_to_runs(shoe_b.id, ["merge_test_2"])
+    shoe_a_id = shoe_a.id
+    shoe_b_id = shoe_b.id
 
     # Merge B into A
     res = editor_client.post(
@@ -489,134 +492,43 @@ def test_shoe_merge_workflow(viewer_client, editor_client):
     )
     assert res.status_code == 200
 
-    # Verify merged shoe is gone from active list
+    # Verify merged shoe is gone from active list, kept shoe remains.
     res = viewer_client.get("/shoes")
     shoe_names = [s["name"] for s in res.json()]
     assert "Merge Shoe A" in shoe_names
     assert "Merge Shoe B" not in shoe_names
 
-    # Re-import a run with the old merged name — should resolve via alias
-    new_run = Run(
-        id="merge_test_3",
-        datetime_utc=datetime(2024, 6, 3, 10, 0, 0),
-        type="Outdoor Run",
-        distance=4.0,
-        duration=2000.0,
-        source="MapMyFitness",
-    )
-    new_run._shoe_name = "Merge Shoe B"
-    inserted = bulk_create_runs([new_run])
-    assert inserted == 1
+    # The merge re-points the merged shoe's run to the kept shoe.
+    repointed = get_run_by_id("merge_test_2")
+    assert repointed is not None
+    assert repointed.shoe_id == shoe_a_id
 
-    # Verify the new run uses the kept shoe, not a recreated one
-    from fitness.db.runs import get_run_by_id
-
-    reimported = get_run_by_id("merge_test_3")
-    assert reimported is not None
-    assert reimported.shoe_id == shoe_a_id
-
-
-@pytest.mark.e2e
-def test_shoe_transitive_merge_workflow(viewer_client, editor_client):
-    """Aliases must follow the chain when a previously-merged-into shoe is itself merged.
-
-    Scenario: merge B -> A, then merge A -> C. A re-imported run with the original
-    "B" name must resolve to C (the final kept shoe), not the soft-deleted A.
-    """
-    runs = [
-        Run(
-            id="transitive_merge_1",
-            datetime_utc=datetime(2024, 7, 1, 10, 0, 0),
-            type="Outdoor Run",
-            distance=5.0,
-            duration=2400.0,
-            source="Strava",
-        ),
-        Run(
-            id="transitive_merge_2",
-            datetime_utc=datetime(2024, 7, 2, 10, 0, 0),
-            type="Outdoor Run",
-            distance=6.0,
-            duration=2800.0,
-            source="MapMyFitness",
-        ),
-        Run(
-            id="transitive_merge_3",
-            datetime_utc=datetime(2024, 7, 3, 10, 0, 0),
-            type="Outdoor Run",
-            distance=7.0,
-            duration=3000.0,
-            source="Strava",
-        ),
-    ]
-    runs[0]._shoe_name = "Transitive Shoe A"
-    runs[1]._shoe_name = "Transitive Shoe B"
-    runs[2]._shoe_name = "Transitive Shoe C"
-
-    inserted = bulk_create_runs(runs)
-    assert inserted == 3
-
-    shoe_a_id = generate_shoe_id("Transitive Shoe A")
-    shoe_b_id = generate_shoe_id("Transitive Shoe B")
-    shoe_c_id = generate_shoe_id("Transitive Shoe C")
-
-    # First merge: B -> A. Creates alias "Transitive Shoe B" -> A.
-    res = editor_client.post(
-        "/shoes/merge",
-        json={"keep_shoe_id": shoe_a_id, "merge_shoe_id": shoe_b_id},
-    )
-    assert res.status_code == 200
-
-    # Second merge: A -> C. The "Transitive Shoe B" alias must follow to C.
-    res = editor_client.post(
-        "/shoes/merge",
-        json={"keep_shoe_id": shoe_c_id, "merge_shoe_id": shoe_a_id},
-    )
-    assert res.status_code == 200
-
-    # Re-import a run under the original "B" name (simulating a fresh sync).
-    new_run = Run(
-        id="transitive_merge_4",
-        datetime_utc=datetime(2024, 7, 4, 10, 0, 0),
-        type="Outdoor Run",
-        distance=4.0,
-        duration=2000.0,
-        source="MapMyFitness",
-    )
-    new_run._shoe_name = "Transitive Shoe B"
-    inserted = bulk_create_runs([new_run])
-    assert inserted == 1
-
-    from fitness.db.runs import get_run_by_id
-
-    reimported = get_run_by_id("transitive_merge_4")
-    assert reimported is not None
-    assert reimported.shoe_id == shoe_c_id, (
-        f"Re-imported run with previously-merged name should resolve to final kept "
-        f"shoe ({shoe_c_id}), not the intermediate soft-deleted shoe ({reimported.shoe_id})"
-    )
+    # And soft-deletes the merged shoe (hidden by default; deleted_at is set).
+    assert get_shoe_by_id(shoe_b_id) is None
+    deleted = get_shoe_by_id(shoe_b_id, include_deleted=True)
+    assert deleted is not None
+    assert deleted.deleted_at is not None
 
 
 @pytest.mark.e2e
 def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_client):
     """A shoe created via POST carries custom thresholds through to /shoes and metrics."""
-    name = "E2E Created Shoe"
-    shoe_id = generate_shoe_id(name)
-
     # 1. Create directly via the new endpoint with custom thresholds.
     res = editor_client.post(
         "/shoes/",
         json={
-            "name": name,
-            "warning_mileage": 222,
-            "maximum_mileage": 444,
+            "brand": "E2E Created",
+            "model": "Shoe",
             "size": 10.5,
             "purchased_date": "2024-08-15",
+            "warning_mileage": 222,
+            "maximum_mileage": 444,
         },
     )
     assert res.status_code == 201
     created = res.json()
-    assert created["id"] == shoe_id
+    shoe_id = created["id"]
+    assert created["name"] == "E2E Created Shoe"
     assert created["warning_mileage"] == 222
     assert created["maximum_mileage"] == 444
     assert created["size"] == 10.5
@@ -631,8 +543,8 @@ def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_cli
     assert listed["warning_mileage"] == 222
     assert listed["maximum_mileage"] == 444
 
-    # 3. Importing a run under the same name resolves to the existing shoe
-    #    (no duplicate) and the thresholds ride along in the by-shoe metrics.
+    # 3. Seed a run and attribute it to the shoe; the thresholds ride along in
+    #    the by-shoe metrics and no duplicate shoe is created.
     run = Run(
         id="e2e_created_shoe_run_1",
         datetime_utc=datetime(2024, 9, 1, 10, 0, 0),
@@ -641,102 +553,27 @@ def test_create_shoe_and_thresholds_surface_in_metrics(viewer_client, editor_cli
         duration=3600.0,
         source="Strava",
     )
-    run._shoe_name = name
     assert bulk_create_runs([run]) == 1
+    assign_shoe_to_runs(shoe_id, ["e2e_created_shoe_run_1"])
 
     res = viewer_client.get("/metrics/mileage/by-shoe")
     assert res.status_code == 200
     by_shoe = res.json()
     matches = [s for s in by_shoe if s["shoe"]["id"] == shoe_id]
-    assert len(matches) == 1  # exactly one — import did not create a duplicate
+    assert len(matches) == 1  # exactly one — assigning the run did not create a duplicate
     assert matches[0]["mileage"] >= 8.0
     assert matches[0]["shoe"]["warning_mileage"] == 222
     assert matches[0]["shoe"]["maximum_mileage"] == 444
 
 
 @pytest.mark.e2e
-def test_rename_creates_alias_and_preserves_retirement(viewer_client, editor_client):
-    """Renaming a shoe keeps the id stable, aliases the old name, and an edit that
-    doesn't touch retirement leaves a retired shoe retired."""
-    from fitness.db.runs import get_run_by_id
-
-    old_name = "E2E Rename Original"
-    new_name = "E2E Rename Updated"
-    shoe_id = generate_shoe_id(old_name)
-
-    # Seed a run so the shoe exists (created implicitly with default thresholds).
-    seed = Run(
-        id="e2e_rename_run_1",
-        datetime_utc=datetime(2024, 10, 1, 10, 0, 0),
-        type="Outdoor Run",
-        distance=5.0,
-        duration=2400.0,
-        source="Strava",
-    )
-    seed._shoe_name = old_name
-    assert bulk_create_runs([seed]) == 1
-
-    # 1. Rename via PATCH (name only).
-    res = editor_client.patch(f"/shoes/{shoe_id}", json={"name": new_name})
-    assert res.status_code == 200
-    assert "updated" in res.json()["message"].lower()
-
-    # 2. The id is unchanged; only the display name changed.
-    res = viewer_client.get("/shoes")
-    shoes = res.json()
-    renamed = next((s for s in shoes if s["id"] == shoe_id), None)
-    assert renamed is not None and renamed["name"] == new_name
-    # No leftover shoe under the old name.
-    assert all(s["name"] != old_name for s in shoes)
-
-    # 3. A later import carrying the OLD gear name resolves to the same shoe via
-    #    the alias instead of spawning a duplicate.
-    reimport = Run(
-        id="e2e_rename_run_2",
-        datetime_utc=datetime(2024, 10, 5, 10, 0, 0),
-        type="Outdoor Run",
-        distance=6.0,
-        duration=2800.0,
-        source="MapMyFitness",
-    )
-    reimport._shoe_name = old_name
-    assert bulk_create_runs([reimport]) == 1
-
-    attached = get_run_by_id("e2e_rename_run_2")
-    assert attached is not None
-    assert attached.shoe_id == shoe_id  # resolved via alias, not a new shoe
-
-    res = viewer_client.get("/shoes")
-    assert sum(1 for s in res.json() if s["id"] == shoe_id) == 1
-    assert all(s["name"] != old_name for s in res.json())
-
-    # 4. REGRESSION: retire the shoe, then make a mileage-only edit and confirm
-    #    it stays retired (the old `retired_at is None` logic would unretire it).
-    res = editor_client.patch(
-        f"/shoes/{shoe_id}",
-        json={"retired_at": "2024-12-01", "retirement_notes": "done"},
-    )
-    assert res.status_code == 200
-
-    res = editor_client.patch(
-        f"/shoes/{shoe_id}", json={"warning_mileage": 275}
-    )
-    assert res.status_code == 200
-
-    res = viewer_client.get("/shoes", params={"retired": True})
-    still_retired = next((s for s in res.json() if s["id"] == shoe_id), None)
-    assert still_retired is not None
-    assert still_retired["retired_at"] == "2024-12-01"
-    assert still_retired["warning_mileage"] == 275
-
-
-@pytest.mark.e2e
 def test_size_and_date_null_for_imports_and_backfillable(viewer_client, editor_client):
-    """Import-created shoes have null size/purchased_date; PATCH can backfill them."""
-    name = "E2E Backfill Shoe"
-    shoe_id = generate_shoe_id(name)
+    """Imports leave shoe_id NULL and record imported_shoe_name; API-created shoes
+    round-trip size/purchased_date and PATCH can edit them."""
+    from fitness.db.connection import get_db_connection
 
-    # Importing a run creates the shoe implicitly, with no size/purchase date.
+    # 1. Importing a run no longer creates or assigns a shoe: shoe_id stays NULL
+    #    and the raw gear name is recorded in imported_shoe_name.
     seed = Run(
         id="e2e_backfill_run_1",
         datetime_utc=datetime(2024, 8, 1, 10, 0, 0),
@@ -745,16 +582,46 @@ def test_size_and_date_null_for_imports_and_backfillable(viewer_client, editor_c
         duration=2400.0,
         source="Strava",
     )
-    seed._shoe_name = name
+    seed._shoe_name = "E2E Import Gear"
     assert bulk_create_runs([seed]) == 1
+
+    imported = get_run_by_id("e2e_backfill_run_1")
+    assert imported is not None
+    assert imported.shoe_id is None
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT imported_shoe_name FROM runs WHERE id = %s",
+                ("e2e_backfill_run_1",),
+            )
+            row = cur.fetchone()
+    assert row is not None
+    assert row[0] == "E2E Import Gear"
+
+    # 2. A shoe created via the API round-trips size/purchased_date.
+    res = editor_client.post(
+        "/shoes/",
+        json={
+            "brand": "E2E Backfill",
+            "model": "Shoe",
+            "size": 8.5,
+            "purchased_date": "2024-06-01",
+        },
+    )
+    assert res.status_code == 201
+    created = res.json()
+    shoe_id = created["id"]
+    assert created["size"] == 8.5
+    assert created["purchased_date"] == "2024-06-01"
 
     res = viewer_client.get("/shoes")
     listed = next((s for s in res.json() if s["id"] == shoe_id), None)
     assert listed is not None
-    assert listed["size"] is None
-    assert listed["purchased_date"] is None
+    assert listed["size"] == 8.5
+    assert listed["purchased_date"] == "2024-06-01"
 
-    # Backfill via PATCH.
+    # 3. PATCH can edit size/purchased_date.
     res = editor_client.patch(
         f"/shoes/{shoe_id}",
         json={"size": 9.0, "purchased_date": "2024-07-01"},

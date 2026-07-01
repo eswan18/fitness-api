@@ -5,6 +5,8 @@ from datetime import datetime
 from fitness.models import Run
 from fitness.db.runs import bulk_create_runs
 
+from tests.e2e.conftest import make_shoe, assign_shoe_to_runs
+
 
 @pytest.mark.e2e
 def test_mileage_metrics(viewer_client):
@@ -181,13 +183,16 @@ def test_shoe_mileage_metrics(viewer_client):
         ),
     ]
 
-    # Set shoe names
-    runs[0]._shoe_name = "Test Shoe A"
-    runs[1]._shoe_name = "Test Shoe B"
-    runs[2]._shoe_name = "Test Shoe A"  # Same shoe as first run
-
     inserted = bulk_create_runs(runs)
     assert inserted == 3
+
+    # Imports no longer create/assign shoes: create the shoes explicitly and
+    # attribute the runs to them. Runs 1 and 3 share "Test Shoe A"; run 2 uses
+    # "Test Shoe B".
+    shoe_a = make_shoe("Test Shoe", "A")
+    shoe_b = make_shoe("Test Shoe", "B")
+    assign_shoe_to_runs(shoe_a.id, ["shoe_mileage_test_1", "shoe_mileage_test_3"])
+    assign_shoe_to_runs(shoe_b.id, ["shoe_mileage_test_2"])
 
     # Test mileage by shoe
     res = viewer_client.get("/metrics/mileage/by-shoe")

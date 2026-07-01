@@ -4,14 +4,14 @@ import pytest
 from datetime import datetime
 from fitness.models import Run
 from fitness.db.runs import bulk_create_runs
-from fitness.models.shoe import generate_shoe_id
+
+from tests.e2e.conftest import make_shoe, assign_shoe_to_runs
 
 
 @pytest.mark.e2e
 def test_shoe_notes_crud_lifecycle(viewer_client, editor_client):
     """Create, list (newest-first), update, and delete dated notes on a shoe."""
-    # Seed a shoe by creating a run that references it.
-    shoe_name = "Notes Test Shoe"
+    # Seed a shoe and a run attributed to it.
     run = Run(
         id="shoe_notes_run_1",
         datetime_utc=datetime(2025, 1, 1, 10, 0, 0),
@@ -21,10 +21,11 @@ def test_shoe_notes_crud_lifecycle(viewer_client, editor_client):
         source="Strava",
         avg_heart_rate=150.0,
     )
-    run._shoe_name = shoe_name
     assert bulk_create_runs([run]) == 1
 
-    shoe_id = generate_shoe_id(shoe_name)
+    shoe = make_shoe("Notes Test", "Shoe")
+    assign_shoe_to_runs(shoe.id, ["shoe_notes_run_1"])
+    shoe_id = shoe.id
 
     # No notes yet.
     res = viewer_client.get(f"/shoes/{shoe_id}/notes")

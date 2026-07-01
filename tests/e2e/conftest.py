@@ -1,18 +1,54 @@
 import os
 from pathlib import Path
 from uuid import UUID
-from datetime import datetime, timezone
-from typing import Iterator
+from datetime import date, datetime, timezone
+from typing import Iterable, Iterator
 import pytest
 from testcontainers.postgres import PostgresContainer
 from alembic.config import Config
 from alembic import command
 from fastapi.testclient import TestClient
 
+from fitness.models.shoe import Shoe
 from fitness.models.user import User, Role
 
 # Ensure allowed environment for env_loader
 os.environ.setdefault("ENV", "dev")
+
+
+def make_shoe(
+    brand: str,
+    model: str,
+    *,
+    size: float = 10.0,
+    purchased_date: date = date(2024, 1, 1),
+    **kwargs,
+) -> Shoe:
+    """Create a shoe for tests; returns the created Shoe (with opaque id).
+
+    Imports no longer create or assign shoes, so tests that need a shoe to exist
+    must create it explicitly. The display ``name`` is ``f"{brand} {model}"``.
+    """
+    # Imported lazily so DATABASE_URL is set (by the db_url fixture) before the
+    # db/connection module resolves it.
+    from fitness.db.shoes import create_shoe as _create_shoe
+
+    return _create_shoe(
+        brand=brand, model=model, size=size, purchased_date=purchased_date, **kwargs
+    )
+
+
+def assign_shoe_to_runs(shoe_id: str, run_ids: Iterable[str]) -> None:
+    """Attribute already-inserted runs to a shoe (imports no longer do this)."""
+    from fitness.db.connection import get_db_connection
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE runs SET shoe_id = %s WHERE id = ANY(%s)",
+                (shoe_id, list(run_ids)),
+            )
+        conn.commit()
 
 
 # Shared test user data
