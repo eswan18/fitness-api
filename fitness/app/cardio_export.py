@@ -28,13 +28,15 @@ from fitness.models.run_detail import RunDetail
 FeedItem = ActivityFeedRunItem | ActivityFeedWorkoutItem | ActivityFeedRideItem
 
 # Column order for the CSV export. Run-only columns (shoes/notes/workout_*) are
-# left blank for ride rows; pace is blank when distance is 0 (most rides).
+# left blank for ride rows; pace is blank when distance is 0 (most rides). `name`
+# applies to both runs and rides.
 CSV_COLUMNS = [
     "activity_kind",
     "activity_id",
     "datetime_utc",
     "local_date",
     "type",
+    "name",
     "source",
     "distance_mi",
     "duration_sec",
@@ -111,6 +113,7 @@ def _run_row(
         "datetime_utc": _fmt_datetime_utc(run.datetime_utc),
         "local_date": _fmt_local_date(run.datetime_utc, user_timezone),
         "type": run.type,
+        "name": run.name or "",
         "source": run.source,
         "distance_mi": round(run.distance, 2),
         "duration_sec": int(run.duration),
@@ -134,6 +137,7 @@ def _ride_row(ride: RideDetail, user_timezone: str | None) -> dict[str, object]:
         "datetime_utc": _fmt_datetime_utc(ride.datetime_utc),
         "local_date": _fmt_local_date(ride.datetime_utc, user_timezone),
         "type": ride.type,
+        "name": ride.name or "",
         "source": ride.source,
         "distance_mi": round(ride.distance, 2),
         "duration_sec": int(ride.duration),

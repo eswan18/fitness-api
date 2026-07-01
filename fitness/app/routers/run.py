@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from fitness.db.runs import (
     get_run_by_id,
     update_run_notes,
+    update_run_name,
     get_run_duplicate_of,
     mark_run_duplicate,
     unmark_run_duplicate,
@@ -230,6 +231,38 @@ def update_run_note(
     _get_run_or_404(run_id)
     notes = (request.notes or "").strip() or None
     update_run_notes(run_id, notes)
+    updated = get_run_by_id(run_id)
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run with ID {run_id} not found",
+        )
+    return updated
+
+
+class RunNameUpdateRequest(BaseModel):
+    """Request model for setting a run's user-authored display name."""
+
+    name: str | None = Field(
+        None, max_length=255, description="Display name; null or empty clears it"
+    )
+
+
+@router.patch("/{run_id}/name", response_model=Run)
+def update_run_name_endpoint(
+    run_id: str,
+    request: RunNameUpdateRequest,
+    _user: User = Depends(require_editor),
+) -> Run:
+    """Set or clear a run's user-authored display name.
+
+    Unlike metric edits (`PATCH /runs/{id}`), this is a lightweight single-field
+    update: it is NOT version/history-tracked and IS allowed on calendar-synced
+    runs (a name doesn't affect the synced event).
+    """
+    _get_run_or_404(run_id)
+    name = (request.name or "").strip() or None
+    update_run_name(run_id, name)
     updated = get_run_by_id(run_id)
     if updated is None:
         raise HTTPException(

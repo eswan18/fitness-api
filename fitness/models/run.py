@@ -46,6 +46,7 @@ class Run(BaseModel):
     avg_heart_rate: float | None = None
     shoe_id: str | None = None  # Foreign key to shoes table
     notes: str | None = None  # User-authored markdown note (preserved across re-syncs)
+    name: str | None = None  # User-authored display name (preserved across re-syncs)
     deleted_at: datetime | None = None
     # Set when this run was marked as a duplicate of another run (the kept one).
     duplicate_of_id: str | None = None

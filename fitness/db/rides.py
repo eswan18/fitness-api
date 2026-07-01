@@ -10,11 +10,16 @@ from .connection import get_db_cursor, get_db_connection
 logger = logging.getLogger(__name__)
 
 
+_RIDE_SELECT = sql.SQL("""
+    SELECT id, datetime_utc, type, distance, duration, source, avg_heart_rate, deleted_at, name
+    FROM rides
+""")
+
 _RIDE_DETAIL_SELECT = sql.SQL("""
     SELECT r.id, r.datetime_utc, r.type, r.distance, r.duration, r.source,
            r.avg_heart_rate, r.deleted_at, r.duplicate_of_id,
            sr.sync_status, sr.synced_at, sr.google_event_id,
-           sr.ride_version, sr.error_message
+           sr.ride_version, sr.error_message, r.name
     FROM rides r
     LEFT JOIN synced_rides sr ON sr.ride_id = r.id
 """)
@@ -36,6 +41,7 @@ def _row_to_ride_detail(row) -> RideDetail:
         google_event_id,
         synced_version,
         error_message,
+        name,
     ) = row
     return RideDetail(
         id=ride_id,
@@ -47,6 +53,7 @@ def _row_to_ride_detail(row) -> RideDetail:
         avg_heart_rate=avg_heart_rate,
         deleted_at=deleted_at,
         duplicate_of_id=duplicate_of_id,
+        name=name,
         is_synced=(sync_status == "synced"),
         sync_status=sync_status,
         synced_at=synced_at,
@@ -62,12 +69,9 @@ def get_all_rides(include_deleted: bool = False) -> list[Ride]:
         deleted_filter = (
             sql.SQL("") if include_deleted else sql.SQL(" WHERE deleted_at IS NULL")
         )
-        query = sql.SQL("""
-            SELECT id, datetime_utc, type, distance, duration, source, avg_heart_rate, deleted_at
-            FROM rides
-            {deleted_filter}
-            ORDER BY datetime_utc
-        """).format(deleted_filter=deleted_filter)
+        query = sql.SQL("{select} {deleted_filter} ORDER BY datetime_utc").format(
+            select=_RIDE_SELECT, deleted_filter=deleted_filter
+        )
         cursor.execute(query)
         rows = cursor.fetchall()
         return [_row_to_ride(row) for row in rows]
@@ -83,13 +87,9 @@ def get_rides_in_date_range(
         deleted_filter = sql.SQL("")
         if not include_deleted:
             deleted_filter = sql.SQL(" AND deleted_at IS NULL")
-        query = sql.SQL("""
-            SELECT id, datetime_utc, type, distance, duration, source,
-                   avg_heart_rate, deleted_at
-            FROM rides
-            WHERE DATE(datetime_utc) BETWEEN %s AND %s{deleted_filter}
-            ORDER BY datetime_utc
-        """).format(deleted_filter=deleted_filter)
+        query = sql.SQL(
+            "{select} WHERE DATE(datetime_utc) BETWEEN %s AND %s{deleted_filter} ORDER BY datetime_utc"
+        ).format(select=_RIDE_SELECT, deleted_filter=deleted_filter)
         cursor.execute(query, [start_date, end_date])
         rows = cursor.fetchall()
         return [_row_to_ride(row) for row in rows]
@@ -250,16 +250,33 @@ def get_ride_by_id(ride_id: str, include_deleted: bool = False) -> Ride | None:
         deleted_filter = (
             sql.SQL("") if include_deleted else sql.SQL(" AND deleted_at IS NULL")
         )
-        query = sql.SQL("""
-            SELECT id, datetime_utc, type, distance, duration, source, avg_heart_rate, deleted_at
-            FROM rides
-            WHERE id = %s{deleted_filter}
-        """).format(deleted_filter=deleted_filter)
+        query = sql.SQL("{select} WHERE id = %s{deleted_filter}").format(
+            select=_RIDE_SELECT, deleted_filter=deleted_filter
+        )
         cursor.execute(query, (ride_id,))
         row = cursor.fetchone()
         if not row:
             return None
         return _row_to_ride(row)
+
+
+def update_ride_name(ride_id: str, name: str | None) -> bool:
+    """Set (or clear) a ride's user-authored display name.
+
+    Mirrors `update_run_name`: a lightweight, single-field update with no
+    version bump or history record. Never touched by re-imports, so it
+    survives Strava re-syncs. Returns True if a non-deleted ride matched.
+    """
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE rides
+            SET name = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND deleted_at IS NULL
+            """,
+            (name, ride_id),
+        )
+        return cursor.rowcount > 0
 
 
 _UPDATABLE_RIDE_FIELDS: tuple[str, ...] = (
@@ -416,6 +433,7 @@ def _row_to_ride(row) -> Ride:
         source,
         avg_heart_rate,
         deleted_at,
+        name,
     ) = row
     return Ride(
         id=ride_id,
@@ -426,4 +444,5 @@ def _row_to_ride(row) -> Ride:
         source=source,
         avg_heart_rate=avg_heart_rate,
         deleted_at=deleted_at,
+        name=name,
     )

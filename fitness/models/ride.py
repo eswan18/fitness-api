@@ -41,6 +41,7 @@ class Ride(BaseModel):
     duration: float  # in seconds (Strava elapsed_time)
     source: RideSource
     avg_heart_rate: float | None = None
+    name: str | None = None  # User-authored display name (preserved across re-syncs)
     deleted_at: datetime | None = None
     # Set when this ride was marked as a duplicate of another ride (the kept one).
     duplicate_of_id: str | None = None

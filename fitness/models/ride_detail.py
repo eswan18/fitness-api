@@ -24,6 +24,7 @@ class RideDetail(BaseModel):
     duration: float
     source: RideSource
     avg_heart_rate: float | None = None
+    name: str | None = None  # User-authored display name on the ride
     deleted_at: datetime | None = None
     # Set when this ride was marked as a duplicate of another ride (the kept one).
     duplicate_of_id: str | None = None
