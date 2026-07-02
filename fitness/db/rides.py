@@ -260,31 +260,13 @@ def get_ride_by_id(ride_id: str, include_deleted: bool = False) -> Ride | None:
         return _row_to_ride(row)
 
 
-def update_ride_name(ride_id: str, name: str | None) -> bool:
-    """Set (or clear) a ride's user-authored display name.
-
-    Mirrors `update_run_name`: a lightweight, single-field update with no
-    version bump or history record. Never touched by re-imports, so it
-    survives Strava re-syncs. Returns True if a non-deleted ride matched.
-    """
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            UPDATE rides
-            SET name = %s, updated_at = CURRENT_TIMESTAMP
-            WHERE id = %s AND deleted_at IS NULL
-            """,
-            (name, ride_id),
-        )
-        return cursor.rowcount > 0
-
-
 _UPDATABLE_RIDE_FIELDS: tuple[str, ...] = (
     "datetime_utc",
     "type",
     "distance",
     "duration",
     "avg_heart_rate",
+    "name",
 )
 
 

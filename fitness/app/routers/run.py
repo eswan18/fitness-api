@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 from fitness.db.runs import (
     get_run_by_id,
     update_run_notes,
-    update_run_name,
     get_run_duplicate_of,
     mark_run_duplicate,
     unmark_run_duplicate,
@@ -78,6 +77,11 @@ class RunUpdateRequest(BaseModel):
     datetime_utc: datetime | None = Field(
         None, description="When the run occurred (UTC)"
     )
+    name: str | None = Field(
+        None,
+        max_length=255,
+        description="Display name; omitted/null leaves it unchanged, blank clears it",
+    )
     change_reason: str | None = Field(None, description="Reason for the change")
     changed_by: str = Field(..., description="User making the change")
 
@@ -99,6 +103,7 @@ class RunHistoryResponse(BaseModel):
     changed_at: datetime
     changed_by: str | None
     change_reason: str | None
+    name: str | None = None
 
     @classmethod
     def from_history_record(cls, record: RunHistoryRecord) -> "RunHistoryResponse":
@@ -118,6 +123,7 @@ class RunHistoryResponse(BaseModel):
             changed_at=record.changed_at,
             changed_by=record.changed_by,
             change_reason=record.change_reason,
+            name=record.name,
         )
 
 
@@ -165,10 +171,18 @@ def update_run(
         _get_run_or_404(run_id)
         _reject_if_synced(run_id)
 
-        # Build updates dictionary, excluding None values and metadata fields
+        # Build updates dictionary, excluding None values and metadata fields.
+        # Omitted/null `name` is excluded here (exclude_none=True) and therefore
+        # leaves the name unchanged; only a non-None value (including blank
+        # strings) survives to be normalized below.
         updates = update_request.model_dump(
             exclude_none=True, exclude={"changed_by", "change_reason"}
         )
+
+        # Normalize name: blank/whitespace-only clears it to NULL, matching the
+        # semantics of the old lightweight PATCH /runs/{id}/name endpoint.
+        if "name" in updates:
+            updates["name"] = updates["name"].strip() or None
 
         if not updates:
             raise HTTPException(
@@ -233,38 +247,6 @@ def update_run_note(
     _get_run_or_404(run_id)
     notes = (request.notes or "").strip() or None
     update_run_notes(run_id, notes)
-    updated = get_run_by_id(run_id)
-    if updated is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Run with ID {run_id} not found",
-        )
-    return updated
-
-
-class RunNameUpdateRequest(BaseModel):
-    """Request model for setting a run's user-authored display name."""
-
-    name: str | None = Field(
-        None, max_length=255, description="Display name; null or empty clears it"
-    )
-
-
-@router.patch("/{run_id}/name", response_model=Run)
-def update_run_name_endpoint(
-    run_id: str,
-    request: RunNameUpdateRequest,
-    _user: User = Depends(require_editor),
-) -> Run:
-    """Set or clear a run's user-authored display name.
-
-    Unlike metric edits (`PATCH /runs/{id}`), this is a lightweight single-field
-    update: it is NOT version/history-tracked and IS allowed on calendar-synced
-    runs (a name doesn't affect the synced event).
-    """
-    _get_run_or_404(run_id)
-    name = (request.name or "").strip() or None
-    update_run_name(run_id, name)
     updated = get_run_by_id(run_id)
     if updated is None:
         raise HTTPException(
@@ -525,6 +507,7 @@ def restore_run_to_version(
             "avg_heart_rate": historical_version.avg_heart_rate,
             "shoe_id": historical_version.shoe_id,
             "datetime_utc": historical_version.datetime_utc,
+            "name": historical_version.name,
         }
 
         # Perform the restoration with history tracking

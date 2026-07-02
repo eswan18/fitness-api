@@ -179,6 +179,90 @@ class TestUpdateRide:
         response = viewer_client.patch("/rides/x", json={"duration": 1800})
         assert response.status_code == 403
 
+    @patch("fitness.app.routers.ride.update_ride")
+    @patch("fitness.app.routers.ride.get_ride_by_id")
+    def test_set_name(
+        self,
+        mock_get: MagicMock,
+        mock_update: MagicMock,
+        outdoor_ride: Ride,
+        editor_client: TestClient,
+    ):
+        mock_get.return_value = outdoor_ride
+        updated = outdoor_ride.model_copy(update={"name": "Sunday Century"})
+        mock_update.return_value = updated
+
+        response = editor_client.patch(
+            f"/rides/{outdoor_ride.id}", json={"name": "Sunday Century"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["ride"]["name"] == "Sunday Century"
+        mock_update.assert_called_once_with(
+            outdoor_ride.id, {"name": "Sunday Century"}
+        )
+
+    @patch("fitness.app.routers.ride.update_ride")
+    @patch("fitness.app.routers.ride.get_ride_by_id")
+    def test_blank_name_clears_to_null(
+        self,
+        mock_get: MagicMock,
+        mock_update: MagicMock,
+        outdoor_ride: Ride,
+        editor_client: TestClient,
+    ):
+        mock_get.return_value = outdoor_ride
+        updated = outdoor_ride.model_copy(update={"name": None})
+        mock_update.return_value = updated
+
+        response = editor_client.patch(
+            f"/rides/{outdoor_ride.id}", json={"name": "   "}
+        )
+
+        assert response.status_code == 200
+        mock_update.assert_called_once_with(outdoor_ride.id, {"name": None})
+
+    @patch("fitness.app.routers.ride.update_ride")
+    @patch("fitness.app.routers.ride.get_ride_by_id")
+    def test_null_name_clears_to_null(
+        self,
+        mock_get: MagicMock,
+        mock_update: MagicMock,
+        outdoor_ride: Ride,
+        editor_client: TestClient,
+    ):
+        mock_get.return_value = outdoor_ride
+        updated = outdoor_ride.model_copy(update={"name": None})
+        mock_update.return_value = updated
+
+        response = editor_client.patch(
+            f"/rides/{outdoor_ride.id}", json={"name": None}
+        )
+
+        assert response.status_code == 200
+        mock_update.assert_called_once_with(outdoor_ride.id, {"name": None})
+
+    @patch("fitness.app.routers.ride.update_ride")
+    @patch("fitness.app.routers.ride.get_ride_by_id")
+    def test_omitted_name_leaves_it_unchanged(
+        self,
+        mock_get: MagicMock,
+        mock_update: MagicMock,
+        outdoor_ride: Ride,
+        editor_client: TestClient,
+    ):
+        """Editing another field without touching `name` must not clear it."""
+        mock_get.return_value = outdoor_ride
+        updated = outdoor_ride.model_copy(update={"duration": 3000.0})
+        mock_update.return_value = updated
+
+        response = editor_client.patch(
+            f"/rides/{outdoor_ride.id}", json={"duration": 3000}
+        )
+
+        assert response.status_code == 200
+        mock_update.assert_called_once_with(outdoor_ride.id, {"duration": 3000.0})
+
     @patch("fitness.app.routers.ride.get_ride_by_id")
     def test_rejects_invalid_type(
         self,

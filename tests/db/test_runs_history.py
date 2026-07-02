@@ -89,6 +89,7 @@ class TestGetRunHistory:
                 datetime(2024, 1, 16, 8, 0),
                 "user123",
                 "Updated distance",
+                "Morning Tempo",
             ),
             (
                 2,
@@ -105,6 +106,7 @@ class TestGetRunHistory:
                 datetime(2024, 1, 15, 12, 0),
                 "system",
                 "Initial import",
+                None,
             ),
         ]
 
@@ -121,6 +123,8 @@ class TestGetRunHistory:
         assert history[0].run_id == "test_run_123"
         assert history[0].version_number == 2
         assert history[0].change_type == "edit"
+        assert history[0].name == "Morning Tempo"
+        assert history[1].name is None
         mock_cursor.execute.assert_called_once()
 
     @patch("fitness.db.runs_history.get_db_cursor")
@@ -170,6 +174,71 @@ class TestUpdateRunWithHistory:
         assert (
             mock_cursor.execute.call_count >= 2
         )  # At least INSERT into history and UPDATE current
+
+    @patch("fitness.db.runs_history.get_db_connection")
+    @patch("fitness.db.runs.get_run_by_id")
+    def test_update_run_with_history_snapshots_name(
+        self, mock_get_run, mock_get_connection, sample_run
+    ):
+        """`name` is an allowed field and its new value is snapshotted into
+        the history row (run names feed calendar event titles, so they need
+        the same history/version tracking as every other editable field)."""
+        mock_get_run.return_value = sample_run
+
+        mock_connection = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = [1]  # Current version
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_get_connection.return_value.__enter__.return_value = mock_connection
+
+        update_run_with_history(
+            "test_run_123", {"name": "Race Day"}, "user123", "Named the run"
+        )
+
+        # Find the INSERT INTO runs_history call and check the snapshotted name.
+        history_insert_call = next(
+            call
+            for call in mock_cursor.execute.call_args_list
+            if "INSERT INTO runs_history" in call.args[0]
+        )
+        params = history_insert_call.args[1]
+        assert params[-1] == "Race Day"  # `name` is the last column in the INSERT
+
+    @patch("fitness.db.runs_history.get_db_connection")
+    @patch("fitness.db.runs.get_run_by_id")
+    def test_update_run_with_history_snapshots_cleared_name(
+        self, mock_get_run, mock_get_connection, sample_run
+    ):
+        """Passing `name=None` explicitly clears it to NULL in the history
+        snapshot too, not just the live row."""
+        mock_get_run.return_value = sample_run
+
+        mock_connection = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = [1]
+        mock_connection.cursor.return_value.__enter__.return_value = mock_cursor
+        mock_get_connection.return_value.__enter__.return_value = mock_connection
+
+        update_run_with_history("test_run_123", {"name": None}, "user123")
+
+        history_insert_call = next(
+            call
+            for call in mock_cursor.execute.call_args_list
+            if "INSERT INTO runs_history" in call.args[0]
+        )
+        params = history_insert_call.args[1]
+        assert params[-1] is None
+
+        # The UPDATE ... SET name = %s statement must also carry NULL as a
+        # bound parameter (not a literal), which psycopg maps to SQL NULL.
+        # The query is a psycopg `sql.Composed` object (not a plain string),
+        # so stringify it before substring-matching.
+        update_call = next(
+            call
+            for call in mock_cursor.execute.call_args_list
+            if "UPDATE runs" in str(call.args[0])
+        )
+        assert None in update_call.args[1]
 
     @patch("fitness.db.runs_history.get_db_connection")
     @patch("fitness.db.runs.get_run_by_id")
@@ -224,6 +293,7 @@ class TestGetRunVersion:
             datetime(2024, 1, 15, 12, 0),
             "system",
             "Initial import",
+            "Morning Tempo",
         )
 
         mock_cursor = MagicMock()
@@ -238,6 +308,7 @@ class TestGetRunVersion:
         assert isinstance(version, RunHistoryRecord)
         assert version.run_id == "test_run_123"
         assert version.version_number == 1
+        assert version.name == "Morning Tempo"
 
     @patch("fitness.db.runs_history.get_db_cursor")
     def test_get_run_version_not_found(self, mock_get_cursor):

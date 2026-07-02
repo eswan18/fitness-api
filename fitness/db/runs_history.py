@@ -30,6 +30,7 @@ class RunHistoryRecord:
     changed_at: datetime
     changed_by: Optional[str]
     change_reason: Optional[str]
+    name: Optional[str] = None
 
     def to_run(self) -> Run:
         """Convert history record back to a Run object."""
@@ -46,6 +47,7 @@ class RunHistoryRecord:
             source=cast(RunSource, self.source),
             avg_heart_rate=self.avg_heart_rate,
             shoe_id=self.shoe_id,
+            name=self.name,
         )
 
 
@@ -61,11 +63,11 @@ def insert_run_history(
         cursor.execute(
             """
             INSERT INTO runs_history (
-                run_id, version_number, change_type, datetime_utc, type, 
+                run_id, version_number, change_type, datetime_utc, type,
                 distance, duration, source, avg_heart_rate, shoe_id,
-                changed_by, change_reason
+                changed_by, change_reason, name
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING history_id
         """,
             (
@@ -81,6 +83,7 @@ def insert_run_history(
                 run.shoe_id,
                 changed_by,
                 change_reason,
+                run.name,
             ),
         )
 
@@ -100,11 +103,11 @@ def get_run_history(run_id: str, limit: Optional[int] = None) -> List[RunHistory
     """Get the edit history for a specific run, ordered by version (newest first)."""
     with get_db_cursor() as cursor:
         query = """
-            SELECT history_id, run_id, version_number, change_type, datetime_utc, 
+            SELECT history_id, run_id, version_number, change_type, datetime_utc,
                    type, distance, duration, source, avg_heart_rate, shoe_id,
-                   changed_at, changed_by, change_reason
-            FROM runs_history 
-            WHERE run_id = %s 
+                   changed_at, changed_by, change_reason, name
+            FROM runs_history
+            WHERE run_id = %s
             ORDER BY version_number DESC
         """
         params: list[str | int] = [run_id]
@@ -134,6 +137,7 @@ def get_run_history(run_id: str, limit: Optional[int] = None) -> List[RunHistory
                     changed_at=row[11],
                     changed_by=row[12],
                     change_reason=row[13],
+                    name=row[14],
                 )
             )
 
@@ -148,10 +152,10 @@ def get_run_version(run_id: str, version_number: int) -> Optional[RunHistoryReco
     with get_db_cursor() as cursor:
         cursor.execute(
             """
-            SELECT history_id, run_id, version_number, change_type, datetime_utc, 
+            SELECT history_id, run_id, version_number, change_type, datetime_utc,
                    type, distance, duration, source, avg_heart_rate, shoe_id,
-                   changed_at, changed_by, change_reason
-            FROM runs_history 
+                   changed_at, changed_by, change_reason, name
+            FROM runs_history
             WHERE run_id = %s AND version_number = %s
         """,
             (run_id, version_number),
@@ -176,6 +180,7 @@ def get_run_version(run_id: str, version_number: int) -> Optional[RunHistoryReco
             changed_at=row[11],
             changed_by=row[12],
             change_reason=row[13],
+            name=row[14],
         )
 
 
@@ -215,6 +220,7 @@ def update_run_with_history(
         "shoe_id",
         "type",
         "datetime_utc",
+        "name",
         # Note: We don't allow editing 'source' as it maintains data lineage
     }
 
@@ -283,6 +289,7 @@ def update_run_with_history(
                         "avg_heart_rate", current_run.avg_heart_rate
                     ),
                     shoe_id=updates.get("shoe_id", current_run.shoe_id),
+                    name=updates.get("name", current_run.name),
                     deleted_at=current_run.deleted_at,
                 )
 
@@ -313,11 +320,11 @@ def insert_run_history_with_cursor(
     cursor.execute(
         """
         INSERT INTO runs_history (
-            run_id, version_number, change_type, datetime_utc, type, 
+            run_id, version_number, change_type, datetime_utc, type,
             distance, duration, source, avg_heart_rate, shoe_id,
-            changed_by, change_reason
+            changed_by, change_reason, name
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING history_id
     """,
         (
@@ -333,6 +340,7 @@ def insert_run_history_with_cursor(
             run.shoe_id,
             changed_by,
             change_reason,
+            run.name,
         ),
     )
 
