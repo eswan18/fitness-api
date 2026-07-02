@@ -65,3 +65,47 @@ def test_minimal_workflow(viewer_client, editor_client):
     # Unretire
     res = editor_client.patch(f"/shoes/{shoe_id}", json={"retired_at": None})
     assert res.status_code == 200
+
+
+@pytest.mark.e2e
+def test_run_name_is_history_tracked_and_restorable(viewer_client, editor_client):
+    """`name` is a first-class edited field: setting it via the full-edit
+    endpoint bumps the version, snapshots into history, and restoring an
+    older version reverts it (mirrors every other editable run field)."""
+    run = Run(
+        id="e2e_run_name_1",
+        datetime_utc=datetime(2024, 2, 1, 8, 0, 0),
+        type="Outdoor Run",
+        distance=3.0,
+        duration=1200.0,
+        source="Strava",
+    )
+    assert bulk_create_runs([run]) == 1
+
+    # Set the name via the full-edit endpoint (not a lightweight endpoint).
+    res = editor_client.patch(
+        "/runs/e2e_run_name_1",
+        json={
+            "name": "Morning Tempo",
+            "changed_by": "e2e",
+            "change_reason": "named the run",
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["run"]["name"] == "Morning Tempo"
+
+    # History should snapshot the name: newest version first, original (no
+    # name) last.
+    res = viewer_client.get("/runs/e2e_run_name_1/history")
+    assert res.status_code == 200
+    history = res.json()
+    assert len(history) == 2
+    assert history[0]["version_number"] == 2
+    assert history[0]["name"] == "Morning Tempo"
+    assert history[1]["version_number"] == 1
+    assert history[1]["name"] is None
+
+    # Restoring to the original version reverts the name to null.
+    res = editor_client.post("/runs/e2e_run_name_1/restore/1?restored_by=e2e")
+    assert res.status_code == 200
+    assert res.json()["run"]["name"] is None

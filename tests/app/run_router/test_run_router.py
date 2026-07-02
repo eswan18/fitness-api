@@ -44,6 +44,7 @@ def sample_history_record():
         changed_at=datetime(2024, 1, 15, 12, 0, 0),
         changed_by="system",
         change_reason="Initial import",
+        name="Morning Tempo",
     )
 
 
@@ -177,6 +178,120 @@ class TestUpdateRunEndpoint:
         assert "No valid fields provided" in response.json()["detail"]
 
 
+class TestUpdateRunNameViaFullEdit:
+    """Test that `name` is a first-class field of PATCH /runs/{run_id}.
+
+    Semantics: omitted/null leaves it unchanged (it's dropped by
+    `exclude_none=True` in the router, same as every other field on this
+    endpoint); a blank/whitespace-only string normalizes to NULL (clears it).
+    """
+
+    @patch("fitness.app.routers.run.is_run_synced", return_value=False)
+    @patch("fitness.app.routers.run.get_run_by_id")
+    @patch("fitness.app.routers.run.update_run_with_history")
+    def test_set_name(
+        self,
+        mock_update: MagicMock,
+        mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
+        sample_run: Run,
+        auth_client: TestClient,
+    ):
+        mock_get_run.return_value = sample_run
+        mock_update.return_value = None
+
+        update_data = {"name": "Morning Tempo", "changed_by": "user123"}
+        response = auth_client.patch("/runs/test_run_123", json=update_data)
+
+        assert response.status_code == 200
+        assert "name" in response.json()["updated_fields"]
+        mock_update.assert_called_once_with(
+            run_id="test_run_123",
+            updates={"name": "Morning Tempo"},
+            changed_by="user123",
+            change_reason=None,
+        )
+
+    @patch("fitness.app.routers.run.is_run_synced", return_value=False)
+    @patch("fitness.app.routers.run.get_run_by_id")
+    @patch("fitness.app.routers.run.update_run_with_history")
+    def test_blank_name_clears_to_null(
+        self,
+        mock_update: MagicMock,
+        mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
+        sample_run: Run,
+        auth_client: TestClient,
+    ):
+        mock_get_run.return_value = sample_run
+        mock_update.return_value = None
+
+        update_data = {"name": "   ", "changed_by": "user123"}
+        response = auth_client.patch("/runs/test_run_123", json=update_data)
+
+        assert response.status_code == 200
+        mock_update.assert_called_once_with(
+            run_id="test_run_123",
+            updates={"name": None},
+            changed_by="user123",
+            change_reason=None,
+        )
+
+    @patch("fitness.app.routers.run.is_run_synced", return_value=False)
+    @patch("fitness.app.routers.run.get_run_by_id")
+    @patch("fitness.app.routers.run.update_run_with_history")
+    def test_omitted_name_leaves_it_unchanged(
+        self,
+        mock_update: MagicMock,
+        mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
+        sample_run: Run,
+        auth_client: TestClient,
+    ):
+        """Editing another field without touching `name` must not clear it."""
+        mock_get_run.return_value = sample_run
+        mock_update.return_value = None
+
+        update_data = {"distance": 5.5, "changed_by": "user123"}
+        response = auth_client.patch("/runs/test_run_123", json=update_data)
+
+        assert response.status_code == 200
+        # "name" must be entirely absent from the updates dict, not merely None.
+        mock_update.assert_called_once_with(
+            run_id="test_run_123",
+            updates={"distance": 5.5},
+            changed_by="user123",
+            change_reason=None,
+        )
+
+    @patch("fitness.app.routers.run.is_run_synced", return_value=False)
+    @patch("fitness.app.routers.run.get_run_by_id")
+    @patch("fitness.app.routers.run.update_run_with_history")
+    def test_null_name_also_leaves_it_unchanged(
+        self,
+        mock_update: MagicMock,
+        mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
+        sample_run: Run,
+        auth_client: TestClient,
+    ):
+        """Explicit JSON null is indistinguishable from omitted on this endpoint
+        (both are stripped by `exclude_none=True`): only a blank string clears."""
+        mock_get_run.return_value = sample_run
+        mock_update.return_value = None
+
+        update_data = {"name": None, "distance": 5.5, "changed_by": "user123"}
+        response = auth_client.patch("/runs/test_run_123", json=update_data)
+
+        assert response.status_code == 200
+        mock_update.assert_called_once_with(
+            run_id="test_run_123",
+            updates={"distance": 5.5},
+            changed_by="user123",
+            change_reason=None,
+        )
+
+
 class TestGetRunHistoryEndpoint:
     """Test the GET /runs/{run_id}/history endpoint."""
 
@@ -202,6 +317,7 @@ class TestGetRunHistoryEndpoint:
         assert result[0]["run_id"] == "test_run_123"
         assert result[0]["version_number"] == 1
         assert result[0]["change_type"] == "original"
+        assert result[0]["name"] == "Morning Tempo"
 
     @patch("fitness.app.routers.run.get_run_by_id")
     def test_get_run_history_run_not_found(
@@ -321,6 +437,11 @@ class TestRestoreRunEndpoint:
         assert result["restored_from_version"] == 1
         assert result["restored_by"] == "user123"
 
+        # The historical version's name is included in the restore updates.
+        mock_update.assert_called_once()
+        call_kwargs = mock_update.call_args[1]
+        assert call_kwargs["updates"]["name"] == sample_history_record.name
+
     @patch("fitness.app.routers.run.get_run_by_id")
     def test_restore_run_not_found(
         self, mock_get_run: MagicMock, auth_client: TestClient
@@ -396,6 +517,29 @@ class TestSyncedRunRejection:
 
         assert response.status_code == 409
         assert "synced" in response.json()["detail"]
+
+    @patch("fitness.app.routers.run.is_run_synced", return_value=True)
+    @patch("fitness.app.routers.run.get_run_by_id")
+    @patch("fitness.app.routers.run.update_run_with_history")
+    def test_name_only_edit_on_synced_run_rejected(
+        self,
+        mock_update: MagicMock,
+        mock_get_run: MagicMock,
+        _mock_synced: MagicMock,
+        sample_run: Run,
+        auth_client: TestClient,
+    ):
+        """Name moved into the full-edit flow, so it's now subject to the same
+        synced-run rejection as every other field (motivation: the name feeds
+        the calendar event title, so it can't drift from what's synced)."""
+        mock_get_run.return_value = sample_run
+
+        update_data = {"name": "Race Day", "changed_by": "user123"}
+        response = auth_client.patch("/runs/test_run_123", json=update_data)
+
+        assert response.status_code == 409
+        assert "synced" in response.json()["detail"]
+        mock_update.assert_not_called()
 
 
 class TestAuthenticationRequirements:

@@ -441,6 +441,74 @@ class TestGoogleCalendarClientCreateEvent:
             assert event_data["summary"] == "0.0 Mile Treadmill Run"
 
     @patch("httpx.Client")
+    def test_create_workout_event_uses_run_name_when_set(self, mock_client):
+        """The event title prefers the user-authored name over the
+        distance/type format (motivation for making `name` first-class:
+        it should appear as the synced calendar event's title)."""
+        mock_creds = create_mock_google_credentials()
+        with patch(
+            "fitness.integrations.google.calendar_client.get_credentials",
+            return_value=mock_creds,
+        ):
+            run = Run(
+                id="test_run_123",
+                datetime_utc=datetime(2025, 8, 9, 14, 30, 0, tzinfo=timezone.utc),
+                type="Outdoor Run",
+                distance=5.2,
+                duration=2400.0,
+                source="Strava",
+                name="Morning Tempo",
+            )
+
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"id": "google_event_123"}
+
+            mock_client_instance = Mock()
+            mock_client.return_value.__enter__.return_value = mock_client_instance
+            mock_client_instance.request.return_value = mock_response
+
+            client = GoogleCalendarClient()
+            event_id = client.create_workout_event(run)
+
+            assert event_id == "google_event_123"
+            call_args = mock_client_instance.request.call_args
+            event_data = call_args[1]["json"]
+            assert event_data["summary"] == "Morning Tempo"
+
+    @patch("httpx.Client")
+    def test_create_workout_event_falls_back_when_name_unset(self, mock_client):
+        """No user-authored name: falls back to the distance/type format."""
+        mock_creds = create_mock_google_credentials()
+        with patch(
+            "fitness.integrations.google.calendar_client.get_credentials",
+            return_value=mock_creds,
+        ):
+            run = Run(
+                id="test_run_123",
+                datetime_utc=datetime(2025, 8, 9, 14, 30, 0, tzinfo=timezone.utc),
+                type="Outdoor Run",
+                distance=5.2,
+                duration=2400.0,
+                source="Strava",
+            )
+
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"id": "google_event_123"}
+
+            mock_client_instance = Mock()
+            mock_client.return_value.__enter__.return_value = mock_client_instance
+            mock_client_instance.request.return_value = mock_response
+
+            client = GoogleCalendarClient()
+            client.create_workout_event(run)
+
+            call_args = mock_client_instance.request.call_args
+            event_data = call_args[1]["json"]
+            assert event_data["summary"] == "5.2 Mile Outdoor Run"
+
+    @patch("httpx.Client")
     def test_create_workout_event_failure(self, mock_client):
         """Test failed event creation."""
         mock_creds = create_mock_google_credentials()

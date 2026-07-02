@@ -12,7 +12,6 @@ from fitness.app.routers._sync_helpers import perform_unsync
 from fitness.db.rides import (
     get_ride_by_id,
     update_ride,
-    update_ride_name,
     get_ride_duplicate_of,
     mark_ride_duplicate,
     unmark_ride_duplicate,
@@ -51,6 +50,11 @@ class RideUpdateRequest(BaseModel):
     datetime_utc: datetime | None = Field(
         None, description="When the ride occurred (UTC)"
     )
+    name: str | None = Field(
+        None,
+        max_length=255,
+        description="Display name; omitted leaves it unchanged, blank/null clears it",
+    )
 
 
 class RideUpdateResponse(BaseModel):
@@ -87,6 +91,13 @@ def update_ride_endpoint(
             detail="No fields provided for update",
         )
 
+    # Normalize name: blank/whitespace-only (or explicit null) clears it to
+    # NULL, matching the semantics of the old lightweight PATCH
+    # /rides/{id}/name endpoint. Omitting the field entirely leaves it
+    # unchanged (it's absent from `updates` thanks to exclude_unset above).
+    if "name" in updates:
+        updates["name"] = (updates["name"] or "").strip() or None
+
     # Validate post-update invariant: Outdoor Ride must have a positive distance.
     final_type = updates.get("type", existing.type)
     final_distance = updates.get("distance", existing.distance)
@@ -108,42 +119,6 @@ def update_ride_endpoint(
         message="Ride updated",
         ride=updated,
     )
-
-
-class RideNameUpdateRequest(BaseModel):
-    """Request model for setting a ride's user-authored display name."""
-
-    name: str | None = Field(
-        None, max_length=255, description="Display name; null or empty clears it"
-    )
-
-
-@router.patch("/{ride_id}/name", response_model=Ride)
-def update_ride_name_endpoint(
-    ride_id: str,
-    request: RideNameUpdateRequest,
-    _user: User = Depends(require_editor),
-) -> Ride:
-    """Set or clear a ride's user-authored display name.
-
-    Unlike metric edits (`PATCH /rides/{id}`), this is a lightweight single-field
-    update: it is NOT version-tracked and IS allowed on calendar-synced rides
-    (a name doesn't affect the synced event).
-    """
-    if get_ride_by_id(ride_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ride {ride_id} not found",
-        )
-    name = (request.name or "").strip() or None
-    update_ride_name(ride_id, name)
-    updated = get_ride_by_id(ride_id)
-    if updated is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ride {ride_id} not found",
-        )
-    return updated
 
 
 class SetRideTagsRequest(BaseModel):

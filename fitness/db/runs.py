@@ -158,9 +158,9 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
                                 INSERT INTO runs_history (
                                     run_id, version_number, change_type, datetime_utc, type,
                                     distance, duration, source, avg_heart_rate, shoe_id,
-                                    changed_by, change_reason
+                                    changed_by, change_reason, name
                                 )
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                                 """,
                                 (
                                     run.id,
@@ -175,6 +175,7 @@ def bulk_create_runs(runs: list[Run], chunk_size: int = 20) -> int:
                                     shoe_id,
                                     "system",  # changed_by
                                     "Initial import",  # change_reason
+                                    run.name,
                                 ),
                             )
 
@@ -448,26 +449,6 @@ def update_run_notes(run_id: str, notes: str | None) -> bool:
             WHERE id = %s AND deleted_at IS NULL
             """,
             (notes, run_id),
-        )
-        return cursor.rowcount > 0
-
-
-def update_run_name(run_id: str, name: str | None) -> bool:
-    """Set (or clear) a run's user-authored display name.
-
-    A lightweight, single-field update with no version bump or history record
-    (unlike metric edits via ``update_run_with_history``). The name is never
-    touched by re-imports (``bulk_create_runs`` skips existing rows), so it
-    survives Strava/MMF re-syncs. Returns True if a non-deleted run matched.
-    """
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            UPDATE runs
-            SET name = %s, updated_at = CURRENT_TIMESTAMP
-            WHERE id = %s AND deleted_at IS NULL
-            """,
-            (name, run_id),
         )
         return cursor.rowcount > 0
 

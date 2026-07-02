@@ -258,9 +258,10 @@ class GoogleCalendarClient:
         Returns:
             Google Calendar event ID if successful, None otherwise.
         """
-        # Format the event title
+        # Format the event title: prefer the user-authored name, falling back
+        # to the distance/type format when no name is set.
         distance_str = f"{run.distance:.1f}" if run.distance else "0.0"
-        event_title = f"{distance_str} Mile {run.type or 'Run'}"
+        event_title = run.name or f"{distance_str} Mile {run.type or 'Run'}"
 
         # Convert stored UTC-naive datetime to timezone-aware UTC
         start_dt_utc = run.datetime_utc.replace(tzinfo=timezone.utc)
